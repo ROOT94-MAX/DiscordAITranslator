@@ -234,6 +234,37 @@ test("loaded-messages scope can still queue visible reply preview translations i
 	assert.equal(queuedCount, 1);
 });
 
+test("disabled channel auto-translation leaves reply previews untouched", () => {
+	const plugin = createPluginInstance();
+	const originalContent = "Hola amigo\n> hello friend";
+	plugin.isTranslationEnabled = () => false;
+	plugin.getCachedReceivedTranslation = () => {
+		throw new Error("reply preview should not read translation cache while disabled");
+	};
+	plugin.queueReplyPreviewTranslation = () => {
+		throw new Error("reply preview should not queue translation while disabled");
+	};
+
+	const event = {
+		instance: {
+			props: {
+				baseMessage: {channel_id: "channel-disabled"},
+				referencedMessage: {
+					message: {
+						id: "reply-disabled",
+						content: originalContent,
+						author: {id: "other-user"}
+					}
+				}
+			}
+		}
+	};
+
+	plugin.processMessageReply(event);
+
+	assert.equal(event.instance.props.referencedMessage.message.content, originalContent);
+});
+
 test("historical loaded messages outside the configured time window are skipped", () => {
 	const plugin = createPluginInstance();
 	let processCount = 0;

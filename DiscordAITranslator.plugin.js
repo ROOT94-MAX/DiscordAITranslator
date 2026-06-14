@@ -4197,11 +4197,24 @@ module.exports = (_ => {
 				if (!e.instance.props.referencedMessage || !e.instance.props.referencedMessage.message) return;
 				const referencedMessage = e.instance.props.referencedMessage.message;
 				const channelId = e.instance.props.baseMessage && e.instance.props.baseMessage.channel_id || BDFDB.LibraryStores.SelectedChannelStore.getChannelId();
-				const deferInitialReplyPreviewTranslate = this.isTranslationEnabled(channelId) && this.shouldDeferInitialAutoTranslate(channelId);
+				const translationEnabled = this.isTranslationEnabled(channelId);
+				const deferInitialReplyPreviewTranslate = translationEnabled && this.shouldDeferInitialAutoTranslate(channelId);
 				let translation = translatedMessages[referencedMessage.id];
-				if (translation && translation.auto && !this.isTranslationEnabled(channelId)) translation = null;
-				if (!translation && this.isTranslationEnabled(channelId)) translation = this.getReplyPreviewTranslation(referencedMessage, channelId);
-				if (!translation && this.isTranslationEnabled(channelId)) {
+				let fallbackContent = translationEnabled ? this.getReplyPreviewFallbackContent(referencedMessage) : (referencedMessage.content || "").trim();
+				if (!translationEnabled) {
+					const previewTranslation = replyPreviewTranslations[referencedMessage.id];
+					if (previewTranslation && previewTranslation.originalContent != null) fallbackContent = (previewTranslation.originalContent || "").trim();
+					delete replyPreviewTranslations[referencedMessage.id];
+					delete queuedReplyPreviewTranslations[referencedMessage.id];
+					if (translation && translation.auto) {
+						const originalContent = this.normalizeStoredTranslationData(translation).originalContent;
+						if (originalContent != null) fallbackContent = (originalContent || "").trim();
+						delete translatedMessages[referencedMessage.id];
+						translation = null;
+					}
+				}
+				if (!translation && translationEnabled) translation = this.getReplyPreviewTranslation(referencedMessage, channelId);
+				if (!translation && translationEnabled) {
 					const cachedTranslation = this.getCachedReceivedTranslation(referencedMessage, channelId);
 					if (cachedTranslation) {
 						translation = this.createReplyPreviewTranslationData(referencedMessage, channelId, cachedTranslation);
@@ -4211,7 +4224,7 @@ module.exports = (_ => {
 				}
 				e.instance.props.referencedMessage = Object.assign({}, e.instance.props.referencedMessage);
 				e.instance.props.referencedMessage.message = new BDFDB.DiscordObjects.Message(referencedMessage);
-				e.instance.props.referencedMessage.message.content = translation ? this.getReplyPreviewDisplayContent(translation) : this.getReplyPreviewFallbackContent(referencedMessage);
+				e.instance.props.referencedMessage.message.content = translation ? this.getReplyPreviewDisplayContent(translation) : fallbackContent;
 				if (e.returnvalue && e.returnvalue.props) {
 					e.returnvalue = this.tagReplyPreviewRenderNode(e.returnvalue);
 					if (translation && translation.originalContent && /\n/.test(this.getReplyPreviewDisplayContent(translation))) e.returnvalue.props.className = BDFDB.DOMUtils.formatClassName(e.returnvalue.props.className, "translator-reply-preview-multiline");
