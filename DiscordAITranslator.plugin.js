@@ -3515,6 +3515,10 @@ module.exports = (_ => {
 				return oldMessages[messageId] && oldMessages[messageId].channel_id || null;
 			}
 
+			getMessageChannelId (message, fallbackChannelId = null) {
+				return message && (message.channel_id || message.channelId) || fallbackChannelId || BDFDB.LibraryStores.SelectedChannelStore.getChannelId();
+			}
+
 			clearAutoTranslationQueue (channelId = null) {
 				if (!channelId) {
 					autoTranslationQueue = [];
@@ -4196,7 +4200,7 @@ module.exports = (_ => {
 			processMessageReply (e) {
 				if (!e.instance.props.referencedMessage || !e.instance.props.referencedMessage.message) return;
 				const referencedMessage = e.instance.props.referencedMessage.message;
-				const channelId = e.instance.props.baseMessage && e.instance.props.baseMessage.channel_id || BDFDB.LibraryStores.SelectedChannelStore.getChannelId();
+				const channelId = this.getMessageChannelId(e.instance.props.baseMessage);
 				const translationEnabled = this.isTranslationEnabled(channelId);
 				const deferInitialReplyPreviewTranslate = translationEnabled && this.shouldDeferInitialAutoTranslate(channelId);
 				let translation = translatedMessages[referencedMessage.id];
@@ -4206,12 +4210,13 @@ module.exports = (_ => {
 					if (previewTranslation && previewTranslation.originalContent != null) fallbackContent = (previewTranslation.originalContent || "").trim();
 					delete replyPreviewTranslations[referencedMessage.id];
 					delete queuedReplyPreviewTranslations[referencedMessage.id];
-					if (translation && translation.auto) {
-						const originalContent = this.normalizeStoredTranslationData(translation).originalContent;
+					if (translation) {
+						const normalizedTranslation = this.normalizeStoredTranslationData(translation);
+						const originalContent = normalizedTranslation.originalContent;
 						if (originalContent != null) fallbackContent = (originalContent || "").trim();
-						delete translatedMessages[referencedMessage.id];
-						translation = null;
+						if (normalizedTranslation.auto) delete translatedMessages[referencedMessage.id];
 					}
+					translation = null;
 				}
 				if (!translation && translationEnabled) translation = this.getReplyPreviewTranslation(referencedMessage, channelId);
 				if (!translation && translationEnabled) {
@@ -4233,12 +4238,23 @@ module.exports = (_ => {
 
 			processMessageContent (e) {
 				if (!e.instance.props.message || !e.returnvalue || !e.returnvalue.props) return;
-				let translation = translatedMessages[e.instance.props.message.id];
+				const message = e.instance.props.message;
+				const channelId = this.getMessageChannelId(message);
+				let translation = translatedMessages[message.id];
+				if (translation && translation.auto && !this.isTranslationEnabled(channelId)) {
+					if (oldMessages[message.id]) {
+						e.instance.props.message = new BDFDB.DiscordObjects.Message(oldMessages[message.id]);
+						delete oldMessages[message.id];
+					}
+					delete translatedMessages[message.id];
+					delete suppressedAutoTranslations[message.id];
+					translation = null;
+				}
 				if (translation) this.refreshTranslationDisplay(translation);
 				let children = this.ensureElementChildrenArray(e.returnvalue);
 				this.cleanupInjectedMessageChildren(children);
 				if (translation && this.settings.general.protectQuotedText) {
-					e.returnvalue.props.children = this.highlightProtectedWrappedTextInNode(e.returnvalue.props.children, e.instance.props.message.id);
+					e.returnvalue.props.children = this.highlightProtectedWrappedTextInNode(e.returnvalue.props.children, message.id);
 					children = this.ensureElementChildrenArray(e.returnvalue);
 				}
 				if (translation && this.settings.general.highlightTranslatedMessages) e.returnvalue.props.className = BDFDB.DOMUtils.formatClassName(e.returnvalue.props.className, "translator-translated-message");
@@ -4264,6 +4280,12 @@ module.exports = (_ => {
 			processEmbed (e) {
 				if (!e.instance.props.embed || !e.instance.props.embed.message_id) return;
 				let translation = translatedMessages[e.instance.props.embed.message_id];
+				const channelId = this.getDisplayedTranslationChannelId(e.instance.props.embed.message_id);
+				if (translation && translation.auto && !this.isTranslationEnabled(channelId)) {
+					delete translatedMessages[e.instance.props.embed.message_id];
+					delete suppressedAutoTranslations[e.instance.props.embed.message_id];
+					translation = null;
+				}
 				if (translation && Object.keys(translation.embeds).length) {
 					if (!e.returnvalue) e.instance.props.embed = Object.assign({}, e.instance.props.embed, {
 						rawDescription: translation.embeds[e.instance.props.embed.id].description,

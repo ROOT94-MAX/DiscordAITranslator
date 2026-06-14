@@ -265,6 +265,80 @@ test("disabled channel auto-translation leaves reply previews untouched", () => 
 	assert.equal(event.instance.props.referencedMessage.message.content, originalContent);
 });
 
+test("disabled channel auto-translation hides stored reply preview translations", () => {
+	const plugin = createPluginInstance();
+	const originalContent = "Top up at half price";
+	const referencedMessage = {
+		id: "reply-stored-disabled",
+		channel_id: "channel-disabled",
+		content: originalContent,
+		embeds: [],
+		author: {id: "other-user"}
+	};
+	plugin.applyStoredTranslationToMessage(referencedMessage, {
+		channelId: "channel-disabled",
+		auto: false,
+		content: "半价充值",
+		translatedContent: "半价充值",
+		originalContent,
+		embeds: {}
+	});
+	plugin.isTranslationEnabled = () => false;
+
+	const event = {
+		instance: {
+			props: {
+				baseMessage: {channel_id: "channel-disabled"},
+				referencedMessage: {
+					message: referencedMessage
+				}
+			}
+		}
+	};
+
+	plugin.processMessageReply(event);
+
+	assert.equal(event.instance.props.referencedMessage.message.content, originalContent);
+});
+
+test("disabled channel auto-translation restores stale automatic message content", () => {
+	const plugin = createPluginInstance();
+	const message = {
+		id: "stale-auto-disabled",
+		channel_id: "channel-disabled",
+		content: "Top up at half price",
+		embeds: [],
+		author: {id: "other-user"}
+	};
+	plugin.applyStoredTranslationToMessage(message, {
+		channelId: "channel-disabled",
+		auto: true,
+		content: "半价充值",
+		translatedContent: "半价充值",
+		originalContent: "Top up at half price",
+		embeds: {}
+	});
+	plugin.isTranslationEnabled = () => false;
+
+	const event = {
+		instance: {
+			props: {
+				message
+			}
+		},
+		returnvalue: {
+			props: {
+				children: []
+			}
+		}
+	};
+
+	plugin.processMessageContent(event);
+
+	assert.equal(event.instance.props.message.content, "Top up at half price");
+	assert.deepEqual(event.returnvalue.props.children, []);
+});
+
 test("historical loaded messages outside the configured time window are skipped", () => {
 	const plugin = createPluginInstance();
 	let processCount = 0;
