@@ -568,8 +568,8 @@ module.exports = (_ => {
 		var queuedReplyPreviewTranslations = {};
 		var lastAutoTranslationChannelId = null;
 		const MAX_TRANSLATION_CACHE_ENTRIES = 500;
-		const AUTO_TRANSLATION_RERENDER_DELAY = 180;
-		const AUTO_TRANSLATION_HISTORY_RERENDER_DELAY = 520;
+		const AUTO_TRANSLATION_RERENDER_DELAY = 650;
+		const AUTO_TRANSLATION_HISTORY_RERENDER_DELAY = 1000;
 		const AUTO_TRANSLATION_QUEUE_RETRY_DELAY = 900;
 		const AUTO_TRANSLATION_BOTTOM_LOCK_THRESHOLD = 80;
 		const DISCORD_EPOCH = 1420070400000;
@@ -3391,6 +3391,7 @@ module.exports = (_ => {
 				queuedReplyPreviewTranslations[message.id] = channelId;
 				this.translateText(originalContent, messageTypes.RECEIVED, (translation, input, output) => {
 					delete queuedReplyPreviewTranslations[message.id];
+					if (!this.isTranslationEnabled(channelId)) return;
 					if (translation) {
 						replyPreviewTranslations[message.id] = {
 							signature,
@@ -4157,6 +4158,11 @@ module.exports = (_ => {
 				const autoTranslateBoundaryId = options.autoTranslateBoundaryId != null ? options.autoTranslateBoundaryId : channelState && channelState.boundaryMessageId;
 				const isNewerThanBoundary = this.isMessageIdNewer(message.id, autoTranslateBoundaryId);
 				let translation = translatedMessages[message.id];
+				if (translation && translation.auto && !this.isTranslationEnabled(channelId)) {
+					delete translatedMessages[message.id];
+					delete suppressedAutoTranslations[message.id];
+					translation = null;
+				}
 				let messageChanged = false;
 				if (translation && translation.signature && translation.signature != expectedSignature) {
 					delete translatedMessages[message.id];
@@ -4193,7 +4199,8 @@ module.exports = (_ => {
 				const channelId = e.instance.props.baseMessage && e.instance.props.baseMessage.channel_id || BDFDB.LibraryStores.SelectedChannelStore.getChannelId();
 				const deferInitialReplyPreviewTranslate = this.isTranslationEnabled(channelId) && this.shouldDeferInitialAutoTranslate(channelId);
 				let translation = translatedMessages[referencedMessage.id];
-				if (!translation) translation = this.getReplyPreviewTranslation(referencedMessage, channelId);
+				if (translation && translation.auto && !this.isTranslationEnabled(channelId)) translation = null;
+				if (!translation && this.isTranslationEnabled(channelId)) translation = this.getReplyPreviewTranslation(referencedMessage, channelId);
 				if (!translation && this.isTranslationEnabled(channelId)) {
 					const cachedTranslation = this.getCachedReceivedTranslation(referencedMessage, channelId);
 					if (cachedTranslation) {
@@ -4522,6 +4529,7 @@ module.exports = (_ => {
 					}
 					else {
 						const channelId = channel && channel.id || BDFDB.LibraryStores.SelectedChannelStore.getChannelId();
+						if (options.auto && !this.isTranslationEnabled(channelId)) return callback(false);
 						const originalContentData = options.originalContentData || this.extractOriginalContentData(message);
 						if (!this.hasTranslatableMessageContent(originalContentData)) return callback(false);
 						const signature = this.createReceivedTranslationSignature(message, channelId, originalContentData);
@@ -4535,6 +4543,7 @@ module.exports = (_ => {
 						message.embeds.forEach(embed => embed.message_id = message.id);
 						let embedIds = message.embeds.map(embed => embed.id);
 						this.translateText(allTextsToTranslate, messageTypes.RECEIVED, (translation, input, output) => {
+							if (options.auto && !this.isTranslationEnabled(channelId)) return callback(false);
 							if (translation) {
 								let strings = translation.split(/\n{0,1}__________________ __________________ __________________\n{0,1}/);
 								let oldContent = (originalContentData.content || "").trim();

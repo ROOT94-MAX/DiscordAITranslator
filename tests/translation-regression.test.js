@@ -297,3 +297,35 @@ test("historical loaded messages are deferred while browsing history, but new me
 	assert.equal(retryCount >= 1, true);
 	assert.deepEqual(translatedIds, ["new-1"]);
 });
+
+test("late auto-translation results are ignored after the channel toggle is disabled", async () => {
+	const plugin = createPluginInstance();
+	let enabled = true;
+	let applyCount = 0;
+	plugin.isTranslationEnabled = () => enabled;
+	plugin.applyStoredTranslationToMessage = () => {
+		applyCount++;
+		return {};
+	};
+	plugin.persistTranslationCacheEntry = () => {};
+	plugin.scheduleTranslationRerender = () => {};
+	plugin.translateText = (_text, _place, callback) => {
+		enabled = false;
+		callback("你好，世界", {id: "en"}, {id: "zh-CN"});
+	};
+
+	const result = await plugin.translateMessage({
+		id: "late-auto-1",
+		content: "hello world",
+		embeds: [],
+		attachments: [],
+		author: {id: "other-user"}
+	}, {id: "channel-late-auto"}, {
+		auto: true,
+		silent: true,
+		trackBusy: false
+	});
+
+	assert.equal(result, false);
+	assert.equal(applyCount, 0);
+});
