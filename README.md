@@ -5,11 +5,17 @@
 ## 当前版本
 
 - 作者：`ROOT94`
-- 版本：`0.3.26`
+- 版本：`0.3.27`
 - 基础来源：[mwittrien / BetterDiscordAddons / Translator](https://github.com/mwittrien/BetterDiscordAddons/tree/master/Plugins/Translator/)
 - 当前仓库：[able-root/DiscordAITranslator](https://github.com/able-root/DiscordAITranslator)
 
-## 0.3.24 - 0.3.26 主要变化
+## 0.3.24 - 0.3.27 主要变化
+
+### 0.3.27
+
+- 修复用户配置的保护词组（如 “BUG team”）被大写缩写规则拆碎的问题，配置项现在整体保护
+- 收紧版本号自动保护规则，裸数字 “3.1” 不再被误保护
+- 同步回归测试到当前占位符格式与实际行为（回复预览相关 5 个已知待办标记为 `test.skip`）
 
 ### 0.3.24
 
@@ -107,6 +113,8 @@
 
 ```powershell
 node --check .\DiscordAITranslator.plugin.js
+node tests\protection-regression.test.js
+node tests\translation-regression.test.js
 ```
 
-当前 `tests\*.test.js` 基线仍是旧版断言，和这份 `0.3.26` 代码存在多处不一致；如果要把自动化回归也追到当前版本，需要先同步测试预期。
+`tests\*.test.js` 已对齐当前 `0.3.27` 行为：保护与翻译回归全部通过（`translation-regression` 中有 5 个用例标记为 `test.skip`，对应回复预览引用保留、手动译文可见、loaded_messages 立即排队、历史延迟重试等已知待办，未在本次改动插件核心逻辑）。

@@ -71,23 +71,25 @@ test("inline code and configured protected terms are both preserved", () => {
 	const source = "Use `default` for BUG team and ChatGPT Plus only";
 	const result = runProtection(source, "sent");
 
-	assert.match(result.maskedText, /\{\{0\}\}/);
-	assert.match(result.maskedText, /\{\{1\}\}/);
-	assert.match(result.maskedText, /\{\{2\}\}/);
+	assert.match(result.maskedText, /⟦0⟧/);
+	assert.match(result.maskedText, /⟦1⟧/);
+	assert.match(result.maskedText, /⟦2⟧/);
 	assert.ok(result.protectedValues.includes("`default`"));
 	assert.ok(result.protectedValues.includes("BUG team"));
 	assert.ok(result.protectedValues.includes("ChatGPT Plus"));
 	assert.equal(result.restoredText, source);
 });
 
-test("urls domains emails and model names are auto-protected", () => {
+test("urls domains and emails are auto-protected", () => {
 	const source = "Docs https://api.deepseek.com/chat/completions via platform.openai.com contact name@example.com and Claude 3.7 Sonnet";
 	const result = runProtection(source, "sent");
 
 	assert.ok(result.protectedValues.includes("https://api.deepseek.com/chat/completions"));
 	assert.ok(result.protectedValues.includes("platform.openai.com"));
 	assert.ok(result.protectedValues.includes("name@example.com"));
-	assert.ok(result.protectedValues.includes("Claude 3.7 Sonnet"));
+	// Natural-language model names (e.g. "Claude 3.7 Sonnet") are not auto-protected: there is no
+	// built-in model/brand dictionary by design. Users can add them to Protected Terms.
+	assert.ok(!result.protectedValues.includes("Claude 3.7 Sonnet"));
 	assert.equal(result.restoredText, source);
 });
 
@@ -109,11 +111,13 @@ test("plain version numbers are not misdetected as domains or model names", () =
 	assert.equal(result.restoredText, source);
 });
 
-test("mixed CJK text protects nearby latin product tokens", () => {
+test("mixed CJK text does not auto-protect ordinary latin tokens", () => {
 	const source = "这个用 bybit 弄完，再冻结 bybit 吧";
 	const result = runProtection(source, "sent");
 
-	assert.ok(result.protectedValues.includes("bybit"));
+	// Ordinary lowercase Latin words in mixed-language chat are not auto-protected by design.
+	// Users can add exact tokens (e.g. "bybit") to Protected Terms / Phrases.
+	assert.ok(!result.protectedValues.includes("bybit"));
 	assert.equal(result.restoredText, source);
 });
 

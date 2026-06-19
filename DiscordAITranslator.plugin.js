@@ -1,7 +1,7 @@
 /**
  * @name DiscordAITranslator
  * @author ROOT94
- * @version 0.3.26
+ * @version 0.3.27
  * @description 基于 BetterDiscord Translator 二次开发的 Discord AI 翻译插件
  * @source https://github.com/able-root/DiscordAITranslator
  */
@@ -8935,7 +8935,10 @@ module.exports = (_ => {
 				// These patterns are code/file/repo/version/identifier-shaped content, not normal words.
 				string = string.replace(/\b[A-Za-z0-9_.-]{2,}\/[A-Za-z0-9_.-]{2,}(?:\/[A-Za-z0-9_.-]+)*\b/g, protectToken);
 				string = string.replace(/\b[A-Za-z0-9_.-]+\.(?:js|jsx|ts|tsx|json|yml|yaml|toml|env|py|java|go|rs|cpp|c|h|css|html|md|txt|zip|rar|7z|exe|dll|png|jpg|jpeg|webp|gif|mp4|mov|psd|fig)\b/gi, protectToken);
-				string = string.replace(/\bv?\d+(?:\.\d+){1,4}(?:[-+][A-Za-z0-9.-]+)?\b/gi, protectToken);
+				// Version/identifier numbers: require a "v" prefix (v3.7, v0.3.26) or at least three
+				// dot-separated parts (1.2.3). A bare two-part number like "3.1" in "版本 3.1" is plain
+				// text and must not be auto-protected.
+				string = string.replace(/\bv\d+(?:\.\d+){1,4}(?:[-+][A-Za-z0-9.-]+)?\b|\b\d+(?:\.\d+){2,4}(?:[-+][A-Za-z0-9.-]+)?\b/gi, protectToken);
 				string = string.replace(/\b[A-Z][A-Z0-9]{1,}(?:[-_/+.][A-Z0-9]+)*\b/g, protectToken);
 				string = string.replace(/\b[A-Za-z]+(?:[A-Z][a-z0-9]+){1,}[A-Za-z0-9]*\b/g, protectToken);
 				string = string.replace(/\b[A-Za-z0-9]+(?:[_-][A-Za-z0-9]+){1,}\b/g, protectToken);
@@ -9045,16 +9048,18 @@ module.exports = (_ => {
 				string = autoProtectedResult.string;
 				excepts = autoProtectedResult.excepts;
 				count = autoProtectedResult.count;
-				let autoTechnicalTermsResult = this.protectAutoTechnicalTerms(string, excepts, count);
-				string = autoTechnicalTermsResult.string;
-				excepts = autoTechnicalTermsResult.excepts;
-				count = autoTechnicalTermsResult.count;
+				// Configured terms first: a user phrase like "BUG team" must be protected as a whole
+				// before the all-caps abbreviation rule can split it into "BUG".
 				if (this.shouldProtectConfiguredTermsForPlace(place)) {
 					let protectedTermsResult = this.protectConfiguredTerms(string, excepts, count);
 					string = protectedTermsResult.string;
 					excepts = protectedTermsResult.excepts;
 					count = protectedTermsResult.count;
 				}
+				let autoTechnicalTermsResult = this.protectAutoTechnicalTerms(string, excepts, count);
+				string = autoTechnicalTermsResult.string;
+				excepts = autoTechnicalTermsResult.excepts;
+				count = autoTechnicalTermsResult.count;
 				let emojiProtectedResult = this.protectUnicodeEmojiSegments(string, excepts, count);
 				string = emojiProtectedResult.string;
 				excepts = emojiProtectedResult.excepts;
