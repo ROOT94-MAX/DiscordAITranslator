@@ -67,6 +67,15 @@ test("triple backtick code blocks are fully protected", () => {
 	assert.equal(result.restoredText, source);
 });
 
+test("configured multiword terms match regardless of internal spaces", () => {
+	const source = "搞的bugteam给我自己的号连坐封了";
+	const result = runProtection(source, "sent");
+
+	// Configured term "BUG team" (with a space) must also protect the no-space variant "bugteam".
+	assert.ok(result.protectedValues.some(value => /^bug\s*team$/i.test(value)));
+	assert.equal(result.restoredText, source);
+});
+
 test("inline code and configured protected terms are both preserved", () => {
 	const source = "Use `default` for BUG team and ChatGPT Plus only";
 	const result = runProtection(source, "sent");
