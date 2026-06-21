@@ -12,7 +12,7 @@
 
 - `tests/translation-regression.test.js`
 - `tests/protection-regression.test.js`
-- `README.md` / `使用说明.md` / `安装教程.md`
+- `README.md`
 
 `BetterDiscordAddons` 与 `BetterDiscordAddons-sparse` 目录可用于参考上游来源，但不是当前插件的主实现入口。
 

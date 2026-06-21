@@ -1,7 +1,7 @@
 /**
  * @name DiscordAITranslator
  * @author ROOT94
- * @version 0.3.28
+ * @version 0.3.32
  * @description 基于 BetterDiscord Translator 二次开发的 Discord AI 翻译插件
  * @source https://github.com/able-root/DiscordAITranslator
  */
@@ -748,6 +748,9 @@ module.exports = (_ => {
 		var lastAutoTranslationChannelId = null;
 		var lastAutoTranslationUserScrollTime = 0;
 		var historicalAutoTranslationPausedUntil = 0;
+		// Backoff window set when the translation provider returns 429/5xx; the queue
+		// pauses until this timestamp to avoid hammering a rate-limited or ailing server.
+		var autoTranslationBackoffUntil = 0;
 		var autoTranslationScrollWatcherAttached = false;
 		var historicalAutoTranslationRerenderPending = false;
 		var historicalAutoTranslationPendingCount = 0;
@@ -841,6 +844,7 @@ module.exports = (_ => {
 						aiAutoTranslatePrompt: {value: ""},
 						skipMixedReceivedMessages:	{value: false},
 						skipSameLanguageReceivedMessages: {value: true},
+					useLocalLanguagePrecheck:	{value: true},
 						treatLanguageVariantsAsSame: {value: true},
 						dropSimilarTranslations:	{value: true},
 						minimumAutoTranslateLength:	{value: 2},
@@ -3059,6 +3063,17 @@ module.exports = (_ => {
 											refreshPanel();
 										}
 									}),
+									BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.SettingsItem, {
+										type: "Switch",
+										label: compactText("本地预检测:翻前用本地语种识别跳过同语言消息", "Local pre-check: skip same-language messages before requesting translation", "Локальная проверка: пропускать сообщения на целевом языке до запроса"),
+										tag: BDFDB.LibraryComponents.FormTitle.Tags.H5,
+										value: this.useLocalLanguagePrecheck(),
+										onChange: value => {
+											saveFilterSetting("useLocalLanguagePrecheck", value);
+											refreshPanel();
+										}
+									}),
+									infoText(compactText("仅在高置信时跳过,拿不准仍照常翻译;关闭后完全交给翻译服务商判定。", "Only skips when highly confident; uncertain text still gets translated. Turn off to rely entirely on the translation provider.", "Пропускает только при высокой уверенности; иначе переводит как обычно.")),
 									currentMode == "ai" && aiCapable && infoText(this.getCustomText("auto_translate_ai_prompt_hint")),
 									currentMode == "ai" && aiCapable && BDFDB.ReactUtils.createElement("textarea", {
 										className: "translator-ai-prompt-textarea",
@@ -5878,6 +5893,35 @@ module.exports = (_ => {
 				}, AUTO_TRANSLATION_QUEUE_RETRY_DELAY);
 			}
 
+			scheduleAutoTranslationBackoff (ms) {
+				// Pause the auto-translate queue for a short window after a 429/5xx so we don't
+				// hammer a rate-limited or ailing provider. Resumes via the retry timer.
+				if (!ms) return;
+				autoTranslationBackoffUntil = Math.max(autoTranslationBackoffUntil || 0, Date.now() + ms);
+				this.scheduleAutoTranslationQueueRetry();
+			}
+
+			requestWithTimeout (url, options, callback, timeoutMs = 30000) {
+				// Wraps BDFDB.LibraryRequires.request with a hard timeout and centralized 429/5xx
+				// backoff. On timeout it synthesizes a 504 response (no error) so existing
+				// statusCode-based handlers keep working, and guards against double callbacks.
+				let done = false;
+				let timer = null;
+				const finish = (error, response, body) => {
+					if (done) return;
+					done = true;
+					if (timer) BDFDB.TimeUtils.clear(timer);
+					const statusCode = response && response.statusCode;
+					if (statusCode == 429) this.scheduleAutoTranslationBackoff(5000);
+					else if (statusCode && statusCode >= 500) this.scheduleAutoTranslationBackoff(2000);
+					callback(error, response, body);
+				};
+				timer = BDFDB.TimeUtils.timeout(_ => finish(null, {statusCode: 504}, ""), timeoutMs);
+				try { BDFDB.LibraryRequires.request(url, options, finish); }
+				catch (err) { finish(err, null, ""); }
+				return timer;
+			}
+
 			scheduleHistoricalAutoTranslationStart () {
 				if (historicalAutoTranslationStartTimer) clearTimeout(historicalAutoTranslationStartTimer);
 				historicalAutoTranslationStartTimer = setTimeout(_ => {
@@ -5916,6 +5960,10 @@ module.exports = (_ => {
 
 			shouldSkipSameLanguageReceivedMessages () {
 				return !!(this.settings.filters && this.settings.filters.skipSameLanguageReceivedMessages !== false);
+			}
+
+			useLocalLanguagePrecheck () {
+				return !(this.settings.filters && this.settings.filters.useLocalLanguagePrecheck === false);
 			}
 
 			shouldDropSimilarTranslations () {
@@ -6064,6 +6112,116 @@ module.exports = (_ => {
 					isMixed,
 					strongTargetScriptMatch
 				};
+			}
+
+			getLatinStopwordTables () {
+				// Compact stopword tables for common Latin-script languages. Used only to fill the
+				// gap that script-family analysis cannot: telling English/French/Spanish/etc. apart.
+				return {
+					en: "the,and,you,that,this,is,are,was,were,have,has,it,for,not,with,but,they,your,from,been,will,just,like,can,what,there,their",
+					es: "que,de,no,es,en,un,una,por,con,se,los,las,su,para,como,mas,pero,le,al,lo,ella,este,eso",
+					fr: "le,la,les,de,et,un,une,que,pas,pour,qui,dans,sur,ne,se,au,est,son,il,elle,avec,nous,vous",
+					de: "der,die,das,und,ist,nicht,ein,eine,den,von,mit,sich,auf,fur,sie,dem,es,auch,wir,aber,hat",
+					pt: "que,de,nao,um,uma,para,com,os,as,se,por,como,mas,mais,eu,voce,sua,seu,ja,esta,isto",
+					it: "che,di,non,un,una,per,si,la,il,le,con,come,ma,piu,gli,sono,questo,quella,anche,stato",
+					nl: "de,het,een,en,van,is,niet,te,dat,die,in,op,voor,met,zijn,haar,maar,wat,heb,wij,zij",
+					pl: "nie,sie,to,na,jest,do,ze,jak,ale,co,dla,moze,tego,tym,byc,lub,oraz,takze,ich,jesli",
+					ro: "sa,de,nu,in,ca,pe,un,o,cu,este,la,ai,mai,dar,sunt,pentru,fata,asta,ori,sau,aceasta",
+					tr: "ve,bir,bu,icin,ile,ben,sen,degil,ama,daha,cok,var,yok,benim,senin,bana,sana,onlar,gibi,kadar",
+					sv: "och,att,det,som,en,den,for,ar,inte,med,har,jag,du,han,hon,ett,kan,sa,men,om,alla",
+					da: "og,at,det,som,en,den,er,ikke,med,har,jag,du,han,hun,et,kan,sa,men,om,vi,der",
+					no: "og,at,det,som,en,den,er,ikke,med,har,jag,du,han,hun,et,kan,sa,men,om,vi,der",
+					cs: "a,se,na,je,to,v,ze,si,pro,ale,jak,tak,ktery,byt,nebo,tento,jejich,coz,vice,ktere",
+					hu: "es,egy,nem,hogy,az,is,volt,meg,lehet,csak,de,mint,mar,ott,majd,igen,mert,azzal,ilyen,olyan",
+					id: "yang,dan,di,ini,itu,untuk,dengan,tidak,saya,anda,akan,ke,pada,dari,juga,karena,bisa,ada,mereka,sebagai",
+					vi: "va,cua,la,mot,cac,trong,khong,co,nay,do,da,duoc,nguoi,cho,voi,den,tu,roi,ra,cung",
+					tl: "ang,ng,mga,sa,ay,na,at,ni,si,naman,dahil,hindi,para,kung,ngunit,siya,ako,ikaw,nila,kapag"
+				};
+			}
+
+			identifyLatinLanguage (text) {
+				if (!this._latinStopwordIndex) {
+					const tables = this.getLatinStopwordTables();
+					const index = Object.create(null);
+					for (const lang in tables) {
+						for (const word of tables[lang].split(",")) {
+							if (!index[word]) index[word] = [];
+							index[word].push(lang);
+						}
+					}
+					this._latinStopwordIndex = index;
+				}
+				const words = (text || "").toLowerCase().match(/[a-zà-ÿ]+(?:['’][a-zà-ÿ]+)*/g) || [];
+				if (words.length < 5) return {languageId: null, confident: false, tokenCount: words.length};
+				const scores = Object.create(null);
+				const seen = Object.create(null);
+				for (const word of words) {
+					const langs = this._latinStopwordIndex[word];
+					if (!langs) continue;
+					for (const lang of langs) {
+						const key = lang + "|" + word;
+						if (seen[key]) continue;
+						seen[key] = 1;
+						scores[lang] = (scores[lang] || 0) + 1;
+					}
+				}
+				let best = null, bestScore = 0, runnerUp = 0;
+				for (const lang in scores) {
+					const score = scores[lang];
+					if (score > bestScore) { runnerUp = bestScore; bestScore = score; best = lang; }
+					else if (score > runnerUp) runnerUp = score;
+				}
+				// Conservative: only trust the call when one language clearly dominates.
+				// Uncertain cases fall through to translation so we never silently drop a real foreign message.
+				const confident = !!(best && bestScore >= 3 && bestScore >= 2 * runnerUp);
+				return {languageId: best, score: bestScore, runnerUp, tokenCount: words.length, confident};
+			}
+
+			detectMessageLanguageLocal (text, analysis, targetLanguageId) {
+				if (!analysis || !analysis.totalLetters) return {languageId: null, confident: false};
+				// Non-Latin scripts are already handled by script-family checks upstream; the local
+				// identifier only fills the Latin-vs-Latin gap where those checks bail out.
+				const targetFamilies = analysis.targetFamilies || this.getLanguageScriptFamilies(targetLanguageId);
+				if (!targetFamilies.length || targetFamilies[0] != "latin") return {languageId: null, confident: false};
+				if (analysis.dominantFamily != "latin") return {languageId: null, confident: false};
+				// Run on the raw masked text, not analysis.cleanedText: the sanitizer strips 1-3
+				// letter tokens, which are exactly the stopwords we score on.
+				return this.identifyLatinLanguage(text);
+			}
+
+			// Local high-confidence "this message is clearly a foreign language" check. Used by the
+			// AI-decision safety net: when AI decision mode returns __SKIP_TRANSLATION__, this lets us
+			// override the skip without any network call whenever the script family alone proves the
+			// message is foreign (e.g. Latin-script message with a Han/Cyrillic/Arabic target).
+			isClearlyForeignLanguageMessage (text, targetLanguageId) {
+				if (!text || !targetLanguageId || targetLanguageId == "auto") return false;
+				const targetLanguage = languages[targetLanguageId];
+				if (targetLanguage && targetLanguage.special) return false;
+				const targetFamilies = this.getLanguageScriptFamilies(targetLanguageId);
+				if (!targetFamilies.length) return false;
+				const targetFamily = targetFamilies[0];
+				const analysis = this.analyzeTextForAutoTranslate(text, targetLanguageId);
+				if (!analysis || !analysis.totalLetters) return false;
+				const dominant = analysis.dominantFamily;
+				if (!dominant) return false;
+				// Different script from the target with enough non-target letters = clearly foreign.
+				if (dominant != targetFamily && analysis.nonTargetLetterCount >= 6) return true;
+				// Same script (latin-vs-latin): confirm a different language via the stopword identifier.
+				if (targetFamily == "latin" && dominant == "latin") {
+					const detected = this.identifyLatinLanguage(text);
+					if (detected.confident && detected.languageId && !this.isSameLanguageOrVariant(detected.languageId, targetLanguageId)) return true;
+				}
+				return false;
+			}
+
+			// Safety-net helper for received auto messages. Returns true when the message is foreign
+			// (must be translated). First tier is the zero-network local check; second tier falls back
+			// to Google gtx detection (covers latin-vs-latin the local check cannot). If gtx is
+			// unreachable, the second tier resolves false so the caller honors the original skip.
+			isReceivedMessageForeignAsync (text, targetLanguageId, callback) {
+				if (this.isClearlyForeignLanguageMessage(text, targetLanguageId)) return callback(true);
+				if (!text || !targetLanguageId || targetLanguageId == "auto") return callback(false);
+				this.detectLanguage(text, detected => callback(!!detected && !this.isSameLanguageOrVariant(detected, targetLanguageId)));
 			}
 
 			isHanTargetMessageWithLatinTerms (analysis, targetLanguageId) {
@@ -6225,6 +6383,17 @@ module.exports = (_ => {
 				if (analysis.totalLetters < this.getAutoTranslateMinimumLengthForAnalysis(analysis)) return false;
 				if (this.isClearlyTargetLanguageMessage(analysis, targetLanguageId)) return false;
 				if (this.shouldSkipSameLanguageReceivedMessages() && this.isMostlyTargetLanguageMessage(analysis, targetLanguageId)) return false;
+				if (this.useLocalLanguagePrecheck()) {
+					// Latin-vs-Latin same-language and source-filter checks that script-family
+					// analysis cannot resolve locally, so we avoid a wasteful AI request. Only
+					// acts on high-confidence detections; uncertain text still goes to translation.
+					const localDetection = this.detectMessageLanguageLocal(analysisSource.text, analysis, targetLanguageId);
+					if (localDetection.confident && localDetection.languageId) {
+						if (this.isSameLanguageOrVariant(localDetection.languageId, targetLanguageId)) return false;
+						const sourceLanguages = this.getReceivedAutoTranslateSourceLanguages();
+						if (sourceLanguages.length && !this.matchesConfiguredSourceLanguage(localDetection.languageId, sourceLanguages)) return false;
+					}
+				}
 				return true;
 			}
 
@@ -6407,7 +6576,7 @@ module.exports = (_ => {
 						temperature: 0.1,
 						top_p: 0.8
 					};
-					BDFDB.LibraryRequires.request(apiEndpoint, {
+					this.requestWithTimeout(apiEndpoint, {
 						method: "post",
 						headers: {
 							"Content-Type": "application/json",
@@ -6581,6 +6750,11 @@ module.exports = (_ => {
 				}
 				if (loadedAutoTranslationStatus.active && loadedAutoTranslationStatus.collecting) this.updateLoadedAutoTranslationStatus({collecting: false});
 				if (isBackgroundTranslating || isTranslating) return;
+				if (Date.now() < (autoTranslationBackoffUntil || 0)) {
+					// Provider is rate-limited or erroring; wait out the backoff window before consuming more.
+					this.scheduleAutoTranslationQueueRetry();
+					return;
+				}
 				if (!autoTranslationQueue.length) {
 					this.finishHistoricalAutoTranslationBatchIfDone();
 					if (!historicalAutoTranslationBatchActive && loadedAutoTranslationStatus && loadedAutoTranslationStatus.active && this.getReceivedAutoTranslateScope() == "loaded_messages") {
@@ -7616,18 +7790,29 @@ module.exports = (_ => {
 				const showToast = options.showToast !== false;
 				const showFailureToast = options.showFailureToast !== false;
 				const trackBusy = options.trackBusy !== false;
-				let toast = null, toastInterval, finished = false, finishTranslation = translation => {
+				let toast = null, toastInterval, finished = false, retriedAfterSkip = false, skipSafetyNetHandler = null, finishTranslation = translation => {
+					// AI-decision safety net: when AI decision mode returns a skip signal OR a wrong-target
+					// result (e.g. it echoes all-caps text unchanged, treating it as an acronym) for a
+					// received auto message, verify the original is actually foreign before honoring the
+					// drop. A real foreign message gets a forced plain re-translation (no skip option) so it
+					// is never dropped to an AI misjudgement. Runs before the cleanup guards so the
+					// translating state stays live.
+					const isSkip = this.isSkipTranslationSignal(translation);
+					if (!isSkip && translation) translation = this.addExceptions(translation, excepts);
+					const wrongTarget = !isSkip && !!translation && !this.isTranslationLikelyInTargetLanguage(translation, output && output.id);
+					if (!finished && !retriedAfterSkip && skipSafetyNetHandler && (isSkip || wrongTarget) && options.auto && place == messageTypes.RECEIVED && this.useLocalLanguagePrecheck() && this.shouldUseAiAutoTranslateDecision()) {
+						retriedAfterSkip = true;
+						skipSafetyNetHandler(translation);
+						return;
+					}
 					if (trackBusy) isTranslating = false;
 					if (toast) toast.close();
 					BDFDB.TimeUtils.clear(toastInterval);
-					
+
 					if (finished) return;
 					finished = true;
-					if (this.isSkipTranslationSignal(translation)) return callback("", input, output, {skipped: true});
-					if (translation) {
-						translation = this.addExceptions(translation, excepts);
-						if (!this.isTranslationLikelyInTargetLanguage(translation, output && output.id)) return callback("", input, output, {failed: true, wrongTargetLanguage: true});
-					}
+					if (isSkip) return callback("", input, output, {skipped: true});
+					if (translation && wrongTarget) return callback("", input, output, {failed: true, wrongTargetLanguage: true});
 					callback(translation == text ? "" : translation, input, output, {failed: !translation});
 				};
 				// Bottom-layer protection is shared by AI and traditional engines: only protected placeholders are sent for mentions/emoji/links/code.
@@ -7680,21 +7865,40 @@ module.exports = (_ => {
 								});
 							}, 500);
 						};
-						if (this.validTranslator(this.settings.engines.translator, input, output, specialCase)) {
-							startTranslating(this.settings.engines.translator);
-							this[translationEngines[this.settings.engines.translator].funcName].apply(this, [{input, output, text: newText, specialCase, engine: translationEngines[this.settings.engines.translator], autoDecision: !!(options.auto && place == messageTypes.RECEIVED && this.shouldUseAiAutoTranslateDecision() && this.supportsAiAutoTranslateDecisionEngine(this.settings.engines.translator)), decisionPrompt: this.getAiAutoTranslatePrompt({input, output})}, translation => {
-								if (!translation && this.validTranslator(this.settings.engines.backup, input, output, specialCase)) {
-									startTranslating(this.settings.engines.backup);
-									this[translationEngines[this.settings.engines.backup].funcName].apply(this, [{input, output, text: newText, specialCase, engine: translationEngines[this.settings.engines.backup], autoDecision: !!(options.auto && place == messageTypes.RECEIVED && this.shouldUseAiAutoTranslateDecision() && this.supportsAiAutoTranslateDecisionEngine(this.settings.engines.backup)), decisionPrompt: this.getAiAutoTranslatePrompt({input, output})}, finishTranslation]);
-								}
-								else finishTranslation(translation);
-							}]);
-						}
-						else if (this.validTranslator(this.settings.engines.backup, input, output, specialCase)) {
-							startTranslating(this.settings.engines.backup);
-							this[translationEngines[this.settings.engines.backup].funcName].apply(this, [{input, output, text: newText, specialCase, engine: translationEngines[this.settings.engines.backup], autoDecision: !!(options.auto && place == messageTypes.RECEIVED && this.shouldUseAiAutoTranslateDecision() && this.supportsAiAutoTranslateDecisionEngine(this.settings.engines.backup)), decisionPrompt: this.getAiAutoTranslatePrompt({input, output})}, finishTranslation]);
-						}
-						else finishTranslation();
+						const aiPrompt = this.getAiAutoTranslatePrompt({input, output});
+						const dispatchEngine = useAutoDecision => {
+							const aiDecisionFor = engineKey => !!useAutoDecision && this.supportsAiAutoTranslateDecisionEngine(engineKey);
+							if (this.validTranslator(this.settings.engines.translator, input, output, specialCase)) {
+								startTranslating(this.settings.engines.translator);
+								this[translationEngines[this.settings.engines.translator].funcName].apply(this, [{input, output, text: newText, specialCase, engine: translationEngines[this.settings.engines.translator], autoDecision: aiDecisionFor(this.settings.engines.translator), decisionPrompt: aiPrompt}, translation => {
+									if (!translation && this.validTranslator(this.settings.engines.backup, input, output, specialCase)) {
+										startTranslating(this.settings.engines.backup);
+										this[translationEngines[this.settings.engines.backup].funcName].apply(this, [{input, output, text: newText, specialCase, engine: translationEngines[this.settings.engines.backup], autoDecision: aiDecisionFor(this.settings.engines.backup), decisionPrompt: aiPrompt}, finishTranslation]);
+									}
+									else finishTranslation(translation);
+								}]);
+							}
+							else if (this.validTranslator(this.settings.engines.backup, input, output, specialCase)) {
+								startTranslating(this.settings.engines.backup);
+								this[translationEngines[this.settings.engines.backup].funcName].apply(this, [{input, output, text: newText, specialCase, engine: translationEngines[this.settings.engines.backup], autoDecision: aiDecisionFor(this.settings.engines.backup), decisionPrompt: aiPrompt}, finishTranslation]);
+							}
+							else finishTranslation();
+						};
+						// Safety net handler: invoked by finishTranslation on an AI skip signal for a received
+						// auto message. If the message is foreign, force a plain re-translation (autoDecision:false,
+						// no skip option); otherwise honor the original skip.
+						skipSafetyNetHandler = skipTranslation => {
+							this.isReceivedMessageForeignAsync(newText, output && output.id, isForeign => {
+								if (isForeign) dispatchEngine(false);
+								else finishTranslation(skipTranslation);
+							});
+						};
+						// Clearly cross-script foreign messages (e.g. all-caps Latin "HELLO CRYZYYY" -> Chinese)
+						// are always foreign: translate plainly so AI decision mode cannot misjudge all-caps
+						// text as an acronym and echo/skip it. Same-script (latin<->latin) still uses AI decision.
+						const isReceivedAutoAiDecision = options.auto && place == messageTypes.RECEIVED && this.shouldUseAiAutoTranslateDecision();
+						const useAutoDecision = isReceivedAutoAiDecision && !this.isClearlyForeignLanguageMessage(newText, output && output.id);
+						dispatchEngine(useAutoDecision);
 					}
 				}
 				else finishTranslation();
@@ -8248,7 +8452,7 @@ module.exports = (_ => {
 					top_p: 0.8
 				};
 
-				BDFDB.LibraryRequires.request(apiEndpoint, {
+				this.requestWithTimeout(apiEndpoint, {
 					method: "post",
 					headers: {
 						"Content-Type": "application/json",
@@ -8343,7 +8547,7 @@ module.exports = (_ => {
 					top_p: 0.8
 				};
 
-				BDFDB.LibraryRequires.request(apiEndpoint, {
+				this.requestWithTimeout(apiEndpoint, {
 					method: "post",
 					headers: {
 						"Content-Type": "application/json",
@@ -8947,7 +9151,24 @@ module.exports = (_ => {
 				// dot-separated parts (1.2.3). A bare two-part number like "3.1" in "版本 3.1" is plain
 				// text and must not be auto-protected.
 				string = string.replace(/\bv\d+(?:\.\d+){1,4}(?:[-+][A-Za-z0-9.-]+)?\b|\b\d+(?:\.\d+){2,4}(?:[-+][A-Za-z0-9.-]+)?\b/gi, protectToken);
-				string = string.replace(/\b[A-Z][A-Z0-9]{1,}(?:[-_/+.][A-Z0-9]+)*\b/g, protectToken);
+				// All-caps "shouting" in Latin-dominant text (e.g. "HELLO CRYZYYY") must not be treated
+				// as acronyms: the all-caps rule below would mask every word and leave nothing
+				// translatable, so the message got skipped entirely. Only protect genuine acronyms
+				// embedded in normal-case or CJK-dominant text. Detection uses the original input so
+				// earlier structural replacements (which yield non-Latin placeholders) do not skew it.
+				const originalForShoutCheck = String(string);
+				const isAllCapsLatinShouting = (() => {
+					const latinLetters = originalForShoutCheck.match(/[A-Za-z]/g) || [];
+					if (latinLetters.length < 4) return false;
+					const upperCount = latinLetters.reduce((n, c) => n + (c >= "A" && c <= "Z" ? 1 : 0), 0);
+					if (upperCount / latinLetters.length < 0.8) return false;
+					// CJK/Hangul-dominant text keeps acronym protection (e.g. "我需要CDK用于GPT").
+					const nonLatin = (originalForShoutCheck.match(/[一-鿿぀-ヿ가-힯]/g) || []).length;
+					return nonLatin * 2 < latinLetters.length;
+				})();
+				if (!isAllCapsLatinShouting) {
+					string = string.replace(/\b[A-Z][A-Z0-9]{1,}(?:[-_/+.][A-Z0-9]+)*\b/g, protectToken);
+				}
 				string = string.replace(/\b[A-Za-z]+(?:[A-Z][a-z0-9]+){1,}[A-Za-z0-9]*\b/g, protectToken);
 				string = string.replace(/\b[A-Za-z0-9]+(?:[_-][A-Za-z0-9]+){1,}\b/g, protectToken);
 				return {string, excepts, count};

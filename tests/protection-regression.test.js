@@ -137,3 +137,31 @@ test("common lowercase English stopwords in mixed text are not auto-protected", 
 	assert.deepEqual(result.protectedValues, []);
 	assert.equal(result.restoredText, source);
 });
+
+test("all-caps Latin shouting is translatable, not treated as acronyms", () => {
+	const source = "HELLO CRYZYYY";
+	const result = runProtection(source, "received");
+
+	// Whole-message shouting must keep translatable content and not mask every word.
+	assert.equal(result.shouldTranslate, true);
+	assert.ok(!result.protectedValues.includes("HELLO"));
+	assert.ok(!result.protectedValues.includes("CRYZYYY"));
+});
+
+test("acronyms in CJK-dominant text stay protected (shouting fix regression guard)", () => {
+	const source = "我需要CDK用于GPT";
+	const result = runProtection(source, "received");
+
+	assert.ok(result.protectedValues.includes("CDK"));
+	assert.ok(result.protectedValues.includes("GPT"));
+	assert.equal(result.shouldTranslate, true);
+	assert.equal(result.restoredText, source);
+});
+
+test("acronyms embedded in normal-case Latin text stay protected", () => {
+	const source = "use the API key please";
+	const result = runProtection(source, "received");
+
+	assert.ok(result.protectedValues.includes("API"));
+	assert.equal(result.restoredText, source);
+});

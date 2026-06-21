@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.3.32
+
+- Fixed: AI 决策模式下全大写外语消息(如 “HELLO CRYZYYY”)自动翻译漏翻。根因是 AI 把全大写当缩写/专名而**原样回显**(不输出 `__SKIP_TRANSLATION__`),v0.3.30 安全网只拦 skip token、不拦回显,于是 `isTranslationLikelyInTargetLanguage` 判非目标语言后静默丢弃;手动翻译强制整段翻译所以不受影响
+- 改动 1(主修复):`translateText` 对“收消息自动 + AI 决策”且按书写系统判定为明确外语(源脚本≠目标脚本且非目标字母≥6)的消息,强制 `autoDecision=false` 直接整段翻译,不给 AI skip/回显的机会
+- 改动 2(兜底):安全网触发条件从“仅 skip 信号”扩展为“skip 信号 或 wrongTarget(原样回显/非目标语言)”;复核确为外语则强制纯翻译重翻,用既有 `retriedAfterSkip` 防死循环
+- Notes: 仅作用于“收消息自动 + AI 决策模式”;manual、basic、同脚本 latin↔latin 行为不变
+
+## v0.3.31
+
+- Fixed: 全大写拉丁字母消息(如 “HELLO CRYZYYY”)无法翻译——根因是 `protectAutoTechnicalTerms` 的全大写缩写规则把每个大写词都当技术缩写保护，整条消息被占位符替换后无剩余可翻译内容，`shouldAutoTranslateReceivedMessage` 直接跳过。现新增“全大写喊话”判定:拉丁主导且大写占比高时跳过该缩写规则，让喊话文本正常翻译;CJK 主导(如 “我需要CDK用于GPT”)与正常大小写文本中的真缩写(CDK/GPT/API)仍照常保护
+- Notes: 修的是 v0.3.30 未覆盖的真正根因，作用于所有引擎与模式(不仅 AI 决策模式);单点改动，正常大小写与 CJK 主导文本行为不变
+
+## v0.3.30
+
+- Fixed: AI 决策模式(`autoTranslateDecisionMode=ai`)偶发把明确的外语消息误判为 `__SKIP_TRANSLATION__` 导致漏翻(典型:全大写英文消息目标中文未翻)
+- Added: 收到消息 AI 决策安全网——AI 返回 skip 时先本地"明确外语"快判(零网络,靠书写系统区分,如拉丁 vs 汉字),再 Google gtx 检测复核(覆盖拉丁语之间),确认是外语则强制纯翻译重翻(不给 AI skip 选项),确保真外语不被漏翻
+- Notes: 安全网仅在 AI 决策模式下、AI 误判 skip 时触发,平时零额外请求;gtx 不通时本地快判仍能兜住不同字形的多数情况,拉丁语之间维持原 skip(不比原来差);挂在 `useLocalLanguagePrecheck` 开关下,basic 模式不受影响;不改 AI 提示词
+
+## v0.3.29
+
+- Added: 本地语种识别预检测,翻前用本地停用词识别跳过拉丁语系同语言消息(英→英、法→法等),避免无意义的 AI 请求。覆盖英/法/西/德/葡/意/荷/波兰/罗马尼亚/土/瑞典/丹麦/挪威/捷/匈/印尼/越/塔加洛等常用语种,仅在高置信时跳过,拿不准仍照常翻译,可开关
+- Added: 收到消息源语言过滤改为请求前本地判定(原为翻完后丢弃,白花一次请求)
+- Added: 翻译请求加 30 秒硬超时,卡住不再无限阻塞队列;超时合成 504 走原有失败分支
+- Added: 429/5xx 触发队列退避暂停(429 暂 5 秒、5xx 暂 2 秒),避免顶着限流连续重打
+- Docs: 说明 AI 决策模式(`autoTranslateDecisionMode=ai`)是 AI 引擎最准的同语言跳过,本地预检测是全引擎通用补充
+
 ## v0.3.28
 
 - Fixed: 保护词匹配忽略内部空格,配置 “BUG team” 现在也能保护 “bugteam”(无空格)、“bug  team”
