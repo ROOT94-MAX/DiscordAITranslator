@@ -4,8 +4,8 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Discord-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.com)
 [![Loader](https://img.shields.io/badge/Loader-BetterDiscord-4E5D94?style=flat-square)](https://betterdiscord.app)
-[![Version](https://img.shields.io/badge/Version-0.3.32-success?style=flat-square)](https://github.com/able-root/DiscordAITranslator/releases)
-[![Downloads](https://img.shields.io/github/downloads/able-root/DiscordAITranslator/total?style=flat-square&color=yellow)](https://github.com/able-root/DiscordAITranslator/releases)
+[![Version](https://img.shields.io/badge/Version-0.3.32-success?style=flat-square)](https://github.com/ROOT94-MAX/DiscordAITranslator/releases)
+[![Downloads](https://img.shields.io/github/downloads/ROOT94-MAX/DiscordAITranslator/total?style=flat-square&color=yellow)](https://github.com/ROOT94-MAX/DiscordAITranslator/releases)
 [![License](https://img.shields.io/badge/License-MIT-orange?style=flat-square)](./LICENSE)
 
 一款专为 Discord 打造的智能翻译插件：发送前双语预审、接收消息自动翻译、历史消息智能补翻，内置文本保护规则与滚动稳定性保障。
@@ -18,6 +18,7 @@
 
 ## 目录
 
+- [效果展示](#效果展示)
 - [核心特性](#核心特性)
 - [支持的翻译服务商](#支持的翻译服务商)
 - [智能保护规则](#智能保护规则)
@@ -26,6 +27,18 @@
 - [项目结构与测试](#项目结构与测试)
 - [致谢](#致谢)
 - [开源协议](#开源协议)
+
+---
+
+## 效果展示
+
+收到消息自动翻译，译文以高亮形式附在原文下方，并标注翻译来源：
+
+![翻译效果](images/translation-effect.png)
+
+适用多语言服务器场景，原消息与译文同屏可见：
+
+![多语言聊天场景](images/chat-overview.png)
 
 ---
 
@@ -92,7 +105,7 @@
 
 ### 安装步骤
 
-> 💡 推荐直接从 [Releases 页面](https://github.com/able-root/DiscordAITranslator/releases) 下载 `DiscordAITranslator.plugin.js`，无需 clone 整个仓库。
+> 💡 推荐直接从 [Releases 页面](https://github.com/ROOT94-MAX/DiscordAITranslator/releases) 下载 `DiscordAITranslator.plugin.js`，无需 clone 整个仓库。
 
 1. 将 `DiscordAITranslator.plugin.js` 移动至插件目录 `%AppData%\BetterDiscord\plugins`。
 2. 将下载好的 `BDFDB Library` 文件（`00BDFDB.plugin.js`）放置到同一目录下。
@@ -101,11 +114,23 @@
 
 > 🔄 **版本更新提示**：替换新版插件后，请在插件页面重新开关一次，或者在 Discord 界面中直接按下 `Ctrl + R` 重载客户端。
 
+### 配置示例
+
+翻译服务配置：选择服务商、填写 API Key / Endpoint / Model（图为 DeepSeek）：
+
+![翻译服务配置](images/settings-service.png)
+
+语言与自动翻译策略：设置收发语言、主备引擎、补翻范围与每批数量：
+
+![语言与自动翻译策略](images/settings-language.png)
+
 ### 推荐搭配：system24 主题
 
-为了获得最极致的像素级视觉体验，推荐在 BetterDiscord 主题页中导入以下直链：
+打开 BetterDiscord 主题页，直接导入以下直链：
 
-<https://refact0r.github.io/system24/build/system24.css>
+```text
+https://refact0r.github.io/system24/build/system24.css
+```
 
 ---
 
