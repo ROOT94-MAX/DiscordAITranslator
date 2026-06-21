@@ -32,15 +32,9 @@
 
 ## 效果展示
 
-收到消息自动翻译，译文以高亮形式附在原文下方，并标注翻译来源：
+收到消息后自动翻译，译文以高亮形式附在原文下方，并标注翻译来源：
 
-原文截图：
-
-![原文截图](images/chat-overview.png)
-
-译文截图：
-
-![译文截图](images/translation-effect.png)
+![原消息与译文对比](images/translation-comparison.png)
 
 ---
 
