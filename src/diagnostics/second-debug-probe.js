@@ -373,13 +373,33 @@ function createSecondDebugProbe({
 		return JSON.stringify({marker: SECOND_DEBUG_MARKER, generatedAt: now(), entryCount: entries.length, entries});
 	}
 
-	function installGlobal(target, {resolveScrollerElement = null, forceUpdate = null, getRenderCount = null, waitForPaint = defaultWaitForPaint} = {}) {
+	function installGlobal(target, {resolveScrollerElement = null, forceUpdate = null, getRenderCount = null, waitForPaint = defaultWaitForPaint, autoRunExperiment = false, autoRunDelayMs = 8000, autoRunMaxAttempts = 15} = {}) {
 		if (!target) return;
 		const experimentConfig = resolveScrollerElement && forceUpdate ? {
 			strategies: createMessageRefreshStrategies({resolveScrollerElement, forceUpdate}),
 			getRenderCount: getRenderCount || (() => parentRenderCount),
 			waitForPaint
 		} : null;
+		// DevTools is unreachable on some clients, so the debug build can run the
+		// experiment on its own once a message list is mounted. It runs exactly once.
+		if (autoRunExperiment && experimentConfig && setTimeoutFn) {
+			let attempts = 0;
+			let ran = false;
+			const attempt = async () => {
+				if (ran) return;
+				attempts++;
+				let mounted = null;
+				try {mounted = resolveScrollerElement();}
+				catch (error) {mounted = null;}
+				if (mounted) {
+					ran = true;
+					await runRefreshExperiment(experimentConfig);
+					return;
+				}
+				if (attempts < autoRunMaxAttempts) setTimeoutFn(attempt, autoRunDelayMs);
+			};
+			setTimeoutFn(attempt, autoRunDelayMs);
+		}
 		target.TranslatorDebug = {
 			marker: SECOND_DEBUG_MARKER,
 			list: () => entries.slice(),

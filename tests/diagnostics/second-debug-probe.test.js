@@ -522,6 +522,46 @@ test("installGlobal wires real refresh strategies and a render-count source into
 	assert.ok(forced.length >= 1);
 });
 
+test("autoRunExperiment waits for the scroller to mount, then runs the experiment exactly once", async () => {
+	const timers = [];
+	const probe = createSecondDebugProbe({
+		log: () => {},
+		setTimeoutFn: (callback, delay) => {timers.push({callback, delay}); return timers.length;},
+		clearTimeoutFn: () => {}
+	});
+	class Ancestor {
+		forceUpdate() {}
+	}
+	function MessagesFn() {}
+	const ancestorFiber = {tag: 1, type: Ancestor, stateNode: new Ancestor(), memoizedProps: {}, return: null};
+	const ownerFiber = {tag: 0, type: MessagesFn, stateNode: null, memoizedProps: {channelStream: [1]}, return: ancestorFiber};
+	const listFiber = {tag: 5, type: "div", stateNode: {}, memoizedProps: {}, return: ownerFiber};
+	let mounted = null;
+	let renderCount = 0;
+
+	probe.installGlobal({}, {
+		resolveScrollerElement: () => mounted,
+		forceUpdate: () => {renderCount += 1;},
+		getRenderCount: () => renderCount,
+		waitForPaint: () => Promise.resolve(),
+		autoRunExperiment: true
+	});
+
+	assert.equal(timers.length, 1, "auto-run is scheduled, not immediate");
+	await timers[0].callback();
+	assert.equal(probe.list().filter(entry => entry.kind === "refreshExperiment").length, 0, "no experiment before the list mounts");
+	assert.ok(timers.length >= 2, "a retry is scheduled while unmounted");
+
+	mounted = {__reactFiber$k: listFiber};
+	await timers[timers.length - 1].callback();
+	const firstRunCount = probe.list().filter(entry => entry.kind === "refreshExperiment").length;
+	assert.ok(firstRunCount >= 3, "all strategies ran once mounted");
+
+	const timerCountAfterRun = timers.length;
+	if (timers[timerCountAfterRun - 1]) await timers[timerCountAfterRun - 1].callback();
+	assert.equal(probe.list().filter(entry => entry.kind === "refreshExperiment").length, firstRunCount, "the experiment does not run a second time");
+});
+
 test("installGlobal exposes dump and clipboard copy on the provided window object", () => {
 	const probe = createSecondDebugProbe({log: () => {}});
 	probe.record("custom", {index: 1});
