@@ -779,25 +779,38 @@ var require_discord_render_adapter = __commonJS({
         }
       }
       __name(findMessageElement, "findMessageElement");
-      function findMessageOwner(element, messageId) {
-        let ownerConfig = {
-          up: !0,
-          unlimited: !0,
-          filter: /* @__PURE__ */ __name((instance) => {
-            let props = instance && (instance.stateNode && instance.stateNode.props || instance.props || instance.memoizedProps);
-            return !!(props && props.message && String(props.message.id) === String(messageId));
-          }, "filter")
-        }, directOwner = BDFDB.ReactUtils.findOwner(element, ownerConfig);
-        if (directOwner) return directOwner;
-        let loadingElement = null;
-        try {
-          loadingElement = element && element.querySelector && element.querySelector(".translator-translation-loading");
-        } catch {
-          loadingElement = null;
-        }
-        return loadingElement ? BDFDB.ReactUtils.findOwner(loadingElement, ownerConfig) : null;
+      function fiberFromElement(element) {
+        if (!element) return null;
+        for (let key in element)
+          if (key.startsWith("__reactFiber$") || key.startsWith("__reactInternalInstance$")) return element[key];
+        return null;
       }
-      __name(findMessageOwner, "findMessageOwner");
+      __name(fiberFromElement, "fiberFromElement");
+      function hasChannelStreamProps(candidate) {
+        let props = candidate && (candidate.stateNode && candidate.stateNode.props || candidate.props || candidate.memoizedProps || candidate.pendingProps);
+        return !!(props && props.channelStream);
+      }
+      __name(hasChannelStreamProps, "hasChannelStreamProps");
+      function findChannelStreamOwner(scroller) {
+        if (!scroller) return null;
+        try {
+          let owner = BDFDB.ReactUtils.findOwner(scroller, { up: !0, unlimited: !0, filter: hasChannelStreamProps });
+          if (owner) return owner;
+        } catch {
+        }
+        let current = fiberFromElement(scroller);
+        for (let depth = 0; current && depth < 40; depth++) {
+          if (hasChannelStreamProps(current)) return current;
+          current = current.return;
+        }
+        return null;
+      }
+      __name(findChannelStreamOwner, "findChannelStreamOwner");
+      function refreshChannelStreamOwner(scroller) {
+        let owner = findChannelStreamOwner(scroller);
+        return owner ? (BDFDB.ReactUtils.forceUpdate(owner), !0) : !1;
+      }
+      __name(refreshChannelStreamOwner, "refreshChannelStreamOwner");
       function waitForPaint() {
         return new Promise((resolve) => requestAnimationFrame2(() => requestAnimationFrame2(resolve)));
       }
@@ -836,28 +849,19 @@ var require_discord_render_adapter = __commonJS({
           }
         });
       }
-      __name(confirmViews, "confirmViews");
-      function updateMessageOwners(messageIds, elementsByMessageId) {
-        let owners = [], seen = /* @__PURE__ */ new Set();
-        for (let messageId of messageIds) {
-          let element = elementsByMessageId.get(String(messageId)), owner = element && findMessageOwner(element, messageId);
-          !owner || seen.has(owner) || (seen.add(owner), owners.push(owner));
-        }
-        return owners.length && BDFDB.ReactUtils.forceUpdate(...owners), owners.length;
-      }
-      return __name(updateMessageOwners, "updateMessageOwners"), {
+      return __name(confirmViews, "confirmViews"), {
         async refreshMessages({ messageIds = [], ownerMessageIds = [], views = [] }) {
-          let uniqueMessageIds = getUniqueMessageIds(messageIds), targetMessageIds = getUniqueMessageIds(uniqueMessageIds.concat(ownerMessageIds)), viewsByMessageId = getViewsByMessageId(views), scroller = document2.querySelector(BDFDB.dotCN.messagesscroller), intentSequence = getUserScrollIntentSequence(), scrollState = scroller ? captureScrollState() : null, outcome, renderError, hasRenderError = !1;
+          let uniqueMessageIds = getUniqueMessageIds(messageIds), viewsByMessageId = getViewsByMessageId(views), scroller = document2.querySelector(BDFDB.dotCN.messagesscroller), intentSequence = getUserScrollIntentSequence(), scrollState = scroller ? captureScrollState() : null, outcome, renderError, hasRenderError = !1;
           try {
             let elementsByMessageId = /* @__PURE__ */ new Map();
-            for (let messageId of targetMessageIds) {
+            for (let messageId of uniqueMessageIds) {
               let element = findMessageElement(messageId);
               element && elementsByMessageId.set(String(messageId), element);
             }
-            let presentTargetIds = targetMessageIds.filter((messageId) => elementsByMessageId.has(String(messageId))), presentIds = uniqueMessageIds.filter((messageId) => elementsByMessageId.has(String(messageId)));
-            isRuntimeActive() && updateMessageOwners(presentTargetIds, elementsByMessageId), await waitForPaint();
+            let presentIds = uniqueMessageIds.filter((messageId) => elementsByMessageId.has(String(messageId))), refreshed = !1;
+            isRuntimeActive() && (refreshed = refreshChannelStreamOwner(scroller)), await waitForPaint();
             let confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.map(String).includes(String(messageId)));
-            unconfirmedIds.length && isRuntimeActive() && (updateMessageOwners(unconfirmedIds, elementsByMessageId), await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.map(String).includes(String(messageId))));
+            unconfirmedIds.length && refreshed && isRuntimeActive() && (refreshChannelStreamOwner(scroller), await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.map(String).includes(String(messageId))));
             let deferredIds = uniqueMessageIds.filter((messageId) => !elementsByMessageId.has(String(messageId)));
             if (!isRuntimeActive()) {
               let confirmedIdSet = new Set(confirmedIds.map(String));

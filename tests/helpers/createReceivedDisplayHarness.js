@@ -7,6 +7,7 @@ function createHarness({confirmDirectly = true, confirmAfterFallback = true, mou
 	const mounted = mountedMessageIds && new Set(mountedMessageIds.map(String));
 	const confirmed = new Set();
 	const messageElements = new Map();
+	const streamOwner = {props: {channelStream: []}};
 	function getMessageElement(messageId) {
 		const id = String(messageId);
 		if (mounted && !mounted.has(id)) return null;
@@ -50,12 +51,23 @@ function createHarness({confirmDirectly = true, confirmAfterFallback = true, mou
 			LibraryComponents: {TooltipContainer: "TooltipContainer"},
 			ReactUtils: {
 				createElement: (type, props) => ({type, key: props && props.key, props: props || {}}),
-				findOwner: element => element ? {props: {message: {id: element.messageId}, channelStream: []}} : null,
+				// The adapter resolves the channel-stream owner from the scroller and forces
+				// it once; that repaint confirms every mounted row in one parent-to-child pass.
+				findOwner: (node, config) => {
+					if (config && typeof config.filter == "function" && node === scroller) return streamOwner;
+					return null;
+				},
 				forceUpdate: (...owners) => {
 					calls.forceUpdate++;
-					const messageIds = owners.map(owner => owner && owner.props && owner.props.message && String(owner.props.message.id)).filter(Boolean);
-					calls.forceUpdateBatches.push(messageIds);
-					if (confirmDirectly) for (const messageId of messageIds) confirmed.add(messageId);
+					const painted = [];
+					if (owners.includes(streamOwner)) {
+						for (const messageId of messageElements.keys()) {
+							if (mounted && !mounted.has(messageId)) continue;
+							if (confirmDirectly) confirmed.add(messageId);
+							painted.push(messageId);
+						}
+					}
+					calls.forceUpdateBatches.push(painted);
 				}
 			},
 			MessageUtils: {

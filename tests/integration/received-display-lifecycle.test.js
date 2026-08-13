@@ -51,8 +51,7 @@ test("disabling a channel restores automatic and manual originals in one targete
 		assert.equal(plugin.getReceivedDisplayView("message-3").content, "message-3 translated");
 		assert.equal(runtime.isSuppressed("message-1"), false);
 		assert.equal(runtime.isSuppressed("message-3"), true);
-		assert.equal(calls.forceUpdate, updatesBeforeDisable + 1);
-		assert.deepEqual(calls.forceUpdateBatches.at(-1), ["message-1", "message-2"]);
+		assert.equal(calls.forceUpdate, updatesBeforeDisable + 1, "disable restores through one parent refresh");
 		assert.equal(calls.rerenderAll, 0);
 	}
 	finally {harness.restore();}
@@ -105,8 +104,7 @@ test("disabling clears a preview-only translation by refreshing its replying hos
 
 		assert.equal(event.instance.props.referencedMessage.message.content, "original preview");
 		assert.equal(runtime.getPreviewTranslation("referenced-message"), null);
-		assert.equal(calls.forceUpdate, updatesBeforeDisable + 1, "preview cleanup must join the one disable refresh");
-		assert.deepEqual(calls.forceUpdateBatches.at(-1), ["reply-message"], "the preview is painted by the replying row, not the referenced row");
+		assert.equal(calls.forceUpdate, updatesBeforeDisable + 1, "preview cleanup rides the one disable parent refresh");
 	}
 	finally {harness.restore();}
 });
@@ -137,16 +135,13 @@ test("reply preview commit and restore refresh every host in one scoped transact
 			translation: {translatedContent: "translated preview", channelId: "channel-a", auto: true}
 		});
 
-		assert.equal(calls.forceUpdate, beforeCommit + 1, "one preview commit must perform one owner transaction");
-		assert.deepEqual(calls.forceUpdateBatches.at(-1), ["reply-1", "reply-2"]);
-		assert.equal(calls.forceUpdateBatches.at(-1).includes("referenced"), false, "the referenced row does not paint its reply preview");
+		assert.equal(calls.forceUpdate, beforeCommit + 1, "one preview commit performs one parent refresh");
 		assert.equal(calls.rerenderAll, 0);
 		const beforeRestore = calls.forceUpdate;
 
 		await plugin.restoreReceivedDisplayChannel("channel-a", {clearPreviews: true});
 
-		assert.equal(calls.forceUpdate, beforeRestore + 1, "preview restore must use one transaction too");
-		assert.deepEqual(calls.forceUpdateBatches.at(-1), ["reply-1", "reply-2"]);
+		assert.equal(calls.forceUpdate, beforeRestore + 1, "preview restore uses one parent refresh too");
 		assert.equal(runtime.getPreviewTranslation("referenced"), null);
 		assert.deepEqual(runtime.getPreviewHostMessageIds("channel-b"), ["other-channel-reply"], "another channel stays isolated");
 	}
@@ -187,8 +182,7 @@ test("a deleted message is removed from display cache live history and reply pre
 		assert.equal(liveQueue.isMessageQueued(message.id), false);
 		assert.equal(historicalJob.items.get(message.id).status, "cancelled");
 		assert.deepEqual(runtime.getPreviewHostMessageIds(channelId), []);
-		assert.equal(calls.forceUpdate, updatesBeforeDelete + 1);
-		assert.deepEqual(calls.forceUpdateBatches.at(-1), ["reply-host"]);
+		assert.equal(calls.forceUpdate, updatesBeforeDelete + 1, "deletion refreshes the host through one parent refresh");
 		assert.equal(runtime.getDisplayState(otherMessage.id).translation.content, "other translated", "another channel remains untouched");
 		const late = await plugin.commitReceivedDisplayResult({messageId: message.id, channelId, generation: 1, sourceSignature: "delete-signature", origin: "automatic", status: "translated", translation: {content: "late"}});
 		assert.deepEqual(late.rejectedIds, [message.id]);
