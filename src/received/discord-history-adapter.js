@@ -100,7 +100,12 @@ function createDiscordHistoryAdapter({
 			if (!channelId || !limit || signal && signal.aborted) return [];
 			const result = await callFetch(fetchMessages, {channelId, beforeMessageId, limit, signal});
 			if (signal && signal.aborted) return [];
-			return cloneMessages(result);
+			const returnedMessages = cloneMessages(result);
+			// Real DiscordPTB evidence: fetchMessages resolves to a boolean and populates
+			// the store asynchronously instead of returning messages. When the action gives
+			// us nothing usable, re-read the store snapshot now that the promise has settled.
+			if (returnedMessages.length) return returnedMessages;
+			return cloneMessages(resolveMessageStoreSource(messageStore, channelId));
 		}
 	});
 }

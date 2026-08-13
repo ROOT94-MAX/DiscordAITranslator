@@ -7691,7 +7691,9 @@ var require_discord_history_adapter = __commonJS({
         async prefetchMessages({ channelId, beforeMessageId = null, limit = 0, signal = null } = {}) {
           if (!channelId || !limit || signal && signal.aborted) return [];
           let result = await callFetch(fetchMessages, { channelId, beforeMessageId, limit, signal });
-          return signal && signal.aborted ? [] : cloneMessages(result);
+          if (signal && signal.aborted) return [];
+          let returnedMessages = cloneMessages(result);
+          return returnedMessages.length ? returnedMessages : cloneMessages(resolveMessageStoreSource(messageStore, channelId));
         }
       });
     }

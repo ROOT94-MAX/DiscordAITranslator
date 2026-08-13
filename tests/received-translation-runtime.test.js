@@ -888,3 +888,59 @@ test("the Discord history adapter enumerates cache and fetch results across supp
 	assert.notStrictEqual(cached[0], cachedMessages[0]);
 	assert.notStrictEqual(prefetched[0], prefetchedMessages[0]);
 });
+
+test("the history adapter re-reads the store when the fetch action resolves to a boolean and populates asynchronously", async () => {
+	// Real DiscordPTB evidence (2026-08-13): MessageActions.fetchMessages resolves to
+	// the boolean `true` and updates MessageStore asynchronously rather than returning
+	// messages. The adapter must await the action, then re-read the store snapshot.
+	let store = [
+		{id: "300", channel_id: "channel-1", content: "cached-300"},
+		{id: "200", channel_id: "channel-1", content: "cached-200"}
+	];
+	let fetchArgs = null;
+	const adapter = createDiscordHistoryAdapter({
+		messageStore: {
+			getMessages: () => ({toArray: () => store})
+		},
+		fetchMessages: {
+			fetchMessages: async request => {
+				fetchArgs = request;
+				store = store.concat([
+					{id: "100", channel_id: "channel-1", content: "fetched-100"},
+					{id: "50", channel_id: "channel-1", content: "fetched-50"}
+				]);
+				return true;
+			}
+		}
+	});
+
+	const prefetched = await adapter.prefetchMessages({channelId: "channel-1", beforeMessageId: "200", limit: 5});
+
+	assert.ok(fetchArgs, "the fetch action still runs");
+	assert.deepEqual(prefetched.map(message => message.id).sort(), ["100", "200", "300", "50"]);
+	assert.ok(prefetched.every(message => message.channel_id === "channel-1"));
+});
+
+test("the history adapter still prefers messages the fetch action returns directly", async () => {
+	const adapter = createDiscordHistoryAdapter({
+		messageStore: {
+			getMessages: () => ({toArray: () => [{id: "999", channel_id: "channel-1", content: "stale-store"}]})
+		},
+		fetchMessages: {
+			fetchMessages: async () => ({body: {messages: [{id: "100", channel_id: "channel-1", content: "direct-100"}]}})
+		}
+	});
+
+	const prefetched = await adapter.prefetchMessages({channelId: "channel-1", beforeMessageId: "200", limit: 5});
+	assert.deepEqual(prefetched.map(message => message.id), ["100"]);
+});
+
+test("the history adapter returns nothing when a boolean fetch adds no store messages", async () => {
+	const adapter = createDiscordHistoryAdapter({
+		messageStore: {getMessages: () => null},
+		fetchMessages: {fetchMessages: async () => true}
+	});
+
+	const prefetched = await adapter.prefetchMessages({channelId: "channel-1", beforeMessageId: "200", limit: 5});
+	assert.deepEqual(prefetched, []);
+});
