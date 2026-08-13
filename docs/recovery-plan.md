@@ -50,7 +50,7 @@ The 2026-08-04 component-scoped display task is retained below as implementation
 ### Mandatory second-debug evidence before implementation
 
 - [ ] Trace one mounted translated message through snapshot, provider result, state commit, parent projection, child decoration, DOM revision, and status accounting without changing runtime behavior.
-- [ ] Capture the real active channel-stream patch instance/Fiber shape and prove which parent render handle is updateable.
+- [x] Capture the real active channel-stream patch instance/Fiber shape and prove which parent render handle is updateable. **(Evidence 2026-08-13 — see "Captured second-debug evidence" below.)**
 - [ ] Trace one channel-disable restoration through automatic, manual, reply-preview, embed, and title state and record the first boundary that remains stale.
 - [ ] Trace one virtualized-ready message through unmount/remount and distinguish it from a mounted render failure.
 - [ ] Trace historical batch parsing by request ID and prove missing, duplicate, reordered, and partial provider results have explicit terminal reasons.
@@ -76,6 +76,14 @@ The 2026-08-04 component-scoped display task is retained below as implementation
 - [ ] Add physical provider cancellation where supported and a runtime task registry for workers, timers, animation frames, host mappings, and channel-session maps; assert stop/start and long-session cleanup.
 - [ ] Restore an explicit loaded-message limit control or remove the persisted setting contract; an unfilled target must report exhausted/failed rather than successful completion and must not auto-hide as complete.
 - [ ] Decide and document reply-preview decoration, then test actual computed presentation. Make focused generated-plugin tests build/check first and extend the release gate to changelog plus artifact identity.
+
+### Captured second-debug evidence (2026-08-13, DiscordPTB app-1.0.1212)
+
+Collected with `DiscordAITranslator.debug.plugin.js` (probe `src/diagnostics/second-debug-probe.js`, evidence written to `BetterDiscord/data/translator-second-debug.json`; not committed). The probe is read-only: it never calls `forceUpdate`, never mutates props, and is stripped from release builds by `__TRANSLATOR_DISPLAY_DEBUG__`.
+
+**Parent render handle (top-priority item 2).** The `before: "Messages"` patch hands the plugin a plain data envelope: `instance` is a bare `Object` with `hasForceUpdate: false` and no `_reactInternals`; `component` is an anonymous function component (`oo`). Across 65 render passes the same channel produced a new plain instance every time, so the patch argument is not a stable, updateable handle. The DOM-anchored fiber walk from the messages scroller found the `channelStream` owner at depth 9 (function `oo`, `canForceUpdate: false`), and the nearest ancestor with a usable `forceUpdate` at depth 24 (class `E`), well outside the message list and behind multiple memo/provider boundaries. **Conclusion:** the current "find the message owner and `forceUpdate` it" strategy has no valid target in this client. The replacement must trigger a parent refresh without relying on an updateable channel-stream component instance.
+
+**Historical prefetch return shape (top-priority item 3).** `MessageStore.getMessages(channelId)` returns a channel-view object (constructor `f`, 26 keys, `hasToArray: true`) rather than an array; cached enumeration must go through `toArray()`. `MessageActions.fetchMessages({channelId, beforeMessageId, limit, signal})` accepts the plugin's request shape but resolves to the boolean `true` in all four observed calls (limits 47/50/3/21) — it never returns messages and populates the store asynchronously instead. The current `discord-history-adapter.js` returns the first non-null result and then runs `cloneMessages(true)`, which yields `[]`. **Conclusion:** the bounded prefetch always contributes zero messages even on success, so a configured maximum is sealed at the already-mounted window. The replacement prefetch must await store population (re-read `getMessages`/`toArray` after the action settles) instead of trusting the action's return value.
 
 ### Approved replacement architecture
 
