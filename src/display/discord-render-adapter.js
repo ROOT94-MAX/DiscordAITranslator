@@ -1,15 +1,3 @@
-// Turns one committed display transaction into one visible refresh. Real-client
-// evidence (2026-08-13, docs/recovery-plan.md "Captured second-debug evidence") showed
-// message rows are functional/memoized components with no updateable per-message owner,
-// so the previous per-message forceUpdate found no target and translations only appeared
-// when Discord repainted for another reason (hover, new message, scroll).
-//
-// The proven mechanism is a single parent refresh: resolve the channel-stream owner
-// (the component whose props carry `channelStream`) from the mounted messages scroller
-// and force-update it once. That repaints the whole list in one parent-to-child React
-// pass, so translated text and its decoration derive from the same revision together.
-// Message IDs are used only to confirm exact DOM revisions afterwards; they are never
-// the refresh target.
 function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, getUserScrollIntentSequence, captureScrollState, restoreScrollState, isRuntimeActive = () => true}) {
 	function escapeAttributeValue(value) {
 		return String(value).replace(/(["\\])/g, "\\$1");
@@ -25,43 +13,24 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 		}
 	}
 
-	function fiberFromElement(element) {
-		if (!element) return null;
-		for (const key in element) {
-			if (key.startsWith("__reactFiber$") || key.startsWith("__reactInternalInstance$")) return element[key];
-		}
-		return null;
-	}
-
-	function hasChannelStreamProps(candidate) {
-		const props = candidate && (candidate.stateNode && candidate.stateNode.props || candidate.props || candidate.memoizedProps || candidate.pendingProps);
-		return !!(props && props.channelStream);
-	}
-
-	// The channel-stream owner is the parent projection boundary. Prefer BDFDB's owner
-	// walk; fall back to a raw fiber walk from the scroller when the loaded runtime does
-	// not expose a matching updater. The returned handle is passed straight to
-	// forceUpdate, which is what the real-client experiment proved repaints the list.
-	function findChannelStreamOwner(scroller) {
-		if (!scroller) return null;
-		try {
-			const owner = BDFDB.ReactUtils.findOwner(scroller, {up: true, unlimited: true, filter: hasChannelStreamProps});
-			if (owner) return owner;
-		}
-		catch (err) {}
-		let current = fiberFromElement(scroller);
-		for (let depth = 0; current && depth < 40; depth++) {
-			if (hasChannelStreamProps(current)) return current;
-			current = current.return;
-		}
-		return null;
-	}
-
-	function refreshChannelStreamOwner(scroller) {
-		const owner = findChannelStreamOwner(scroller);
-		if (!owner) return false;
-		BDFDB.ReactUtils.forceUpdate(owner);
-		return true;
+	function findMessageOwner(element, messageId) {
+		const ownerConfig = {
+			up: true,
+			unlimited: true,
+			filter: instance => {
+				const props = instance && (instance.stateNode && instance.stateNode.props || instance.props || instance.memoizedProps);
+				return !!(props && props.message && String(props.message.id) === String(messageId));
+			}
+		};
+		const directOwner = BDFDB.ReactUtils.findOwner(element, ownerConfig);
+		if (directOwner) return directOwner;
+		// Discord can attach the list-row DOM node above the React message owner.
+		// The loading marker is injected by this plugin inside MessageContent, so it is
+		// a reliable lower starting point for the same exact-owner walk.
+		let loadingElement = null;
+		try {loadingElement = element && element.querySelector && element.querySelector(".translator-translation-loading");}
+		catch (err) {loadingElement = null;}
+		return loadingElement ? BDFDB.ReactUtils.findOwner(loadingElement, ownerConfig) : null;
 	}
 
 	function waitForPaint() {
@@ -107,9 +76,24 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 		});
 	}
 
+	function updateMessageOwners(messageIds, elementsByMessageId) {
+		const owners = [];
+		const seen = new Set();
+		for (const messageId of messageIds) {
+			const element = elementsByMessageId.get(String(messageId));
+			const owner = element && findMessageOwner(element, messageId);
+			if (!owner || seen.has(owner)) continue;
+			seen.add(owner);
+			owners.push(owner);
+		}
+		if (owners.length) BDFDB.ReactUtils.forceUpdate(...owners);
+		return owners.length;
+	}
+
 	return {
 		async refreshMessages({messageIds = [], ownerMessageIds = [], views = []}) {
 			const uniqueMessageIds = getUniqueMessageIds(messageIds);
+			const targetMessageIds = getUniqueMessageIds(uniqueMessageIds.concat(ownerMessageIds));
 			const viewsByMessageId = getViewsByMessageId(views);
 			const scroller = document.querySelector(BDFDB.dotCN.messagesscroller);
 			const intentSequence = getUserScrollIntentSequence();
@@ -119,22 +103,18 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 			let hasRenderError = false;
 			try {
 				const elementsByMessageId = new Map();
-				for (const messageId of uniqueMessageIds) {
+				for (const messageId of targetMessageIds) {
 					const element = findMessageElement(messageId);
 					if (element) elementsByMessageId.set(String(messageId), element);
 				}
+				const presentTargetIds = targetMessageIds.filter(messageId => elementsByMessageId.has(String(messageId)));
 				const presentIds = uniqueMessageIds.filter(messageId => elementsByMessageId.has(String(messageId)));
-				// One parent refresh for the whole transaction. ownerMessageIds (reply hosts,
-				// deleted-message hosts) ride the same list repaint and need no separate update.
-				let refreshed = false;
-				if (isRuntimeActive()) refreshed = refreshChannelStreamOwner(scroller);
+				if (isRuntimeActive()) updateMessageOwners(presentTargetIds, elementsByMessageId);
 				await waitForPaint();
 				let confirmedIds = confirmViews(presentIds, viewsByMessageId);
 				let unconfirmedIds = presentIds.filter(messageId => !confirmedIds.map(String).includes(String(messageId)));
-				// One bounded retry: a mounted row that did not carry its expected revision
-				// gets exactly one more parent refresh, never a global remount.
-				if (unconfirmedIds.length && refreshed && isRuntimeActive()) {
-					refreshChannelStreamOwner(scroller);
+				if (unconfirmedIds.length && isRuntimeActive()) {
+					updateMessageOwners(unconfirmedIds, elementsByMessageId);
 					await waitForPaint();
 					confirmedIds = confirmViews(presentIds, viewsByMessageId);
 					unconfirmedIds = presentIds.filter(messageId => !confirmedIds.map(String).includes(String(messageId)));
