@@ -85,7 +85,7 @@ module.exports = (_ => {
 			receivedMessageFilterRuntime,
 			createReceivedTranslationRuntime
 		} = require("../received/received-translation-runtime");
-		const {createHistoricalSourceRuntime} = require("../received/historical-source-runtime");
+		const {createPluginHistoricalSourceRuntime} = require("../received/historical-source-wiring");
 		const {createMessageDeletionLifecycle} = require("../lifecycle/message-deletion-lifecycle");
 		const {
 			LOADED_AUTO_TRANSLATE_RANGE_MODES,
@@ -152,6 +152,10 @@ module.exports = (_ => {
 		const AI_SKIP_TRANSLATION_TOKEN = "__SKIP_TRANSLATION__";
 
 		const protectionLogic = createProtectionLogic({BDFDB});
+
+		// Debug-build-only evidence probe; the compile-time constant strips it from release bundles, matching the journal pattern in display-runtime.js.
+		const secondDebugProbe = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? require("../diagnostics/second-debug-probe").createSecondDebugProbe({log: line => console.info(line)}) : null;
+		if (secondDebugProbe && typeof window != "undefined") secondDebugProbe.installGlobal(window);
 
 		const {receivedTranslationRuntime} = createReceivedTranslationRuntime({BDFDB, loadedTranslationStatusStore});
 
@@ -1213,19 +1217,7 @@ module.exports = (_ => {
 			prepareAutoTranslationChannelSession (channelId) {this.ensureHistoricalSourceRuntime().handleChannelSessionChange(this.ensureLiveTranslationQueue().getLastChannelId(), channelId); return this.ensureLiveTranslationQueue().prepareChannelSession(channelId);}
 
 			ensureHistoricalSourceRuntime () {
-				if (!this.historicalSourceRuntimeInstance) this.historicalSourceRuntimeInstance = createHistoricalSourceRuntime({
-					messageStore: BDFDB.LibraryStores && BDFDB.LibraryStores.MessageStore,
-					fetchMessages: BDFDB.LibraryModules && (BDFDB.LibraryModules.MessageActions || BDFDB.LibraryModules.MessageManager || BDFDB.LibraryModules.MessageUtils),
-					isTranslationEnabled: channelId => this.isTranslationEnabled(channelId),
-					getSelectedChannelId: () => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && typeof BDFDB.LibraryStores.SelectedChannelStore.getChannelId == "function" ? BDFDB.LibraryStores.SelectedChannelStore.getChannelId() : null,
-					cloneMessage: message => this.cloneHistoricalSourceMessage(message), getMessageChannelId: (message, fallbackChannelId) => this.getMessageChannelId(message, fallbackChannelId),
-					extractOriginalContentData: message => this.extractOriginalContentData(message), cloneOriginalContentData: originalContentData => this.cloneOriginalContentData(originalContentData),
-					shouldAutoTranslateReceivedMessage: (message, channel, originalContentData, ignoreQueued) => this.shouldAutoTranslateReceivedMessage(message, channel, originalContentData, ignoreQueued),
-					getCachedReceivedTranslation: (message, channelId, originalContentData) => this.getCachedReceivedTranslation(message, channelId, originalContentData), collectHistoricalTranslationMessage: queueItem => this.collectHistoricalTranslationMessage(queueItem),
-					finishHistoricalTranslationSnapshot: channelId => this.finishHistoricalTranslationSnapshot(channelId), getFailedHistoricalTranslationCount: channelId => this.getFailedHistoricalTranslationCount(channelId),
-					updateLoadedAutoTranslationStatus: update => this.updateLoadedAutoTranslationStatus(update),
-					getCurrentBatchNumber: channelId => loadedTranslationStatusStore.getCurrentBatchNumber(channelId)
-				});
+				if (!this.historicalSourceRuntimeInstance) this.historicalSourceRuntimeInstance = createPluginHistoricalSourceRuntime({plugin: this, BDFDB, getCurrentBatchNumber: channelId => loadedTranslationStatusStore.getCurrentBatchNumber(channelId), debugProbe: secondDebugProbe});
 				return this.historicalSourceRuntimeInstance;
 			}
 			getHistoricalMessageSourceGeneration (channelId) {return this.ensureHistoricalSourceRuntime().getGeneration(channelId);}
@@ -3253,6 +3245,7 @@ module.exports = (_ => {
 			}
 
 			processMessages (e) {
+				if (secondDebugProbe) secondDebugProbe.recordParentRenderPass(e);
 				return receivedTranslationRuntime.processMessages(this, e);
 			}
 

@@ -7819,6 +7819,41 @@ var require_historical_source_runtime = __commonJS({
   }
 });
 
+// src/received/historical-source-wiring.js
+var require_historical_source_wiring = __commonJS({
+  "src/received/historical-source-wiring.js"(exports2, module2) {
+    var { createHistoricalSourceRuntime } = require_historical_source_runtime();
+    function createPluginHistoricalSourceRuntime({
+      plugin,
+      BDFDB,
+      getCurrentBatchNumber,
+      debugProbe = null,
+      createRuntime = createHistoricalSourceRuntime
+    }) {
+      let rawMessageStore = BDFDB.LibraryStores && BDFDB.LibraryStores.MessageStore, rawFetchMessages = BDFDB.LibraryModules && (BDFDB.LibraryModules.MessageActions || BDFDB.LibraryModules.MessageManager || BDFDB.LibraryModules.MessageUtils);
+      return createRuntime({
+        messageStore: debugProbe ? debugProbe.wrapModule(rawMessageStore, { label: "MessageStore", methods: ["getMessages", "getRawMessages", "getMessageCache"] }) : rawMessageStore,
+        fetchMessages: debugProbe ? debugProbe.wrapModule(rawFetchMessages, { label: "MessageFetchModule", methods: ["fetchMessages", "loadMessages", "fetch"] }) : rawFetchMessages,
+        isTranslationEnabled: /* @__PURE__ */ __name((channelId) => plugin.isTranslationEnabled(channelId), "isTranslationEnabled"),
+        getSelectedChannelId: /* @__PURE__ */ __name(() => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && typeof BDFDB.LibraryStores.SelectedChannelStore.getChannelId == "function" ? BDFDB.LibraryStores.SelectedChannelStore.getChannelId() : null, "getSelectedChannelId"),
+        cloneMessage: /* @__PURE__ */ __name((message) => plugin.cloneHistoricalSourceMessage(message), "cloneMessage"),
+        getMessageChannelId: /* @__PURE__ */ __name((message, fallbackChannelId) => plugin.getMessageChannelId(message, fallbackChannelId), "getMessageChannelId"),
+        extractOriginalContentData: /* @__PURE__ */ __name((message) => plugin.extractOriginalContentData(message), "extractOriginalContentData"),
+        cloneOriginalContentData: /* @__PURE__ */ __name((originalContentData) => plugin.cloneOriginalContentData(originalContentData), "cloneOriginalContentData"),
+        shouldAutoTranslateReceivedMessage: /* @__PURE__ */ __name((message, channel, originalContentData, ignoreQueued) => plugin.shouldAutoTranslateReceivedMessage(message, channel, originalContentData, ignoreQueued), "shouldAutoTranslateReceivedMessage"),
+        getCachedReceivedTranslation: /* @__PURE__ */ __name((message, channelId, originalContentData) => plugin.getCachedReceivedTranslation(message, channelId, originalContentData), "getCachedReceivedTranslation"),
+        collectHistoricalTranslationMessage: /* @__PURE__ */ __name((queueItem) => plugin.collectHistoricalTranslationMessage(queueItem), "collectHistoricalTranslationMessage"),
+        finishHistoricalTranslationSnapshot: /* @__PURE__ */ __name((channelId) => plugin.finishHistoricalTranslationSnapshot(channelId), "finishHistoricalTranslationSnapshot"),
+        getFailedHistoricalTranslationCount: /* @__PURE__ */ __name((channelId) => plugin.getFailedHistoricalTranslationCount(channelId), "getFailedHistoricalTranslationCount"),
+        updateLoadedAutoTranslationStatus: /* @__PURE__ */ __name((update) => plugin.updateLoadedAutoTranslationStatus(update), "updateLoadedAutoTranslationStatus"),
+        getCurrentBatchNumber
+      });
+    }
+    __name(createPluginHistoricalSourceRuntime, "createPluginHistoricalSourceRuntime");
+    module2.exports = { createPluginHistoricalSourceRuntime };
+  }
+});
+
 // src/lifecycle/message-deletion-lifecycle.js
 var require_message_deletion_lifecycle = __commonJS({
   "src/lifecycle/message-deletion-lifecycle.js"(exports2, module2) {
@@ -9779,7 +9814,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
-        } = require_received_translation_runtime(), { createHistoricalSourceRuntime } = require_historical_source_runtime(), { createMessageDeletionLifecycle } = require_message_deletion_lifecycle(), {
+        } = require_received_translation_runtime(), { createPluginHistoricalSourceRuntime } = require_historical_source_wiring(), { createMessageDeletionLifecycle } = require_message_deletion_lifecycle(), {
           LOADED_AUTO_TRANSLATE_RANGE_MODES,
           loadedAutoTranslatePolicy,
           aiDecisionPolicy,
@@ -10052,7 +10087,9 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }, messageTypes = {
           RECEIVED: "received",
           SENT: "sent"
-        }, AI_SKIP_TRANSLATION_TOKEN = "__SKIP_TRANSLATION__", protectionLogic = createProtectionLogic({ BDFDB }), { receivedTranslationRuntime } = createReceivedTranslationRuntime({ BDFDB, loadedTranslationStatusStore }), translationDisplayLogic = createTranslationDisplayLogic({ BDFDB });
+        }, AI_SKIP_TRANSLATION_TOKEN = "__SKIP_TRANSLATION__", protectionLogic = createProtectionLogic({ BDFDB }), secondDebugProbe = null;
+        secondDebugProbe && typeof window < "u" && secondDebugProbe.installGlobal(window);
+        let { receivedTranslationRuntime } = createReceivedTranslationRuntime({ BDFDB, loadedTranslationStatusStore }), translationDisplayLogic = createTranslationDisplayLogic({ BDFDB });
         return _a = class extends Plugin {
           getVersion() {
             return normalizeSemverVersion(this.version);
@@ -10854,23 +10891,7 @@ __________________ __________________ __________________
             return this.ensureHistoricalSourceRuntime().handleChannelSessionChange(this.ensureLiveTranslationQueue().getLastChannelId(), channelId), this.ensureLiveTranslationQueue().prepareChannelSession(channelId);
           }
           ensureHistoricalSourceRuntime() {
-            return this.historicalSourceRuntimeInstance || (this.historicalSourceRuntimeInstance = createHistoricalSourceRuntime({
-              messageStore: BDFDB.LibraryStores && BDFDB.LibraryStores.MessageStore,
-              fetchMessages: BDFDB.LibraryModules && (BDFDB.LibraryModules.MessageActions || BDFDB.LibraryModules.MessageManager || BDFDB.LibraryModules.MessageUtils),
-              isTranslationEnabled: /* @__PURE__ */ __name((channelId) => this.isTranslationEnabled(channelId), "isTranslationEnabled"),
-              getSelectedChannelId: /* @__PURE__ */ __name(() => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && typeof BDFDB.LibraryStores.SelectedChannelStore.getChannelId == "function" ? BDFDB.LibraryStores.SelectedChannelStore.getChannelId() : null, "getSelectedChannelId"),
-              cloneMessage: /* @__PURE__ */ __name((message) => this.cloneHistoricalSourceMessage(message), "cloneMessage"),
-              getMessageChannelId: /* @__PURE__ */ __name((message, fallbackChannelId) => this.getMessageChannelId(message, fallbackChannelId), "getMessageChannelId"),
-              extractOriginalContentData: /* @__PURE__ */ __name((message) => this.extractOriginalContentData(message), "extractOriginalContentData"),
-              cloneOriginalContentData: /* @__PURE__ */ __name((originalContentData) => this.cloneOriginalContentData(originalContentData), "cloneOriginalContentData"),
-              shouldAutoTranslateReceivedMessage: /* @__PURE__ */ __name((message, channel, originalContentData, ignoreQueued) => this.shouldAutoTranslateReceivedMessage(message, channel, originalContentData, ignoreQueued), "shouldAutoTranslateReceivedMessage"),
-              getCachedReceivedTranslation: /* @__PURE__ */ __name((message, channelId, originalContentData) => this.getCachedReceivedTranslation(message, channelId, originalContentData), "getCachedReceivedTranslation"),
-              collectHistoricalTranslationMessage: /* @__PURE__ */ __name((queueItem) => this.collectHistoricalTranslationMessage(queueItem), "collectHistoricalTranslationMessage"),
-              finishHistoricalTranslationSnapshot: /* @__PURE__ */ __name((channelId) => this.finishHistoricalTranslationSnapshot(channelId), "finishHistoricalTranslationSnapshot"),
-              getFailedHistoricalTranslationCount: /* @__PURE__ */ __name((channelId) => this.getFailedHistoricalTranslationCount(channelId), "getFailedHistoricalTranslationCount"),
-              updateLoadedAutoTranslationStatus: /* @__PURE__ */ __name((update) => this.updateLoadedAutoTranslationStatus(update), "updateLoadedAutoTranslationStatus"),
-              getCurrentBatchNumber: /* @__PURE__ */ __name((channelId) => loadedTranslationStatusStore.getCurrentBatchNumber(channelId), "getCurrentBatchNumber")
-            })), this.historicalSourceRuntimeInstance;
+            return this.historicalSourceRuntimeInstance || (this.historicalSourceRuntimeInstance = createPluginHistoricalSourceRuntime({ plugin: this, BDFDB, getCurrentBatchNumber: /* @__PURE__ */ __name((channelId) => loadedTranslationStatusStore.getCurrentBatchNumber(channelId), "getCurrentBatchNumber"), debugProbe: secondDebugProbe })), this.historicalSourceRuntimeInstance;
           }
           getHistoricalMessageSourceGeneration(channelId) {
             return this.ensureHistoricalSourceRuntime().getGeneration(channelId);
@@ -12405,7 +12426,7 @@ __________________ __________________ __________________
             }
           }
           processMessages(e) {
-            return receivedTranslationRuntime.processMessages(this, e);
+            return secondDebugProbe && secondDebugProbe.recordParentRenderPass(e), receivedTranslationRuntime.processMessages(this, e);
           }
           checkMessage(stream, message, channel, options = {}) {
             return receivedTranslationRuntime.checkMessage(this, stream, message, channel, options);

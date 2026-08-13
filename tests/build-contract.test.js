@@ -42,6 +42,8 @@ test("the generated plugin keeps metadata and excludes development artifacts", a
 	assert.doesNotMatch(generated, /sourceMappingURL=/);
 	assert.doesNotMatch(generated, /tests\//);
 	assert.doesNotMatch(generated, /TRANSLATOR_DISPLAY_DEBUG_JOURNAL/);
+	assert.doesNotMatch(generated, /TRANSLATOR_SECOND_DEBUG_PROBE/);
+	assert.match(debugGenerated, /TRANSLATOR_SECOND_DEBUG_PROBE/);
 	assert.equal(plugin.constructor.name, "Translator");
 	assert.equal(debugResult.status, 0, debugResult.stderr);
 	assert.equal(debugResult.stdout, debugGenerated);
