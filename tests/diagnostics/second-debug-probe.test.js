@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const {createSecondDebugProbe, createSecondDebugEvidenceSink, SECOND_DEBUG_MARKER} = require("../../src/diagnostics/second-debug-probe");
+const {createSecondDebugProbe, createSecondDebugEvidenceSink, createMessageRefreshStrategies, SECOND_DEBUG_MARKER} = require("../../src/diagnostics/second-debug-probe");
 
 function createClassInstanceFixture() {
 	class MessagesLikeComponent {
@@ -399,6 +399,127 @@ test("the evidence sink writes beside BetterDiscord's data folder rather than th
 test("the evidence sink is absent when the host provides no filesystem or plugins folder", () => {
 	assert.equal(createSecondDebugEvidenceSink({fs: null, path, pluginsFolder: "C:\\plugins"}), null);
 	assert.equal(createSecondDebugEvidenceSink({fs: {writeFileSync: () => {}}, path, pluginsFolder: ""}), null);
+});
+
+test("getParentRenderCount counts every render pass including deduplicated repeats", () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+	const instance = {props: {channel: {id: "c"}, channelStream: []}};
+	assert.equal(probe.getParentRenderCount(), 0);
+	probe.recordParentRenderPass({instance});
+	probe.recordParentRenderPass({instance});
+	probe.recordParentRenderPass({instance: {props: {channel: {id: "c2"}, channelStream: []}}});
+	assert.equal(probe.getParentRenderCount(), 3);
+});
+
+test("createMessageRefreshStrategies builds candidate strategies over the messages scroller fiber", () => {
+	class Ancestor {
+		forceUpdate() {}
+	}
+	function MessagesFn() {}
+	const ancestorFiber = {tag: 1, type: Ancestor, stateNode: new Ancestor(), memoizedProps: {}, return: null};
+	const ownerFiber = {tag: 0, type: MessagesFn, stateNode: null, memoizedProps: {channelStream: [1]}, return: ancestorFiber};
+	const listFiber = {tag: 5, type: "div", stateNode: {}, memoizedProps: {}, return: ownerFiber};
+	const element = {__reactFiber$k: listFiber};
+	const forced = [];
+
+	const strategies = createMessageRefreshStrategies({
+		resolveScrollerElement: () => element,
+		forceUpdate: (...targets) => forced.push(targets)
+	});
+
+	assert.ok(strategies.length >= 2);
+	const names = strategies.map(strategy => strategy.name);
+	assert.ok(names.includes("channelStreamOwnerFiber"));
+	assert.ok(names.includes("nearestUpdateableAncestor"));
+
+	strategies.find(strategy => strategy.name === "nearestUpdateableAncestor").run();
+	assert.equal(forced.length, 1);
+	assert.equal(forced[0][0], ancestorFiber.stateNode);
+});
+
+test("createMessageRefreshStrategies strategies throw a clear error when nothing is mounted", () => {
+	const strategies = createMessageRefreshStrategies({resolveScrollerElement: () => null, forceUpdate: () => {}});
+	for (const strategy of strategies) assert.throws(() => strategy.run(), /no (element|fiber|owner|ancestor)/i);
+});
+
+test("the refresh experiment runs each strategy sequentially and records the render-count delta", async () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+	let renderCount = 0;
+	const ran = [];
+	const strategies = [
+		{name: "forceUpdateAncestor", run: () => {ran.push("forceUpdateAncestor");}},
+		{name: "forceUpdateOwner", run: () => {ran.push("forceUpdateOwner"); renderCount += 1;}}
+	];
+
+	await probe.runRefreshExperiment({
+		strategies,
+		getRenderCount: () => renderCount,
+		waitForPaint: () => Promise.resolve()
+	});
+
+	assert.deepEqual(ran, ["forceUpdateAncestor", "forceUpdateOwner"]);
+	const results = probe.list().filter(entry => entry.kind === "refreshExperiment");
+	assert.equal(results.length, 2);
+	assert.equal(results[0].strategy, "forceUpdateAncestor");
+	assert.equal(results[0].renderedDelta, 0);
+	assert.equal(results[0].caused, false);
+	assert.equal(results[1].strategy, "forceUpdateOwner");
+	assert.equal(results[1].renderedDelta, 1);
+	assert.equal(results[1].caused, true);
+});
+
+test("the refresh experiment records a strategy that throws without aborting the run", async () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+	let renderCount = 5;
+	const strategies = [
+		{name: "boom", run: () => {throw new Error("no handle");}},
+		{name: "works", run: () => {renderCount += 2;}}
+	];
+
+	await probe.runRefreshExperiment({strategies, getRenderCount: () => renderCount, waitForPaint: () => Promise.resolve()});
+	const results = probe.list().filter(entry => entry.kind === "refreshExperiment");
+
+	assert.equal(results.length, 2);
+	assert.equal(results[0].strategy, "boom");
+	assert.equal(results[0].error, "no handle");
+	assert.equal(results[0].caused, false);
+	assert.equal(results[1].strategy, "works");
+	assert.equal(results[1].caused, true);
+});
+
+test("installGlobal exposes a refresh experiment runner and dump/copy on the window object", () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+	const fakeWindow = {};
+	probe.installGlobal(fakeWindow);
+	assert.equal(typeof fakeWindow.TranslatorDebug.tryRefresh, "function");
+});
+
+test("installGlobal wires real refresh strategies and a render-count source into tryRefresh", async () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+	class Ancestor {
+		forceUpdate() {}
+	}
+	function MessagesFn() {}
+	const ancestorFiber = {tag: 1, type: Ancestor, stateNode: new Ancestor(), memoizedProps: {}, return: null};
+	const ownerFiber = {tag: 0, type: MessagesFn, stateNode: null, memoizedProps: {channelStream: [1]}, return: ancestorFiber};
+	const listFiber = {tag: 5, type: "div", stateNode: {}, memoizedProps: {}, return: ownerFiber};
+	const element = {__reactFiber$k: listFiber};
+	const forced = [];
+	let renderCount = 0;
+	const fakeWindow = {};
+
+	probe.installGlobal(fakeWindow, {
+		resolveScrollerElement: () => element,
+		forceUpdate: (...targets) => {forced.push(targets); renderCount += 1;},
+		getRenderCount: () => renderCount,
+		waitForPaint: () => Promise.resolve()
+	});
+
+	await fakeWindow.TranslatorDebug.tryRefresh();
+	const results = probe.list().filter(entry => entry.kind === "refreshExperiment");
+	assert.ok(results.length >= 3);
+	assert.ok(results.every(result => typeof result.caused === "boolean"));
+	assert.ok(forced.length >= 1);
 });
 
 test("installGlobal exposes dump and clipboard copy on the provided window object", () => {

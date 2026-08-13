@@ -150,6 +150,7 @@ function createSecondDebugProbe({
 	let domWalkCount = 0;
 	let domWalkSettled = false;
 	let domWalkArmed = false;
+	let parentRenderCount = 0;
 	let lastFlushAt = -Infinity;
 	let pendingFlushHandle = null;
 
@@ -232,6 +233,7 @@ function createSecondDebugProbe({
 	}
 
 	function recordParentRenderPass(e, {resolveScrollerElement = null} = {}) {
+		parentRenderCount++;
 		const instance = e && e.instance;
 		let instanceId = null;
 		if (instance && (typeof instance == "object" || typeof instance == "function")) {
@@ -334,15 +336,54 @@ function createSecondDebugProbe({
 		});
 	}
 
+	// A manual, user-triggered experiment (never a render hook): it tries each candidate
+	// refresh strategy on the mounted message list and records whether the list's render
+	// count actually advanced, so the replacement can pick a strategy proven on the real
+	// client rather than an assumed updateable owner.
+	async function runRefreshExperiment({strategies = [], getRenderCount = () => 0, waitForPaint = defaultWaitForPaint} = {}) {
+		const results = [];
+		for (const strategy of strategies) {
+			const before = getRenderCount();
+			const entry = {strategy: strategy.name};
+			try {
+				strategy.run();
+			}
+			catch (error) {
+				entry.error = error && error.message || String(error);
+			}
+			try {await waitForPaint();}
+			catch (error) {}
+			const after = getRenderCount();
+			entry.renderedDelta = after - before;
+			entry.caused = after > before;
+			results.push(record("refreshExperiment", entry));
+		}
+		return results;
+	}
+
+	function defaultWaitForPaint() {
+		return new Promise(resolve => {
+			if (typeof requestAnimationFrame == "function") requestAnimationFrame(() => requestAnimationFrame(resolve));
+			else if (setTimeoutFn) setTimeoutFn(resolve, 50);
+			else resolve();
+		});
+	}
+
 	function dump() {
 		return JSON.stringify({marker: SECOND_DEBUG_MARKER, generatedAt: now(), entryCount: entries.length, entries});
 	}
 
-	function installGlobal(target) {
+	function installGlobal(target, {resolveScrollerElement = null, forceUpdate = null, getRenderCount = null, waitForPaint = defaultWaitForPaint} = {}) {
 		if (!target) return;
+		const experimentConfig = resolveScrollerElement && forceUpdate ? {
+			strategies: createMessageRefreshStrategies({resolveScrollerElement, forceUpdate}),
+			getRenderCount: getRenderCount || (() => parentRenderCount),
+			waitForPaint
+		} : null;
 		target.TranslatorDebug = {
 			marker: SECOND_DEBUG_MARKER,
 			list: () => entries.slice(),
+			tryRefresh: options => runRefreshExperiment(options || experimentConfig || {}),
 			dump,
 			copy() {
 				const text = dump();
@@ -375,6 +416,8 @@ function createSecondDebugProbe({
 		record,
 		recordParentRenderPass,
 		recordDomFiberWalk,
+		runRefreshExperiment,
+		getParentRenderCount: () => parentRenderCount,
 		wrapModule,
 		list: () => entries.slice(),
 		dump,
@@ -396,10 +439,58 @@ function createSecondDebugEvidenceSink({fs, path, pluginsFolder, fileName = "tra
 	};
 }
 
+// Candidate parent-refresh strategies to try on the real client. Each resolves the
+// mounted messages scroller fiber fresh (nothing is cached across a click) and throws a
+// clear reason when its target is absent, so the experiment records a usable failure.
+function createMessageRefreshStrategies({resolveScrollerElement, forceUpdate, walkDepth = 40} = {}) {
+	function resolveStartFiber() {
+		const element = resolveScrollerElement && resolveScrollerElement();
+		if (!element) throw new Error("no element: messages scroller is not mounted");
+		const fiber = findFiberFromElement(element);
+		if (!fiber) throw new Error("no fiber: scroller element has no React fiber");
+		return fiber;
+	}
+	function findChannelStreamOwner(fiber) {
+		let current = fiber;
+		for (let depth = 0; current && depth < walkDepth; depth++) {
+			const props = current.memoizedProps || current.pendingProps || null;
+			if (props && props.channelStream) return current;
+			current = current.return;
+		}
+		throw new Error("no owner: channelStream owner fiber not found");
+	}
+	function findUpdateableAncestor(fiber) {
+		let current = fiber;
+		for (let depth = 0; current && depth < walkDepth; depth++) {
+			if (current.stateNode && typeof current.stateNode.forceUpdate == "function") return current;
+			current = current.return;
+		}
+		throw new Error("no ancestor: no updateable class ancestor found");
+	}
+	return [
+		{
+			name: "channelStreamOwnerFiber",
+			run: () => forceUpdate(findChannelStreamOwner(resolveStartFiber()))
+		},
+		{
+			name: "channelStreamOwnerStateNode",
+			run: () => {
+				const owner = findChannelStreamOwner(resolveStartFiber());
+				forceUpdate(owner.stateNode || owner);
+			}
+		},
+		{
+			name: "nearestUpdateableAncestor",
+			run: () => forceUpdate(findUpdateableAncestor(findChannelStreamOwner(resolveStartFiber())).stateNode)
+		}
+	];
+}
+
 module.exports = {
 	SECOND_DEBUG_MARKER,
 	createSecondDebugProbe,
 	createSecondDebugEvidenceSink,
+	createMessageRefreshStrategies,
 	describeReactType,
 	summarizeFiber,
 	summarizeValueShape

@@ -10090,7 +10090,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
           RECEIVED: "received",
           SENT: "sent"
         }, AI_SKIP_TRANSLATION_TOKEN = "__SKIP_TRANSLATION__", protectionLogic = createProtectionLogic({ BDFDB }), secondDebugProbe = null;
-        secondDebugProbe && typeof window < "u" && secondDebugProbe.installGlobal(window);
+        secondDebugProbe && typeof window < "u" && secondDebugProbe.installGlobal(window, { resolveScrollerElement: /* @__PURE__ */ __name(() => document.querySelector(BDFDB.dotCN.messagesscroller), "resolveScrollerElement"), forceUpdate: /* @__PURE__ */ __name((...targets) => BDFDB.ReactUtils.forceUpdate(...targets), "forceUpdate"), getRenderCount: /* @__PURE__ */ __name(() => secondDebugProbe.getParentRenderCount(), "getRenderCount") });
         let { receivedTranslationRuntime } = createReceivedTranslationRuntime({ BDFDB, loadedTranslationStatusStore }), translationDisplayLogic = createTranslationDisplayLogic({ BDFDB });
         return _a = class extends Plugin {
           getVersion() {
