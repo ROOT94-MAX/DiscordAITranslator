@@ -153,8 +153,8 @@ module.exports = (_ => {
 
 		const protectionLogic = createProtectionLogic({BDFDB});
 
-		// Debug-build-only evidence probe; the compile-time constant strips it from release bundles, matching the journal pattern in display-runtime.js.
-		const secondDebugProbe = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? require("../diagnostics/second-debug-probe").createSecondDebugProbe({log: line => console.info(line)}) : null;
+		// Debug-build-only evidence probe, stripped from release bundles by the compile-time constant, as in display-runtime.js. It also persists to disk because DevTools is not reachable on every client.
+		const secondDebugProbe = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? (secondDebugModule => secondDebugModule.createSecondDebugProbe({log: line => console.info(line), sink: secondDebugModule.createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder})}))(require("../diagnostics/second-debug-probe")) : null;
 		if (secondDebugProbe && typeof window != "undefined") secondDebugProbe.installGlobal(window);
 
 		const {receivedTranslationRuntime} = createReceivedTranslationRuntime({BDFDB, loadedTranslationStatusStore});
@@ -3245,7 +3245,7 @@ module.exports = (_ => {
 			}
 
 			processMessages (e) {
-				if (secondDebugProbe) secondDebugProbe.recordParentRenderPass(e);
+				if (secondDebugProbe) secondDebugProbe.recordParentRenderPass(e, {resolveScrollerElement: () => document.querySelector(BDFDB.dotCN.messagesscroller)});
 				return receivedTranslationRuntime.processMessages(this, e);
 			}
 

@@ -12426,7 +12426,7 @@ __________________ __________________ __________________
             }
           }
           processMessages(e) {
-            return secondDebugProbe && secondDebugProbe.recordParentRenderPass(e), receivedTranslationRuntime.processMessages(this, e);
+            return secondDebugProbe && secondDebugProbe.recordParentRenderPass(e, { resolveScrollerElement: /* @__PURE__ */ __name(() => document.querySelector(BDFDB.dotCN.messagesscroller), "resolveScrollerElement") }), receivedTranslationRuntime.processMessages(this, e);
           }
           checkMessage(stream, message, channel, options = {}) {
             return receivedTranslationRuntime.checkMessage(this, stream, message, channel, options);

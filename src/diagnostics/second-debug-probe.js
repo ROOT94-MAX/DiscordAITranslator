@@ -51,6 +51,14 @@ function summarizeFiber(fiber) {
 	};
 }
 
+function findFiberFromElement(element) {
+	if (!element) return null;
+	for (const key in element) {
+		if (key.startsWith("__reactFiber$") || key.startsWith("__reactInternalInstance$")) return element[key];
+	}
+	return null;
+}
+
 function findNearestUpdateableAncestor(fiber) {
 	let current = fiber;
 	for (let depth = 0; current && depth <= MAX_ANCESTOR_WALK; depth++) {
@@ -113,13 +121,57 @@ function summarizeValueShape(value, depth = 2) {
 	return summary;
 }
 
-function createSecondDebugProbe({log = () => {}, now = Date.now, limit = 400} = {}) {
+function createSecondDebugProbe({
+	log = () => {},
+	now = Date.now,
+	limit = 400,
+	// The DOM-anchored fiber walk answers the "which parent render handle is
+	// updateable" question once per session shape; it does not need to run on
+	// every render pass.
+	domWalkLimit = 3,
+	domWalkDepth = 40,
+	// The scroller is not mounted yet while the before-render patch runs, so the
+	// walk waits for a paint and retries.
+	domWalkDelayMs = 800,
+	// An optional evidence file writer. DevTools is not reachable on every client,
+	// so the debug build also persists the dump; the throttle keeps a busy channel
+	// from writing on every recorded call.
+	sink = null,
+	flushIntervalMs = 1500,
+	setTimeoutFn = typeof setTimeout == "function" ? setTimeout : null,
+	clearTimeoutFn = typeof clearTimeout == "function" ? clearTimeout : null
+} = {}) {
 	const entries = [];
 	const instanceIds = new WeakMap();
 	const parentEntriesBySignature = new Map();
 	const missingModuleLabels = new Set();
 	let nextInstanceId = 0;
 	let nextCallId = 0;
+	let domWalkCount = 0;
+	let domWalkSettled = false;
+	let domWalkArmed = false;
+	let lastFlushAt = -Infinity;
+	let pendingFlushHandle = null;
+
+	function flush() {
+		if (pendingFlushHandle != null && clearTimeoutFn) clearTimeoutFn(pendingFlushHandle);
+		pendingFlushHandle = null;
+		lastFlushAt = now();
+		if (!sink) return;
+		try {sink(dump());}
+		catch (error) {}
+	}
+
+	function scheduleFlush() {
+		if (!sink) return;
+		const elapsed = now() - lastFlushAt;
+		if (elapsed >= flushIntervalMs) return flush();
+		if (pendingFlushHandle != null || !setTimeoutFn) return;
+		pendingFlushHandle = setTimeoutFn(() => {
+			pendingFlushHandle = null;
+			flush();
+		}, flushIntervalMs - elapsed);
+	}
 
 	function push(entry) {
 		entries.push(entry);
@@ -132,6 +184,7 @@ function createSecondDebugProbe({log = () => {}, now = Date.now, limit = 400} = 
 			}
 		}
 		log(`[${SECOND_DEBUG_MARKER}] ${entry.kind}: ${JSON.stringify(entry)}`);
+		scheduleFlush();
 		return entry;
 	}
 
@@ -139,7 +192,46 @@ function createSecondDebugProbe({log = () => {}, now = Date.now, limit = 400} = 
 		return push(Object.assign({kind, timestamp: now()}, data));
 	}
 
-	function recordParentRenderPass(e) {
+	function recordDomFiberWalk({label = "domFiberWalk", element = null} = {}) {
+		if (!element) return record("domFiberWalk", {label, found: false, reason: "no-element", chain: []});
+		const startFiber = findFiberFromElement(element);
+		if (!startFiber) return record("domFiberWalk", {label, found: false, reason: "no-fiber-key", chain: []});
+		const chain = [];
+		let channelStreamOwner = null;
+		let updateableAboveChannelStream = null;
+		let current = startFiber;
+		for (let depth = 0; current && depth < domWalkDepth; depth++) {
+			const props = current.memoizedProps || current.pendingProps || null;
+			let propsKeys = [];
+			try {propsKeys = props ? Object.keys(props).slice(0, MAX_KEYS) : [];}
+			catch (error) {propsKeys = [];}
+			const type = describeReactType(current.type);
+			const canForceUpdate = !!(current.stateNode && typeof current.stateNode.forceUpdate == "function");
+			const hasChannelStream = !!(props && props.channelStream);
+			chain.push({depth, tag: current.tag, type, canForceUpdate, hasChannelStream, propsKeys});
+			if (hasChannelStream && !channelStreamOwner) channelStreamOwner = {depth, name: type.name};
+			if (channelStreamOwner && canForceUpdate && !updateableAboveChannelStream && depth >= channelStreamOwner.depth) updateableAboveChannelStream = {depth, name: type.name};
+			current = current.return;
+		}
+		return record("domFiberWalk", {label, found: true, chain, channelStreamOwner, updateableAboveChannelStream});
+	}
+
+	function scheduleDomFiberWalk(resolveScrollerElement) {
+		if (domWalkSettled || domWalkArmed || domWalkCount >= domWalkLimit || !setTimeoutFn) return;
+		domWalkArmed = true;
+		setTimeoutFn(() => {
+			domWalkArmed = false;
+			domWalkCount++;
+			let scrollerElement = null;
+			try {scrollerElement = resolveScrollerElement();}
+			catch (error) {scrollerElement = null;}
+			const entry = recordDomFiberWalk({label: "messagesScroller", element: scrollerElement});
+			if (entry && entry.found) domWalkSettled = true;
+			else scheduleDomFiberWalk(resolveScrollerElement);
+		}, domWalkDelayMs);
+	}
+
+	function recordParentRenderPass(e, {resolveScrollerElement = null} = {}) {
 		const instance = e && e.instance;
 		let instanceId = null;
 		if (instance && (typeof instance == "object" || typeof instance == "function")) {
@@ -148,6 +240,10 @@ function createSecondDebugProbe({log = () => {}, now = Date.now, limit = 400} = 
 		}
 		const fiber = instance && (instance._reactInternals || instance._reactInternalFiber) || null;
 		const props = instance && instance.props || null;
+		if (resolveScrollerElement) scheduleDomFiberWalk(resolveScrollerElement);
+		let propsKeys = [];
+		try {propsKeys = props ? Object.keys(props).slice(0, MAX_KEYS) : [];}
+		catch (error) {propsKeys = [];}
 		const summary = {
 			instanceId,
 			instanceType: instance == null ? String(instance) : typeof instance,
@@ -155,6 +251,12 @@ function createSecondDebugProbe({log = () => {}, now = Date.now, limit = 400} = 
 			hasForceUpdate: !!(instance && typeof instance.forceUpdate == "function"),
 			hasReactInternals: !!fiber,
 			eventKeys: e && typeof e == "object" ? Object.keys(e).slice(0, MAX_KEYS) : [],
+			patchName: e && e.name || null,
+			methodName: e && e.methodname || null,
+			patchTypes: e && Array.isArray(e.patchtypes) ? e.patchtypes.slice() : e && e.patchtypes || null,
+			component: describeReactType(e && e.component),
+			returnValueType: describeReactType(e && e.returnvalue && e.returnvalue.type),
+			propsKeys,
 			channelId: props && props.channel && props.channel.id || null,
 			channelStreamLength: props && Array.isArray(props.channelStream) ? props.channelStream.length : null,
 			fiber: summarizeFiber(fiber),
@@ -174,6 +276,7 @@ function createSecondDebugProbe({log = () => {}, now = Date.now, limit = 400} = 
 			existing.lastSeen = now();
 			existing.channelId = summary.channelId;
 			existing.channelStreamLength = summary.channelStreamLength;
+			scheduleFlush();
 			return existing;
 		}
 		const entry = record("parentRenderPass", Object.assign({passCount: 1, lastSeen: now()}, summary));
@@ -185,8 +288,8 @@ function createSecondDebugProbe({log = () => {}, now = Date.now, limit = 400} = 
 		if (result && typeof result.then == "function") {
 			entry.resultKind = "promise";
 			result.then(
-				resolved => {entry.result = summarizeValueShape(resolved, 3); entry.settledAt = now();},
-				error => {entry.error = error && error.message || String(error); entry.settledAt = now();}
+				resolved => {entry.result = summarizeValueShape(resolved, 3); entry.settledAt = now(); scheduleFlush();},
+				error => {entry.error = error && error.message || String(error); entry.settledAt = now(); scheduleFlush();}
 			);
 			return result;
 		}
@@ -271,16 +374,32 @@ function createSecondDebugProbe({log = () => {}, now = Date.now, limit = 400} = 
 		marker: SECOND_DEBUG_MARKER,
 		record,
 		recordParentRenderPass,
+		recordDomFiberWalk,
 		wrapModule,
 		list: () => entries.slice(),
 		dump,
+		flush,
 		installGlobal
 	});
+}
+
+// The evidence file lives in BetterDiscord's data folder, never in the plugins
+// folder: BetterDiscord watches that folder and would reload the plugin on every
+// write.
+function createSecondDebugEvidenceSink({fs, path, pluginsFolder, fileName = "translator-second-debug.json"} = {}) {
+	if (!fs || typeof fs.writeFileSync != "function" || !path || !pluginsFolder) return null;
+	const directory = path.join(pluginsFolder, "..", "data");
+	const filePath = path.join(directory, fileName);
+	return text => {
+		if (typeof fs.existsSync == "function" && !fs.existsSync(directory) && typeof fs.mkdirSync == "function") fs.mkdirSync(directory, {recursive: true});
+		fs.writeFileSync(filePath, text, "utf8");
+	};
 }
 
 module.exports = {
 	SECOND_DEBUG_MARKER,
 	createSecondDebugProbe,
+	createSecondDebugEvidenceSink,
 	describeReactType,
 	summarizeFiber,
 	summarizeValueShape

@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {createSecondDebugProbe, SECOND_DEBUG_MARKER} = require("../../src/diagnostics/second-debug-probe");
+const path = require("node:path");
+const {createSecondDebugProbe, createSecondDebugEvidenceSink, SECOND_DEBUG_MARKER} = require("../../src/diagnostics/second-debug-probe");
 
 function createClassInstanceFixture() {
 	class MessagesLikeComponent {
@@ -175,6 +176,229 @@ test("the entry buffer is bounded and dump produces marked JSON", () => {
 	const dumped = JSON.parse(probe.dump());
 	assert.equal(dumped.marker, SECOND_DEBUG_MARKER);
 	assert.equal(dumped.entries.length, 5);
+});
+
+test("the parent render pass records the BDFDB patch envelope and plain-object instance props", () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+	function MessagesFunction() {}
+
+	probe.recordParentRenderPass({
+		instance: {props: {channel: {id: "channel-7"}, channelStream: [1, 2, 3], hasMoreBefore: true}},
+		component: MessagesFunction,
+		methodname: "type",
+		name: "Messages",
+		patchtypes: ["before"],
+		returnvalue: {$$typeof: Symbol.for("react.element"), type: MessagesFunction}
+	});
+	const entry = probe.list().find(item => item.kind === "parentRenderPass");
+
+	assert.equal(entry.patchName, "Messages");
+	assert.equal(entry.methodName, "type");
+	assert.deepEqual(entry.patchTypes, ["before"]);
+	assert.equal(entry.component.kind, "function");
+	assert.equal(entry.component.name, "MessagesFunction");
+	assert.ok(entry.propsKeys.includes("channelStream"));
+	assert.equal(entry.hasForceUpdate, false);
+	assert.equal(entry.fiber, null);
+});
+
+test("the DOM fiber walk reports the channel-stream owner and the nearest updateable ancestor above it", () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+	class ScrollerClass {
+		forceUpdate() {}
+	}
+	function MessagesFunction() {}
+	const scrollerInstance = new ScrollerClass();
+	const scrollerFiber = {tag: 1, type: ScrollerClass, stateNode: scrollerInstance, memoizedProps: {}, return: null};
+	const messagesFiber = {
+		tag: 0,
+		type: MessagesFunction,
+		stateNode: null,
+		memoizedProps: {channelStream: [1, 2], channel: {id: "channel-7"}},
+		return: scrollerFiber
+	};
+	const listFiber = {tag: 5, type: "div", stateNode: {}, memoizedProps: {}, return: messagesFiber};
+	const element = {__reactFiber$abc123: listFiber};
+
+	probe.recordDomFiberWalk({label: "messagesScroller", element});
+	const entry = probe.list().find(item => item.kind === "domFiberWalk");
+
+	assert.equal(entry.label, "messagesScroller");
+	assert.equal(entry.found, true);
+	assert.equal(entry.chain.length, 3);
+	assert.equal(entry.chain[1].type.name, "MessagesFunction");
+	assert.equal(entry.chain[1].hasChannelStream, true);
+	assert.equal(entry.chain[1].canForceUpdate, false);
+	assert.deepEqual(entry.channelStreamOwner, {depth: 1, name: "MessagesFunction"});
+	assert.deepEqual(entry.updateableAboveChannelStream, {depth: 2, name: "ScrollerClass"});
+});
+
+test("a DOM element without a React fiber key is recorded as not found", () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+
+	probe.recordDomFiberWalk({label: "messagesScroller", element: {className: "scroller"}});
+	probe.recordDomFiberWalk({label: "messagesScroller", element: null});
+	const entries = probe.list().filter(item => item.kind === "domFiberWalk");
+
+	assert.equal(entries.length, 2);
+	assert.equal(entries[0].found, false);
+	assert.equal(entries[1].found, false);
+	assert.equal(entries[1].reason, "no-element");
+});
+
+test("the DOM walk is deferred past the render pass and retries until the scroller is mounted", () => {
+	const timers = [];
+	const probe = createSecondDebugProbe({
+		log: () => {},
+		domWalkLimit: 4,
+		domWalkDelayMs: 800,
+		setTimeoutFn: (callback, delay) => {timers.push({callback, delay}); return timers.length;},
+		clearTimeoutFn: () => {}
+	});
+	class Root {
+		forceUpdate() {}
+	}
+	const rootFiber = {tag: 1, type: Root, stateNode: new Root(), memoizedProps: {channelStream: []}, return: null};
+	let mounted = null;
+
+	probe.recordParentRenderPass({instance: {props: {}}}, {resolveScrollerElement: () => mounted});
+	assert.equal(probe.list().filter(item => item.kind === "domFiberWalk").length, 0, "the walk must not run inside the render pass");
+	assert.equal(timers.length, 1);
+	assert.equal(timers[0].delay, 800);
+
+	timers[0].callback();
+	let walks = probe.list().filter(item => item.kind === "domFiberWalk");
+	assert.equal(walks.length, 1);
+	assert.equal(walks[0].found, false);
+	assert.equal(timers.length, 2, "a failed attempt schedules a retry");
+
+	mounted = {__reactFiber$xyz: rootFiber};
+	timers[1].callback();
+	walks = probe.list().filter(item => item.kind === "domFiberWalk");
+	assert.equal(walks.length, 2);
+	assert.equal(walks[1].found, true);
+	assert.equal(timers.length, 2, "a successful walk schedules no further retry");
+
+	probe.recordParentRenderPass({instance: {props: {}}}, {resolveScrollerElement: () => mounted});
+	assert.equal(timers.length, 2, "later render passes do not re-arm a completed walk");
+});
+
+test("the deferred DOM walk gives up after the attempt limit", () => {
+	const timers = [];
+	const probe = createSecondDebugProbe({
+		log: () => {},
+		domWalkLimit: 2,
+		setTimeoutFn: (callback, delay) => {timers.push({callback, delay}); return timers.length;},
+		clearTimeoutFn: () => {}
+	});
+
+	probe.recordParentRenderPass({instance: {props: {}}}, {resolveScrollerElement: () => null});
+	timers[0].callback();
+	timers[1].callback();
+
+	assert.equal(probe.list().filter(item => item.kind === "domFiberWalk").length, 2);
+	assert.equal(timers.length, 2);
+});
+
+test("a configured sink receives the first evidence write immediately", () => {
+	const writes = [];
+	let clock = 1000;
+	const probe = createSecondDebugProbe({
+		log: () => {},
+		now: () => clock,
+		sink: text => writes.push(text),
+		setTimeoutFn: () => 0,
+		clearTimeoutFn: () => {}
+	});
+
+	probe.record("custom", {index: 1});
+
+	assert.equal(writes.length, 1);
+	const written = JSON.parse(writes[0]);
+	assert.equal(written.marker, SECOND_DEBUG_MARKER);
+	assert.equal(written.entries.length, 1);
+});
+
+test("rapid records are throttled into one trailing sink write carrying every entry", () => {
+	const writes = [];
+	const timers = [];
+	let clock = 1000;
+	const probe = createSecondDebugProbe({
+		log: () => {},
+		now: () => clock,
+		flushIntervalMs: 1500,
+		sink: text => writes.push(text),
+		setTimeoutFn: (callback, delay) => {timers.push({callback, delay}); return timers.length;},
+		clearTimeoutFn: handle => {timers[handle - 1] = null;}
+	});
+
+	probe.record("custom", {index: 1});
+	assert.equal(writes.length, 1);
+
+	clock = 1100;
+	probe.record("custom", {index: 2});
+	clock = 1200;
+	probe.record("custom", {index: 3});
+	assert.equal(writes.length, 1, "records inside the throttle window must not write again");
+
+	const pending = timers.filter(Boolean);
+	assert.equal(pending.length, 1, "one trailing flush is scheduled for the whole burst");
+	assert.equal(pending[0].delay, 1400);
+
+	clock = 2500;
+	pending[0].callback();
+	assert.equal(writes.length, 2);
+	assert.equal(JSON.parse(writes[1]).entries.length, 3);
+});
+
+test("flush writes on demand and a failing sink never breaks recording", () => {
+	let failing = true;
+	const writes = [];
+	const probe = createSecondDebugProbe({
+		log: () => {},
+		sink: text => {
+			if (failing) throw new Error("disk full");
+			writes.push(text);
+		},
+		setTimeoutFn: () => 0,
+		clearTimeoutFn: () => {}
+	});
+
+	assert.doesNotThrow(() => probe.record("custom", {index: 1}));
+	assert.equal(probe.list().length, 1);
+
+	failing = false;
+	probe.flush();
+	assert.equal(writes.length, 1);
+	assert.equal(JSON.parse(writes[0]).entries.length, 1);
+});
+
+test("the evidence sink writes beside BetterDiscord's data folder rather than the watched plugins folder", () => {
+	const written = [];
+	const created = [];
+	const sink = createSecondDebugEvidenceSink({
+		fs: {
+			existsSync: () => false,
+			mkdirSync: (directory, options) => created.push({directory, options}),
+			writeFileSync: (file, text, encoding) => written.push({file, text, encoding})
+		},
+		path,
+		pluginsFolder: path.join("C:", "BetterDiscord", "plugins")
+	});
+
+	sink("evidence");
+
+	const expectedDirectory = path.join("C:", "BetterDiscord", "data");
+	assert.deepEqual(created, [{directory: expectedDirectory, options: {recursive: true}}]);
+	assert.equal(written.length, 1);
+	assert.equal(written[0].file, path.join(expectedDirectory, "translator-second-debug.json"));
+	assert.equal(written[0].text, "evidence");
+	assert.equal(written[0].encoding, "utf8");
+});
+
+test("the evidence sink is absent when the host provides no filesystem or plugins folder", () => {
+	assert.equal(createSecondDebugEvidenceSink({fs: null, path, pluginsFolder: "C:\\plugins"}), null);
+	assert.equal(createSecondDebugEvidenceSink({fs: {writeFileSync: () => {}}, path, pluginsFolder: ""}), null);
 });
 
 test("installGlobal exposes dump and clipboard copy on the provided window object", () => {
