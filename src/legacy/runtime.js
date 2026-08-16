@@ -1458,25 +1458,25 @@ module.exports = (_ => {
 
 			positionLoadedAutoTranslationStatusElement (element) {
 				if (!element || typeof document == "undefined") return;
-				// Product rule (2026-08-16): the capsule lives on the chat area's right side.
-				// A native hint strip (slow mode etc.) gets the capsule directly above it,
-				// right-aligned; without a hint the capsule takes the hint's own row.
+				// Product rule (2026-08-16): the capsule's right edge sits on the same
+				// vertical line as the native hint's right edge (slow mode etc.), floating
+				// above the hint; without a hint it takes the hint's own row, right-aligned
+				// to the chat area. The hint scan scopes to the chat wrapper - the proven
+				// scroller's parent - because the hint lives outside the composer form.
 				const viewportPadding = 12;
 				const innerWidth = typeof window != "undefined" && window.innerWidth || 1280;
 				const innerHeight = typeof window != "undefined" && window.innerHeight || 720;
-				let scrollerRect = null;
+				let scroller = null, scrollerRect = null;
 				try {
-					const scroller = document.querySelector(BDFDB.dotCN && BDFDB.dotCN.messagesscroller || ".messages-scroller");
+					scroller = document.querySelector(BDFDB.dotCN && BDFDB.dotCN.messagesscroller || ".messages-scroller");
 					if (scroller && scroller.getBoundingClientRect) scrollerRect = scroller.getBoundingClientRect();
 				}
-				catch (err) {scrollerRect = null;}
+				catch (err) {scroller = null; scrollerRect = null;}
 				let composerRect = null, nativeHintRect = null;
 				try {
 					const composer = document.querySelector("form");
 					if (composer && composer.getBoundingClientRect) composerRect = composer.getBoundingClientRect() || null;
-					// The slow-mode hint sits outside the form (a sibling below it), so the
-					// scan covers the composer's parent, still one container - not the app.
-					const hintScope = composer && composer.parentElement || composer;
+					const hintScope = scroller && scroller.parentElement || composer && composer.parentElement || null;
 					if (hintScope && hintScope.querySelectorAll) {
 						const nativeHint = Array.from(hintScope.querySelectorAll("div, span")).map(node => {
 							if (!node || !node.getBoundingClientRect) return null;
@@ -1498,7 +1498,7 @@ module.exports = (_ => {
 				const measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null;
 				const statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth));
 				const statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20);
-				const anchorRight = nativeHintRect ? nativeHintRect.right : composerRect && composerRect.width ? composerRect.right - viewportPadding : scrollerRect && scrollerRect.width ? scrollerRect.right - viewportPadding : innerWidth - viewportPadding;
+				const anchorRight = nativeHintRect ? nativeHintRect.right : scrollerRect && scrollerRect.width ? scrollerRect.right - viewportPadding : composerRect && composerRect.width ? composerRect.right - viewportPadding : innerWidth - viewportPadding;
 				const anchorBottom = nativeHintRect ? nativeHintRect.top - 6 : composerRect && composerRect.height ? composerRect.bottom - 6 : scrollerRect && scrollerRect.height ? scrollerRect.bottom - viewportPadding : innerHeight - viewportPadding;
 				const left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth, innerWidth - statusWidth - viewportPadding));
 				const top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight, innerHeight - statusHeight - viewportPadding));

@@ -2,10 +2,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {createPluginInstance} = require("./helpers/createPluginInstance");
 
-// 2026-08-16 product decision: the capsule lives on the chat area's right side.
-// When Discord shows a native hint strip (slow mode "已开启" etc.), the capsule floats
-// directly above that hint, right-aligned with it; without a hint it takes the hint's
-// own row at the right side, under the input. It never covers the composer input.
+// Product rule (2026-08-16, fifth round): the capsule's RIGHT edge must sit on the
+// same vertical line as the native hint's RIGHT edge. With a hint (slow mode etc.)
+// the capsule floats directly above it; without one it takes the hint's own row.
+// The hint scan scopes to the chat wrapper (the scroller's parent), because the hint
+// lives outside the composer form and its exact container keeps moving.
 function createPositionHarness({scrollerRect, composerRect, nativeRect} = {}) {
 	const realDocument = global.document;
 	const realWindow = global.window;
@@ -22,20 +23,19 @@ function createPositionHarness({scrollerRect, composerRect, nativeRect} = {}) {
 		getBoundingClientRect: () => ({...fixture.nativeRect}),
 		textContent: "已开启"
 	};
-	// The slow-mode hint sits OUTSIDE the form (a sibling below it), so the hint scan
-	// covers the composer's parent; the composer itself still reports its own rect.
-	const composerParent = {
-		getBoundingClientRect: () => ({...fixture.composerRect}),
+	// The chat wrapper contains both the scroller and the hint strip below it.
+	const chatWrapper = {
 		querySelectorAll: selector => selector == "div, span" && nativeNode ? [nativeNode] : []
 	};
-	const composer = {
-		getBoundingClientRect: () => ({...fixture.composerRect}),
-		parentElement: composerParent
+	const scroller = fixture.scrollerRect && {
+		getBoundingClientRect: () => ({...fixture.scrollerRect}),
+		parentElement: chatWrapper
 	};
+	const composer = fixture.composerRect && {getBoundingClientRect: () => ({...fixture.composerRect})};
 	global.document = {
 		querySelector: selector => {
-			if (/messages-?scroller/.test(selector)) return fixture.scrollerRect ? {getBoundingClientRect: () => ({...fixture.scrollerRect})} : null;
-			if (selector == "form") return fixture.composerRect ? composer : null;
+			if (/messages-?scroller/.test(selector)) return scroller || null;
+			if (selector == "form") return composer || null;
 			return null;
 		}
 	};
@@ -57,21 +57,21 @@ function createPositionHarness({scrollerRect, composerRect, nativeRect} = {}) {
 	};
 }
 
-test("with a native hint the capsule floats above it, right-aligned", () => {
+test("with a native hint the capsule's right edge aligns with the hint's right edge, above it", () => {
 	const harness = createPositionHarness({nativeRect: {left: 900, top: 676, right: 960, bottom: 694, width: 60, height: 18}});
 	try {
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
-		assert.equal(harness.element.style.left, `${960 - 180}px`, "right edge aligns with the native hint");
-		assert.equal(harness.element.style.top, `${676 - 6 - 20}px`, "capsule floats 6px above the native hint");
+		assert.equal(harness.element.style.left, `${960 - 180}px`, "the capsule's right edge shares the hint's right vertical line");
+		assert.equal(harness.element.style.top, `${676 - 6 - 20}px`, "the capsule floats 6px above the hint");
 	}
 	finally {harness.restore();}
 });
 
-test("without a native hint the capsule takes the hint's row at the chat's right side", () => {
+test("without a native hint the capsule takes the hint's row, right-aligned to the chat area", () => {
 	const harness = createPositionHarness();
 	try {
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
-		assert.equal(harness.element.style.left, `${980 - 12 - 180}px`, "12px inside the composer's right edge");
+		assert.equal(harness.element.style.left, `${1000 - 12 - 180}px`, "right edge aligns to the chat area's right edge");
 		assert.equal(harness.element.style.top, `${700 - 6 - 20}px`, "sits on the native hint's own row under the input");
 	}
 	finally {harness.restore();}

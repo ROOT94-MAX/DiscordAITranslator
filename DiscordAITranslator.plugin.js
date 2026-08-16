@@ -11164,18 +11164,17 @@ __________________ __________________ __________________
           }
           positionLoadedAutoTranslationStatusElement(element) {
             if (!element || typeof document > "u") return;
-            let viewportPadding = 12, innerWidth = typeof window < "u" && window.innerWidth || 1280, innerHeight = typeof window < "u" && window.innerHeight || 720, scrollerRect = null;
+            let viewportPadding = 12, innerWidth = typeof window < "u" && window.innerWidth || 1280, innerHeight = typeof window < "u" && window.innerHeight || 720, scroller = null, scrollerRect = null;
             try {
-              let scroller = document.querySelector(BDFDB.dotCN && BDFDB.dotCN.messagesscroller || ".messages-scroller");
-              scroller && scroller.getBoundingClientRect && (scrollerRect = scroller.getBoundingClientRect());
+              scroller = document.querySelector(BDFDB.dotCN && BDFDB.dotCN.messagesscroller || ".messages-scroller"), scroller && scroller.getBoundingClientRect && (scrollerRect = scroller.getBoundingClientRect());
             } catch {
-              scrollerRect = null;
+              scroller = null, scrollerRect = null;
             }
             let composerRect = null, nativeHintRect = null;
             try {
               let composer = document.querySelector("form");
               composer && composer.getBoundingClientRect && (composerRect = composer.getBoundingClientRect() || null);
-              let hintScope = composer && composer.parentElement || composer;
+              let hintScope = scroller && scroller.parentElement || composer && composer.parentElement || null;
               if (hintScope && hintScope.querySelectorAll) {
                 let nativeHint = Array.from(hintScope.querySelectorAll("div, span")).map((node) => {
                   if (!node || !node.getBoundingClientRect) return null;
@@ -11192,7 +11191,7 @@ __________________ __________________ __________________
             element.style.right = "auto", element.style.bottom = "auto";
             let maxStatusWidth = Math.max(180, Math.min(360, innerWidth - viewportPadding * 2));
             scrollerRect && scrollerRect.width && (maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(scrollerRect.width * 0.55), scrollerRect.width - 16))), element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
-            let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20), anchorRight = nativeHintRect ? nativeHintRect.right : composerRect && composerRect.width ? composerRect.right - viewportPadding : scrollerRect && scrollerRect.width ? scrollerRect.right - viewportPadding : innerWidth - viewportPadding, anchorBottom = nativeHintRect ? nativeHintRect.top - 6 : composerRect && composerRect.height ? composerRect.bottom - 6 : scrollerRect && scrollerRect.height ? scrollerRect.bottom - viewportPadding : innerHeight - viewportPadding, left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth, innerWidth - statusWidth - viewportPadding)), top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight, innerHeight - statusHeight - viewportPadding));
+            let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20), anchorRight = nativeHintRect ? nativeHintRect.right : scrollerRect && scrollerRect.width ? scrollerRect.right - viewportPadding : composerRect && composerRect.width ? composerRect.right - viewportPadding : innerWidth - viewportPadding, anchorBottom = nativeHintRect ? nativeHintRect.top - 6 : composerRect && composerRect.height ? composerRect.bottom - 6 : scrollerRect && scrollerRect.height ? scrollerRect.bottom - viewportPadding : innerHeight - viewportPadding, left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth, innerWidth - statusWidth - viewportPadding)), top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight, innerHeight - statusHeight - viewportPadding));
             element.style.left = `${Math.round(left)}px`, element.style.top = `${Math.round(top)}px`;
           }
           isChannelTextAreaFocused() {
