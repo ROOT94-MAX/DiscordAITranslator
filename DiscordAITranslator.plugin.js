@@ -11147,20 +11147,26 @@ __________________ __________________ __________________
             } catch {
               scrollerRect = null;
             }
+            let composerRect = null, nativeHintRect = null;
+            try {
+              let composer = document.querySelector("form");
+              if (composer && composer.getBoundingClientRect && (composerRect = composer.getBoundingClientRect() || null), composerRect && composerRect.width && composer.querySelectorAll) {
+                let nativeHint = Array.from(composer.querySelectorAll("div, span")).map((node) => {
+                  if (!node || !node.getBoundingClientRect) return null;
+                  let text = (node.textContent || "").trim();
+                  if (!text || !/慢速模式|slow\s*mode|slowmode|已开启/i.test(text)) return null;
+                  let rect = node.getBoundingClientRect();
+                  return !rect.width || !rect.height ? null : { rect, score: rect.right + rect.bottom };
+                }).filter(Boolean).sort((a, b) => b.score - a.score)[0];
+                nativeHintRect = nativeHint && nativeHint.rect || null;
+              }
+            } catch {
+              composerRect = null;
+            }
             element.style.right = "auto", element.style.bottom = "auto";
             let maxStatusWidth = Math.max(180, Math.min(360, innerWidth - viewportPadding * 2));
             scrollerRect && scrollerRect.width && (maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(scrollerRect.width * 0.55), scrollerRect.width - 16))), element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
-            let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20), anchorRight = scrollerRect && scrollerRect.width ? scrollerRect.right : innerWidth, composerTop = null;
-            try {
-              let composer = document.querySelector("form");
-              if (composer && composer.getBoundingClientRect) {
-                let composerRect = composer.getBoundingClientRect();
-                composerRect && composerRect.width && composerRect.top && (composerTop = composerRect.top);
-              }
-            } catch {
-              composerTop = null;
-            }
-            let anchorBottom = scrollerRect && scrollerRect.height ? scrollerRect.bottom : innerHeight, bottomBoundary = composerTop != null ? Math.min(anchorBottom, composerTop) : anchorBottom, left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth - viewportPadding, innerWidth - statusWidth - viewportPadding)), top = Math.max(viewportPadding, Math.min(bottomBoundary - statusHeight - (composerTop != null ? 8 : viewportPadding), innerHeight - statusHeight - viewportPadding));
+            let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20), anchorRight = nativeHintRect ? nativeHintRect.right : composerRect && composerRect.width ? composerRect.right - viewportPadding : scrollerRect && scrollerRect.width ? scrollerRect.right - viewportPadding : innerWidth - viewportPadding, anchorBottom = nativeHintRect ? nativeHintRect.top - 6 : composerRect && composerRect.height ? composerRect.bottom - 6 : scrollerRect && scrollerRect.height ? scrollerRect.bottom - viewportPadding : innerHeight - viewportPadding, left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth, innerWidth - statusWidth - viewportPadding)), top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight, innerHeight - statusHeight - viewportPadding));
             element.style.left = `${Math.round(left)}px`, element.style.top = `${Math.round(top)}px`;
           }
           isChannelTextAreaFocused() {

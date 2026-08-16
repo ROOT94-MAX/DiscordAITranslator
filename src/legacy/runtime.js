@@ -1458,9 +1458,9 @@ module.exports = (_ => {
 
 			positionLoadedAutoTranslationStatusElement (element) {
 				if (!element || typeof document == "undefined") return;
-				// The chat scroller is the one anchor the 2026-08-16 probe proved stable
-				// across client updates; guessing textarea containers drifted and floated
-				// the capsule into the wrong corner.
+				// Product rule (2026-08-16): the capsule lives on the chat area's right side.
+				// A native hint strip (slow mode etc.) gets the capsule directly above it,
+				// right-aligned; without a hint the capsule takes the hint's own row.
 				const viewportPadding = 12;
 				const innerWidth = typeof window != "undefined" && window.innerWidth || 1280;
 				const innerHeight = typeof window != "undefined" && window.innerHeight || 720;
@@ -1470,6 +1470,25 @@ module.exports = (_ => {
 					if (scroller && scroller.getBoundingClientRect) scrollerRect = scroller.getBoundingClientRect();
 				}
 				catch (err) {scrollerRect = null;}
+				let composerRect = null, nativeHintRect = null;
+				try {
+					const composer = document.querySelector("form");
+					if (composer && composer.getBoundingClientRect) composerRect = composer.getBoundingClientRect() || null;
+				if (composerRect && composerRect.width && composer.querySelectorAll) {
+					// Scoped to the composer: a document-wide scan once per status update
+					// read textContent off every node in the app.
+					const nativeHint = Array.from(composer.querySelectorAll("div, span")).map(node => {
+						if (!node || !node.getBoundingClientRect) return null;
+						const text = (node.textContent || "").trim();
+						if (!text || !(/慢速模式|slow\s*mode|slowmode|已开启/i.test(text))) return null;
+						const rect = node.getBoundingClientRect();
+						if (!rect.width || !rect.height) return null;
+						return {rect, score: rect.right + rect.bottom};
+					}).filter(Boolean).sort((a, b) => b.score - a.score)[0];
+					nativeHintRect = nativeHint && nativeHint.rect || null;
+				}
+				}
+				catch (err) {composerRect = null;}
 				element.style.right = "auto";
 				element.style.bottom = "auto";
 				let maxStatusWidth = Math.max(180, Math.min(360, innerWidth - viewportPadding * 2));
@@ -1478,22 +1497,10 @@ module.exports = (_ => {
 				const measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null;
 				const statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth));
 				const statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20);
-				const anchorRight = scrollerRect && scrollerRect.width ? scrollerRect.right : innerWidth;
-				// The composer (chat form) owns the strip under the chat, slow-mode text
-				// included; floating above its top edge keeps the capsule off both.
-				let composerTop = null;
-				try {
-					const composer = document.querySelector("form");
-					if (composer && composer.getBoundingClientRect) {
-						const composerRect = composer.getBoundingClientRect();
-						if (composerRect && composerRect.width && composerRect.top) composerTop = composerRect.top;
-					}
-				}
-				catch (err) {composerTop = null;}
-				const anchorBottom = scrollerRect && scrollerRect.height ? scrollerRect.bottom : innerHeight;
-				const bottomBoundary = composerTop != null ? Math.min(anchorBottom, composerTop) : anchorBottom;
-				const left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth - viewportPadding, innerWidth - statusWidth - viewportPadding));
-				const top = Math.max(viewportPadding, Math.min(bottomBoundary - statusHeight - (composerTop != null ? 8 : viewportPadding), innerHeight - statusHeight - viewportPadding));
+				const anchorRight = nativeHintRect ? nativeHintRect.right : composerRect && composerRect.width ? composerRect.right - viewportPadding : scrollerRect && scrollerRect.width ? scrollerRect.right - viewportPadding : innerWidth - viewportPadding;
+				const anchorBottom = nativeHintRect ? nativeHintRect.top - 6 : composerRect && composerRect.height ? composerRect.bottom - 6 : scrollerRect && scrollerRect.height ? scrollerRect.bottom - viewportPadding : innerHeight - viewportPadding;
+				const left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth, innerWidth - statusWidth - viewportPadding));
+				const top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight, innerHeight - statusHeight - viewportPadding));
 				element.style.left = `${Math.round(left)}px`;
 				element.style.top = `${Math.round(top)}px`;
 			}
@@ -4042,7 +4049,6 @@ module.exports = (_ => {
 				}
 				else finishTranslation();
 			}
-			
 			validTranslator (key, input, output, specialCase) {
 				let engine = translationEngines[key];
 				if (!engine || typeof this[engine.funcName] != "function") return false;
@@ -4085,7 +4091,6 @@ module.exports = (_ => {
 			validateEngineConfig (engineKey) {
 				return this.ensureProviderClient().validateEngineConfig(engineKey);
 			}
-			
 			googleApiTranslate (data, callback) {
 				return this.ensureProviderClient().googleApiTranslate(data, callback);
 			}
@@ -4093,11 +4098,9 @@ module.exports = (_ => {
 			googleCloudTranslate (data, callback) {
 				return this.ensureProviderClient().googleCloudTranslate(data, callback);
 			}
-			
 			microsoftTranslate (data, callback) {
 				return this.ensureProviderClient().microsoftTranslate(data, callback);
 			}
-			
 			deepLTranslate (data, callback) {
 				return this.ensureProviderClient().deepLTranslate(data, callback);
 			}
@@ -4140,15 +4143,12 @@ module.exports = (_ => {
 						iTranslateTranslate (data, callback) {
 				return this.ensureProviderClient().iTranslateTranslate(data, callback);
 			}
-			
 			yandexTranslate (data, callback) {
 				return this.ensureProviderClient().yandexTranslate(data, callback);
 			}
-			
 			papagoTranslate (data, callback) {
 				return this.ensureProviderClient().papagoTranslate(data, callback);
 			}
-			
 			baiduTranslate (data, callback) {
 				return this.ensureProviderClient().baiduTranslate(data, callback);
 			}
