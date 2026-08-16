@@ -24,11 +24,10 @@ function findNativeTextAreaStatusElement({document: documentRef, anchorRect = nu
 		if (cached.hint && (!cached.hint.isConnected || typeof cached.hint.isConnected != "boolean")) hintScanCache.delete(anchorElement);
 		else if (cached.hint || now - cached.scannedAt < HINT_MISS_RESCAN_MS) return cached.hint;
 	}
-	// Survey evidence (2026-08-16): two fixed-depth scope guesses both found nothing
-	// while a document-wide survey saw the hint every time - its container depth
-	// varies with the client build. The scan WALKS UP from the composer one wrapper
-	// at a time and stops before any ancestor reaches deep into the message list
-	// (150px above the input), so each scanned subtree stays composer-sized.
+	// The ancestor walk was removed (2026-08-16): it never detected the hint on this
+	// client (149 recorded misses), and re-running it per heartbeat tick caused the
+	// flicker regression. Only the composer's own parent is scanned - the one scope the
+	// shipped 0.3.32 plugin proved on older clients - and only once per composer.
 	const matchIn = scope => {
 		let candidates = [];
 		try {candidates = Array.from(scope.querySelectorAll("div, span"));}
@@ -52,17 +51,9 @@ function findNativeTextAreaStatusElement({document: documentRef, anchorRect = nu
 			return {element, rect, score: rect.right + rect.bottom};
 		}).filter(Boolean).sort((a, b) => b.score - a.score);
 	};
-	let scope = anchorElement && anchorElement.parentElement || null;
-	let found = null;
-	for (let level = 0; scope && level < 8; level++) {
-		let scopeRect = null;
-		try {scopeRect = scope.getBoundingClientRect && scope.getBoundingClientRect() || null;}
-		catch (err) {scopeRect = null;}
-		if (anchorRect && scopeRect && scopeRect.top < anchorRect.top - 150) break;
-		const matches = matchIn(scope);
-		if (matches.length) {found = matches[0] && matches[0].element || null; break;}
-		scope = scope.parentElement;
-	}
+	const parentScope = anchorElement && anchorElement.parentElement || null;
+	const matches = parentScope ? matchIn(parentScope) : [];
+	const found = matches.length && matches[0] && matches[0].element || null;
 	if (anchorElement) hintScanCache.set(anchorElement, {hint: found, scannedAt: now});
 	return found;
 }

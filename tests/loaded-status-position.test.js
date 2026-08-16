@@ -7,27 +7,28 @@ const {createPluginInstance} = require("./helpers/createPluginInstance");
 // otherwise sit directly above the input. The guards exist so a slow-mode-like node
 // anywhere else in the DOM (the icon row above the input) is rejected - matching it
 // once floated the capsule onto the icons.
-function createPositionHarness({anchorRect, hintNodes} = {}) {
+function createPositionHarness({anchorRect, hintNodes, deepHintNodes} = {}) {
 	const realDocument = global.document;
 	const realWindow = global.window;
 	const defaults = {
 		anchorRect: {left: 820, top: 1127, right: 1493, bottom: 1185, width: 673, height: 58}
 	};
 	const anchor = anchorRect === undefined ? defaults.anchorRect : anchorRect;
-	// Survey evidence (2026-08-16): after two scope guesses still found nothing while
-	// a document-wide survey sees the hint every time - its container depth varies.
-	// The scan WALKS UP from the composer; only the deepest level of this fixture
-	// carries the hint nodes, so a fixed-depth scan cannot find them.
-	let levelScans = 0;
+	// Only the composer's own parent is scanned (the scope the shipped 0.3.32 plugin
+	// proved on older clients). Deeper levels exist in the fixture and count their
+	// queries: a scan that ever reaches them is a regression of the flicker kind.
 	const makeLevel = rect => ({getBoundingClientRect: () => rect, querySelectorAll: () => [], parentElement: null});
-	const hintScope = makeLevel({left: 820, top: 1100, right: 1501, bottom: 1193});
-	hintScope.querySelectorAll = selector => {
+	const countInto = (counter, nodes) => selector => {
 		if (selector != "div, span") return [];
-		levelScans++;
-		return hintNodes || [];
+		counter.count++;
+		return nodes || [];
 	};
-	const levelTwo = makeLevel({left: 820, top: 1100, right: 1501, bottom: 1193});
+	const counters = {parent: {count: 0}, deep: {count: 0}};
 	const composerWrapper = makeLevel({left: 820, top: 1120, right: 1493, bottom: 1193});
+	composerWrapper.querySelectorAll = countInto(counters.parent, hintNodes);
+	const levelTwo = makeLevel({left: 820, top: 1100, right: 1501, bottom: 1193});
+	const hintScope = makeLevel({left: 820, top: 1100, right: 1501, bottom: 1193});
+	levelTwo.querySelectorAll = hintScope.querySelectorAll = countInto(counters.deep, deepHintNodes);
 	composerWrapper.parentElement = levelTwo;
 	levelTwo.parentElement = hintScope;
 	const anchorNode = anchor && {
@@ -49,7 +50,8 @@ function createPositionHarness({anchorRect, hintNodes} = {}) {
 	return {
 		plugin,
 		element,
-		levelScans: () => levelScans,
+		levelScans: () => counters.parent.count,
+		deepScans: () => counters.deep.count,
 		restore() {
 			global.document = realDocument;
 			global.window = realWindow;
@@ -190,6 +192,21 @@ test("a repeated heartbeat tick on the same composer costs zero hint scans", () 
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
 
 		assert.equal(harness.levelScans(), firstPassScans, "heartbeat ticks reuse the cached scan result");
+	}
+	finally {harness.restore();}
+});
+
+test("a hint beyond the composer's parent is never scanned for", () => {
+	// The ancestor walk never detected the hint on this client (149 recorded misses)
+	// while its per-second rescans caused the flicker regression. Deeper levels are
+	// off limits entirely: a slow-mode-like node there must leave the capsule on the
+	// plain fallback and cost zero deep queries.
+	const harness = createPositionHarness({deepHintNodes: [hintNode({left: 1361, top: 1103, right: 1501, bottom: 1126, width: 140, height: 23})]});
+	try {
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+		assert.equal(harness.element.style.left, `${1493 - 12 - 180}px`, "the fallback position is used");
+		assert.equal(harness.element.style.top, `${1127 - 20 - 8}px`);
+		assert.equal(harness.deepScans(), 0, "no level beyond the composer's parent is ever queried");
 	}
 	finally {harness.restore();}
 });

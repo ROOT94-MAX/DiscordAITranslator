@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId a1e4a1a6aa06224e
+ * @buildId 61cbf81a068feabf
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -4815,10 +4815,10 @@ var require_loaded_status_position = __commonJS({
         if (cached.hint && (!cached.hint.isConnected || typeof cached.hint.isConnected != "boolean")) hintScanCache.delete(anchorElement);
         else if (cached.hint || now - cached.scannedAt < HINT_MISS_RESCAN_MS) return cached.hint;
       }
-      let matchIn = /* @__PURE__ */ __name((scope2) => {
+      let matchIn = /* @__PURE__ */ __name((scope) => {
         let candidates = [];
         try {
-          candidates = Array.from(scope2.querySelectorAll("div, span"));
+          candidates = Array.from(scope.querySelectorAll("div, span"));
         } catch {
           return [];
         }
@@ -4834,22 +4834,7 @@ var require_loaded_status_position = __commonJS({
           }
           return { element, rect, score: rect.right + rect.bottom };
         }).filter(Boolean).sort((a, b) => b.score - a.score);
-      }, "matchIn"), scope = anchorElement && anchorElement.parentElement || null, found = null;
-      for (let level = 0; scope && level < 8; level++) {
-        let scopeRect = null;
-        try {
-          scopeRect = scope.getBoundingClientRect && scope.getBoundingClientRect() || null;
-        } catch {
-          scopeRect = null;
-        }
-        if (anchorRect && scopeRect && scopeRect.top < anchorRect.top - 150) break;
-        let matches = matchIn(scope);
-        if (matches.length) {
-          found = matches[0] && matches[0].element || null;
-          break;
-        }
-        scope = scope.parentElement;
-      }
+      }, "matchIn"), parentScope = anchorElement && anchorElement.parentElement || null, matches = parentScope ? matchIn(parentScope) : [], found = matches.length && matches[0] && matches[0].element || null;
       return anchorElement && hintScanCache.set(anchorElement, { hint: found, scannedAt: now }), found;
     }
     __name(findNativeTextAreaStatusElement, "findNativeTextAreaStatusElement");
@@ -10283,7 +10268,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "a1e4a1a6aa06224e";
+            return "61cbf81a068feabf";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
