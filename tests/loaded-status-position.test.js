@@ -14,16 +14,25 @@ function createPositionHarness({anchorRect, hintNodes} = {}) {
 		anchorRect: {left: 820, top: 1127, right: 1493, bottom: 1185, width: 673, height: 58}
 	};
 	const anchor = anchorRect === undefined ? defaults.anchorRect : anchorRect;
+	// Survey evidence (2026-08-16): after two scope guesses still found nothing while
+	// a document-wide survey sees the hint every time - its container depth varies.
+	// The scan WALKS UP from the composer; only the deepest level of this fixture
+	// carries the hint nodes, so a fixed-depth scan cannot find them.
+	const makeLevel = rect => ({getBoundingClientRect: () => rect, querySelectorAll: () => [], parentElement: null});
+	const hintScope = makeLevel({left: 820, top: 1100, right: 1501, bottom: 1193});
+	hintScope.querySelectorAll = selector => selector == "div, span" ? (hintNodes || []) : [];
+	const levelTwo = makeLevel({left: 820, top: 1100, right: 1501, bottom: 1193});
+	const composerWrapper = makeLevel({left: 820, top: 1120, right: 1493, bottom: 1193});
+	composerWrapper.parentElement = levelTwo;
+	levelTwo.parentElement = hintScope;
 	const anchorNode = anchor && {
-		getBoundingClientRect: () => ({...anchor})
+		getBoundingClientRect: () => ({...anchor}),
+		parentElement: composerWrapper
 	};
 	const plugin = createPluginInstance({callSetLanguages: false});
 	// Set after instance creation: createPluginInstance replaces global.window itself.
 	global.document = {
-		querySelectorAll: selector => {
-			if (selector == 'div, span') return hintNodes || [];
-			return selector == '[class*="channelTextArea"]' || selector == 'form [role="textbox"]' ? (anchorNode ? [anchorNode] : []) : [];
-		}
+		querySelectorAll: selector => selector == '[class*="channelTextArea"]' || selector == 'form [role="textbox"]' ? (anchorNode ? [anchorNode] : []) : []
 	};
 	global.window = Object.assign({}, global.window, {innerWidth: 1520, innerHeight: 1220});
 	const element = {

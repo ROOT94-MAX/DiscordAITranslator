@@ -3,18 +3,14 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-test("capsule positioning keeps the shipped 0.3.32 selector and scan contracts", () => {
+test("composer status and focus detection do not read the removed BDFDB channeltextarea selector", () => {
 	const runtime = fs.readFileSync(path.resolve(__dirname, "..", "src", "legacy", "runtime.js"), "utf8");
-	const positioner = fs.readFileSync(path.resolve(__dirname, "..", "src", "ui", "loaded-status-position.js"), "utf8");
+	const viewport = fs.readFileSync(path.resolve(__dirname, "..", "src", "viewport", "message-viewport-store.js"), "utf8");
 
-	// The runtime itself stays out of raw composer DOM; the positioner module owns it.
-	assert.doesNotMatch(runtime, /\[class\*="channelTextArea"\]/, "capsule positioning lives in the positioner module, not the runtime");
-	// The shipped 0.3.32 positioner anchored on BDFDB's composer class first and found
-	// the slow-mode hint with a DOCUMENT-WIDE scan filtered by proximity guards.
-	// Container-scoped rescans missed the hint 149 recorded times after the client
-	// moved it out of the guessed container, so both old contracts are pinned here.
-	assert.match(positioner, /BDFDB\.dotCN\.channeltextarea/, "the BDFDB composer anchor stays the first selector");
-	assert.match(positioner, /documentRef\.querySelectorAll\("div, span"\)/, "the hint scan stays document-wide like the shipped version");
-	assert.match(positioner, /nearInputRight/, "the proximity guards stay in place");
-	assert.match(positioner, /slow\\s\*mode/, "the slow-mode wording stays matched");
+	assert.doesNotMatch(runtime, /BDFDB\.dotCN\s*&&\s*BDFDB\.dotCN\.channeltextarea|BDFDB\.dotCN\.channeltextarea/);
+	// Capsule positioning anchors to the chat scroller (probe-proven stable across
+	// client updates); guessing composer containers in the runtime drifted on
+	// 2026-08-16 (PTB 1.0.1214) and floated the capsule into the wrong corner.
+	assert.doesNotMatch(runtime, /\[class\*="channelTextArea"\]/, "capsule positioning must not guess composer containers");
+	assert.match(viewport, /\[class\*="channelTextArea"\]/, "composer focus detection keeps its local fallback selector");
 });
