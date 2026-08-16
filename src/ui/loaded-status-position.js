@@ -1,56 +1,42 @@
-// Restored from the pre-rewrite runtime (git 53ee75d): the composer-anchored capsule
-// positioner with the slow-mode hint detector. The 2026-08-16 rewrite rounds deleted
-// the proximity guards, and the capsule drifted onto the composer icon row and into
-// the strip below the input. The guards accept a slow-mode match only when it really
-// sits at the composer's top-right; without a hint the capsule returns to the
-// original spot - directly above the input, right side. Debug builds record the
-// anchor/hint geometry so future drift is calibrated from evidence, not guesses.
-function findNativeTextAreaStatusElement({document: documentRef, anchorRect = null, anchorElement = null}) {
+// Positions the floating loaded-status capsule, mirroring the shipped 0.3.32 plugin
+// (the version users ran for months): a DOCUMENT-WIDE scan finds slow-mode text, the
+// proximity guards filter it, and the capsule floats above a passing hint with both
+// right edges on one line. Container-scoped scans were a later "optimization" in this
+// repo; they broke detection the moment the client moved the hint outside the guessed
+// container (149 recorded misses across every scope variant), while this survey-style
+// scan saw the hint on every run. Status updates are throttled to ~1/s, the same rate
+// the old plugin paid without issue.
+function findNativeTextAreaStatusElement({document: documentRef, anchorRect = null}) {
 	if (!documentRef) return null;
-	// Survey evidence (2026-08-16): two fixed-depth scope guesses both found nothing
-	// while a document-wide survey saw the hint every time - its container depth
-	// varies with the client build. The scan WALKS UP from the composer one wrapper
-	// at a time and stops before any ancestor reaches deep into the message list
-	// (150px above the input), so each scanned subtree stays composer-sized.
-	const matchIn = scope => {
-		let candidates = [];
-		try {candidates = Array.from(scope.querySelectorAll("div, span"));}
-		catch (err) {return [];}
-		return candidates.map(element => {
-			if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
-			const text = (element.textContent || "").trim();
-			if (!text || !(/慢速模式|slow\s*mode|slowmode|已开启/i.test(text))) return null;
-			const rect = element.getBoundingClientRect();
-			if (!rect.width || !rect.height) return null;
-			if (anchorRect) {
-				// Old clients render the slow-mode hint in a strip ABOVE the input; this
-				// client (PTB 1.0.1214, probe evidence 2026-08-16) renders it BELOW. Both
-				// bands pass - anything else (the icon row, the channel list) is rejected.
-				const nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42;
-				const aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8;
-				const belowInput = rect.top >= anchorRect.bottom - 10 && rect.top <= anchorRect.bottom + 42 && rect.bottom <= anchorRect.bottom + 58;
-				const nearInputRight = rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45;
-				if (!nearInputRight || !(nearInputTop && aboveInput || belowInput)) return null;
-			}
-			return {element, rect, score: rect.right + rect.bottom};
-		}).filter(Boolean).sort((a, b) => b.score - a.score);
-	};
-	let scope = anchorElement && anchorElement.parentElement || null;
-	for (let level = 0; scope && level < 8; level++) {
-		let scopeRect = null;
-		try {scopeRect = scope.getBoundingClientRect && scope.getBoundingClientRect() || null;}
-		catch (err) {scopeRect = null;}
-		if (anchorRect && scopeRect && scopeRect.top < anchorRect.top - 150) break;
-		const matches = matchIn(scope);
-		if (matches.length) return matches[0] && matches[0].element || null;
-		scope = scope.parentElement;
-	}
-	return null;
+	let candidates = [];
+	try {candidates = Array.from(documentRef.querySelectorAll("div, span"));}
+	catch (err) {return null;}
+	const matches = candidates.map(element => {
+		if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
+		const text = (element.textContent || "").trim();
+		if (!text || !(/慢速模式|slow\s*mode|slowmode|已开启/i.test(text))) return null;
+		const rect = element.getBoundingClientRect();
+		if (!rect.width || !rect.height) return null;
+		if (anchorRect) {
+			// Old clients render the slow-mode hint in a strip ABOVE the input; this
+			// client (PTB 1.0.1214, probe evidence 2026-08-16) renders it BELOW. Both
+			// bands pass - anything else (the icon row, the channel list) is rejected.
+			const nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42;
+			const aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8;
+			const belowInput = rect.top >= anchorRect.bottom - 10 && rect.top <= anchorRect.bottom + 42 && rect.bottom <= anchorRect.bottom + 58;
+			const nearInputRight = rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45;
+			if (!nearInputRight || !(nearInputTop && aboveInput || belowInput)) return null;
+		}
+		return {element, rect, score: rect.right + rect.bottom};
+	}).filter(Boolean).sort((a, b) => b.score - a.score);
+	return matches[0] && matches[0].element || null;
 }
 
 function positionLoadedStatusElement({BDFDB, document: documentRef, window: windowRef, element}) {
 	if (!element || !documentRef || !windowRef || typeof documentRef.querySelectorAll != "function") return;
-	const selectors = ['[class*="channelTextArea"]', 'form [role="textbox"]'];
+	// The shipped 0.3.32 selector trio: BDFDB's known composer class first, then the
+	// local fallbacks.
+	const selectors = [BDFDB && BDFDB.dotCN && BDFDB.dotCN.channeltextarea, '[class*="channelTextArea"]', 'form [role="textbox"]'];
 	let anchors = [];
 	for (const selector of selectors) {
 		if (!selector) continue;
@@ -86,7 +72,7 @@ function positionLoadedStatusElement({BDFDB, document: documentRef, window: wind
 	if (anchor && anchor.getBoundingClientRect) {
 		const rect = anchor.getBoundingClientRect();
 		anchorRectOut = rect;
-		const nativeStatus = findNativeTextAreaStatusElement({document: documentRef, anchorRect: rect, anchorElement: anchor});
+		const nativeStatus = findNativeTextAreaStatusElement({document: documentRef, anchorRect: rect});
 		left = rect.right - statusWidth - viewportPadding;
 		top = rect.top - statusHeight - 8;
 		if (nativeStatus && nativeStatus.getBoundingClientRect) {

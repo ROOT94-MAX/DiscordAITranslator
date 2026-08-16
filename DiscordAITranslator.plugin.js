@@ -4801,46 +4801,32 @@ var require_translate_components = __commonJS({
 // src/ui/loaded-status-position.js
 var require_loaded_status_position = __commonJS({
   "src/ui/loaded-status-position.js"(exports2, module2) {
-    function findNativeTextAreaStatusElement({ document: documentRef, anchorRect = null, anchorElement = null }) {
+    function findNativeTextAreaStatusElement({ document: documentRef, anchorRect = null }) {
       if (!documentRef) return null;
-      let matchIn = /* @__PURE__ */ __name((scope2) => {
-        let candidates = [];
-        try {
-          candidates = Array.from(scope2.querySelectorAll("div, span"));
-        } catch {
-          return [];
-        }
-        return candidates.map((element) => {
-          if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
-          let text = (element.textContent || "").trim();
-          if (!text || !/慢速模式|slow\s*mode|slowmode|已开启/i.test(text)) return null;
-          let rect = element.getBoundingClientRect();
-          if (!rect.width || !rect.height) return null;
-          if (anchorRect) {
-            let nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42, aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8, belowInput = rect.top >= anchorRect.bottom - 10 && rect.top <= anchorRect.bottom + 42 && rect.bottom <= anchorRect.bottom + 58;
-            if (!(rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45) || !(nearInputTop && aboveInput || belowInput)) return null;
-          }
-          return { element, rect, score: rect.right + rect.bottom };
-        }).filter(Boolean).sort((a, b) => b.score - a.score);
-      }, "matchIn"), scope = anchorElement && anchorElement.parentElement || null;
-      for (let level = 0; scope && level < 8; level++) {
-        let scopeRect = null;
-        try {
-          scopeRect = scope.getBoundingClientRect && scope.getBoundingClientRect() || null;
-        } catch {
-          scopeRect = null;
-        }
-        if (anchorRect && scopeRect && scopeRect.top < anchorRect.top - 150) break;
-        let matches = matchIn(scope);
-        if (matches.length) return matches[0] && matches[0].element || null;
-        scope = scope.parentElement;
+      let candidates = [];
+      try {
+        candidates = Array.from(documentRef.querySelectorAll("div, span"));
+      } catch {
+        return null;
       }
-      return null;
+      let matches = candidates.map((element) => {
+        if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
+        let text = (element.textContent || "").trim();
+        if (!text || !/慢速模式|slow\s*mode|slowmode|已开启/i.test(text)) return null;
+        let rect = element.getBoundingClientRect();
+        if (!rect.width || !rect.height) return null;
+        if (anchorRect) {
+          let nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42, aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8, belowInput = rect.top >= anchorRect.bottom - 10 && rect.top <= anchorRect.bottom + 42 && rect.bottom <= anchorRect.bottom + 58;
+          if (!(rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45) || !(nearInputTop && aboveInput || belowInput)) return null;
+        }
+        return { element, rect, score: rect.right + rect.bottom };
+      }).filter(Boolean).sort((a, b) => b.score - a.score);
+      return matches[0] && matches[0].element || null;
     }
     __name(findNativeTextAreaStatusElement, "findNativeTextAreaStatusElement");
     function positionLoadedStatusElement({ BDFDB, document: documentRef, window: windowRef, element }) {
       if (!element || !documentRef || !windowRef || typeof documentRef.querySelectorAll != "function") return;
-      let selectors = ['[class*="channelTextArea"]', 'form [role="textbox"]'], anchors = [];
+      let selectors = [BDFDB && BDFDB.dotCN && BDFDB.dotCN.channeltextarea, '[class*="channelTextArea"]', 'form [role="textbox"]'], anchors = [];
       for (let selector of selectors)
         if (selector)
           try {
@@ -4866,7 +4852,7 @@ var require_loaded_status_position = __commonJS({
       if (anchor && anchor.getBoundingClientRect) {
         let rect = anchor.getBoundingClientRect();
         anchorRectOut = rect;
-        let nativeStatus = findNativeTextAreaStatusElement({ document: documentRef, anchorRect: rect, anchorElement: anchor });
+        let nativeStatus = findNativeTextAreaStatusElement({ document: documentRef, anchorRect: rect });
         if (left = rect.right - statusWidth - viewportPadding, top = rect.top - statusHeight - 8, nativeStatus && nativeStatus.getBoundingClientRect) {
           let nativeRect = nativeStatus.getBoundingClientRect();
           nativeHintRect = nativeRect, left = Math.max(rect.left + 8, Math.min(nativeRect.right - statusWidth, windowRef.innerWidth - statusWidth - viewportPadding)), top = nativeRect.top - statusHeight - 8;
