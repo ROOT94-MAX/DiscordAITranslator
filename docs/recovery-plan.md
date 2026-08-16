@@ -108,6 +108,21 @@ Collected with `DiscordAITranslator.debug.plugin.js` (probe `src/diagnostics/sec
 
 The second debug covers acquisition, batch/result parsing, state ownership, rendering, virtualization, scrolling/input, automatic/manual precedence, disable/re-enable, edits/deletes, replies, embeds, titles, status, themes/localization, lifecycle cleanup, deterministic build, artifact identity, rollback, and real-client smoke evidence. `docs/architecture.md` is the canonical detailed contract.
 
+### Open item: floating capsule hint alignment (parked 2026-08-16, awaiting fresh analysis)
+
+**User rule:** with a native hint (slow mode etc.) the capsule floats directly above it and both RIGHT edges share one vertical line; without a hint it sits above the input, right side. The capsule must never cover the composer input or linger outside its channel (the lingering fix and the every-state visibility heartbeat are already shipped).
+
+**Evidence collected (probe file `translator-second-debug.json`, `statusPositioning` + `survey` entries):**
+- The hint is the `cooldownWrapper` ("慢速模式已开启"), recorded at top 1104-1126, right 1501 while the composer anchor was top 1127, right 1493 - i.e. directly above the input's top-right, 8px wider than the composer.
+- Every container-scoped hint scan (composer parent, grandparent, then an 8-level ancestor walk bounded to 150px above the input) detected the hint 0 times across ~149 recorded positioning runs, while the document-wide survey saw it every time. The hint is not under any scanned composer ancestor within the walk bound.
+- The old shipped plugin (0.3.32) detected it via a full `document.querySelectorAll("div, span")` scan plus proximity guards - but the user reports that full-document scan caused visible page flicker, and its final alignment was also wrong. Do NOT restore that approach.
+
+**Constraint:** no document-wide per-positioning scan (flicker); no fixed-container or fixed-depth guess (all failed); nothing may read textContent off large subtrees per tick.
+
+**Proposed but unapproved approach:** geometry probe - sample `document.elementsFromPoint()` at 2-3 points computed live from the composer rect (anchor.right - 30, anchor.top - 10/-20/-30), text-check only the few returned nodes, cache the found hint element and re-read its live rect for alignment. All coordinates are computed per pass from the live anchor; nothing absolute is stored. Needs a fresh reviewer to validate or replace.
+
+**Current behavior:** hint detection effectively never succeeds on PTB 1.0.1214, so the capsule uses the no-hint fallback (above the input, right-aligned to the composer) at all times.
+
 ---
 
 ## Active Automatic Translation Recovery Design (Approved 2026-08-04)
