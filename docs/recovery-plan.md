@@ -121,7 +121,7 @@ The second debug covers acquisition, batch/result parsing, state ownership, rend
 
 **Proposed but unapproved approach:** geometry probe - sample `document.elementsFromPoint()` at 2-3 points computed live from the composer rect (anchor.right - 30, anchor.top - 10/-20/-30), text-check only the few returned nodes, cache the found hint element and re-read its live rect for alignment. All coordinates are computed per pass from the live anchor; nothing absolute is stored. Needs a fresh reviewer to validate or replace.
 
-**Current behavior:** hint detection effectively never succeeds on PTB 1.0.1214, so the capsule uses the no-hint fallback (above the input, right-aligned to the composer) at all times.
+**Current behavior:** hint detection effectively never succeeds on PTB 1.0.1214, so the capsule uses the no-hint fallback (above the input, right-aligned to the composer) at all times. In slow-mode channels this fallback visually OVERLAPS the hint strip (both sit directly above the input on this client), which users read as the old recognition having returned - the parked solution should also separate the fallback band from the hint strip.
 
 ---
 
