@@ -63,7 +63,7 @@ The channel popout does not contain:
 - Historical results that belong to virtualized rows are stored without repainting the chat. Those rows render their final stored state when they later mount.
 - Completed translations become visible even while the user is typing or scrolling; interaction never creates a display delay.
 - One historical display transaction refreshes the mounted message rows in that configured batch together while preserving the viewport anchor once; if the user changes scroll intent during paint, the plugin does not pull the viewport back. Virtualized rows render their final stored state when they mount.
-- Automatic translation display never remounts the full chat list.
+- Automatic translation display repaints the whole message list at most once per translation transaction. Confirmation retries only re-read painted rows, and purely virtualized rows never trigger a repaint; they render their stored state when they mount.
 - The compact loaded-message status is `translation icon completed/total · elapsed`, for example `20/50 · 8s`. It counts valid results stored for visible or virtualized rows, not merely currently painted rows.
 - The status icon uses the active Discord theme: brand color while translating, positive when complete, warning during repair, and danger for terminal partial failure. Detailed visible, background-ready, and retry counts appear only in the hover explanation.
 - A completed status remains briefly and then collapses. Status updates never repaint the message list.
@@ -93,8 +93,6 @@ The channel popout does not contain:
 - Edited titles invalidate stale translations.
 - Disabling the channel or stopping the plugin restores the original title and rejects late callbacks.
 
-## Remaining Engineering Work
+## Incomplete Work
 
-- Split the tested single-file implementation into source modules with deterministic build output.
-- Add provider and Discord render latency instrumentation.
-- Complete the remaining DiscordPTB smoke-test checklist before a version bump or release.
+Remaining work, its order, and the parked investigations live in `docs/recovery-plan.md`. Deferred items include provider and Discord render latency instrumentation.

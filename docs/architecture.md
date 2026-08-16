@@ -2,9 +2,9 @@
 
 ## Status
 
-This document defines the approved target architecture for the repository. The deterministic `src/` build exists, but the received-message display migration is reopened because repository verification did not reproduce the real Discord React lifecycle.
+This document defines the approved target architecture for the repository. The deterministic `src/` build exists, and v0.3.38 (2026-08-16) shipped the display repair series that restored hover-independent translation display on current clients.
 
-The shipped runtime remains the generated `DiscordAITranslator.plugin.js`. At the 2026-08-10 debug baseline (`9fb24a1`) it is 13,305 lines and 904,357 bytes. It must remain installable while the display ownership boundary is replaced.
+The shipped runtime is the generated `DiscordAITranslator.plugin.js` (13,454 lines and 915,364 bytes at v0.3.38, build id `61cbf81a068feabf`). The shipped display strategy supersedes the former parent-transaction refresh design: real-client evidence proved per-message `forceUpdate` is a no-op on current clients, so each display transaction triggers at most one whole-list rebuild (see "DiscordRenderAdapter" below; the full debug evidence is archived outside Git with the pre-compression recovery transcript).
 
 ## Distribution Contract
 
@@ -286,9 +286,9 @@ confirmMountedViews({channelId, views})
 refreshThreadTitles(channelId)
 ```
 
-No translation policy or provider logic is allowed in this adapter. One transaction requests one refresh at the parent channel-stream projection boundary so normal React parent-to-child order produces text and decoration from the same revision. A channel-scoped render handle may be captured from the `Messages` patch or resolved from the active scroller, but the adapter must prove that the handle is updateable before using it. Message DOM nodes and IDs are used for mounted-state detection and revision confirmation, not as the primary refresh owners.
+No translation policy or provider logic is allowed in this adapter. Real-client evidence (2026-08-13, DiscordPTB app-1.0.1212; archived debug transcript) proved that `forceUpdate` on any node around the channel-stream boundary — per-message owners, the stream owner, or its nearest updateable ancestor — does not repaint the message list on current clients. The shipped contract is therefore: each display transaction triggers at most one whole-list rebuild, message-row lookup uses a tolerant selector ladder that accepts composite `channelId-messageId` shapes, and message DOM nodes and IDs are used only for mounted-state detection and revision confirmation.
 
-The adapter returns separate `confirmedIds`, `deferredIds`, `missingIds`, and `ownerMissing` evidence. `deferredIds` means the row was not mounted. A mounted row without the requested revision is `missing`, never deferred or displayed. Off-screen rows remain state-ready and render from the store when mounted. Automatic display does not use a whole-chat remount as its normal or repair path.
+The adapter returns separate `confirmedIds`, `deferredIds`, `missingIds`, and `ownerMissing` evidence. `deferredIds` means the row was not mounted. A mounted row without the requested revision is `missing`, never deferred or displayed. Off-screen rows remain state-ready and render from the store when mounted. A whole-list rebuild is budgeted at most once per display transaction; confirmation retries are read-only DOM checks and never rebuild, and purely virtualized rows never trigger a rebuild.
 
 ### TranslationOrchestrator
 
