@@ -49,6 +49,14 @@ function renderSettingsPanel(plugin, collapseStates = {}, dependencies = {}) {
 		collapseStates: collapseStates,
 		children: _ => {
 			let settingsItems = [];
+			// Audit item 29: two bundles with identical metadata used to be indistinguishable
+			// at runtime. The build identity line lets anyone compare the loaded plugin
+			// against the repository artifact in one glance.
+			const buildId = plugin.getBuildId && plugin.getBuildId();
+			settingsItems.push(BDFDB.ReactUtils.createElement("div", {
+				className: "translator-settings-note",
+				children: `v${plugin.getVersion()}${buildId ? ` · build ${buildId}` : ""}`
+			}));
 			const recommendedEngines = ["microsoft", "googlecloud", "googleapi", "deepseek", "openai", "gemini", "oaicompat"];
 			const getSettingsPanelRoot = () => document.querySelector(".translator-settings-panel-root");
 			const isScrollableElement = node => {

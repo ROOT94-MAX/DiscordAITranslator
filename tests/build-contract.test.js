@@ -70,3 +70,20 @@ test("the generated plugin stays readable rather than minified", () => {
 	assert.ok(averageLineLength < 200, `the shipped plugin looks minified (average line ${averageLineLength.toFixed(0)} chars); keep it readable for live debugging`);
 	assert.match(generated, /\n\t/, "the shipped plugin keeps source indentation");
 });
+
+test("the artifact carries a deterministic build identity visible at runtime", async () => {
+	// Audit item 29: two bundles built without changing metadata used to be
+	// indistinguishable at runtime, so support could not tell a stale loaded bundle
+	// from the current source. The banner declares @buildId and the running plugin
+	// exposes the exact same id.
+	const {createPluginBundle} = await import("../scripts/build-plugin.mjs");
+	const firstGenerated = await createPluginBundle();
+	const secondGenerated = await createPluginBundle();
+	const firstId = (firstGenerated.match(/@buildId ([0-9a-f]{16})/) || [])[1];
+	const secondId = (secondGenerated.match(/@buildId ([0-9a-f]{16})/) || [])[1];
+
+	assert.ok(firstId, "the banner carries a 16-hex build id");
+	assert.equal(firstId, secondId, "the id is deterministic for the same source");
+	const plugin = createPluginInstance({callSetLanguages: false});
+	assert.equal(plugin.getBuildId(), firstId, "the running plugin exposes the banner's build id");
+});

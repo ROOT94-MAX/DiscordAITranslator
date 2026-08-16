@@ -3,6 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.37
+ * @buildId 7ed929eb351cc295
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -3564,7 +3565,12 @@ BDFDB is loading. Please reopen settings in a few seconds.`, panel;
       return settingsPanel = BDFDB.PluginUtils.createSettingsPanel(plugin, {
         collapseStates,
         children: /* @__PURE__ */ __name((_) => {
-          let settingsItems = [], recommendedEngines = ["microsoft", "googlecloud", "googleapi", "deepseek", "openai", "gemini", "oaicompat"], getSettingsPanelRoot = /* @__PURE__ */ __name(() => document.querySelector(".translator-settings-panel-root"), "getSettingsPanelRoot"), isScrollableElement = /* @__PURE__ */ __name((node) => {
+          let settingsItems = [], buildId = plugin.getBuildId && plugin.getBuildId();
+          settingsItems.push(BDFDB.ReactUtils.createElement("div", {
+            className: "translator-settings-note",
+            children: `v${plugin.getVersion()}${buildId ? ` · build ${buildId}` : ""}`
+          }));
+          let recommendedEngines = ["microsoft", "googlecloud", "googleapi", "deepseek", "openai", "gemini", "oaicompat"], getSettingsPanelRoot = /* @__PURE__ */ __name(() => document.querySelector(".translator-settings-panel-root"), "getSettingsPanelRoot"), isScrollableElement = /* @__PURE__ */ __name((node) => {
             if (!node || node == document || node == document.body || node == document.documentElement || typeof node.scrollTop != "number" || typeof node.scrollHeight != "number" || typeof node.clientHeight != "number" || node.scrollHeight <= node.clientHeight + 1) return !1;
             let overflowY = "";
             try {
@@ -10266,6 +10272,9 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         return _a = class extends Plugin {
           getVersion() {
             return normalizeSemverVersion(this.version);
+          }
+          getBuildId() {
+            return "7ed929eb351cc295";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
