@@ -19,10 +19,14 @@ function findNativeTextAreaStatusElement({document: documentRef, anchorRect = nu
 		const rect = element.getBoundingClientRect();
 		if (!rect.width || !rect.height) return null;
 		if (anchorRect) {
+			// Old clients render the slow-mode hint in a strip ABOVE the input; this
+			// client (PTB 1.0.1214, probe evidence 2026-08-16) renders it BELOW. Both
+			// bands pass - anything else (the icon row, the channel list) is rejected.
 			const nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42;
-			const nearInputRight = rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45;
 			const aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8;
-			if (!nearInputTop || !nearInputRight || !aboveInput) return null;
+			const belowInput = rect.top >= anchorRect.bottom - 10 && rect.top <= anchorRect.bottom + 42 && rect.bottom <= anchorRect.bottom + 58;
+			const nearInputRight = rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45;
+			if (!nearInputRight || !(nearInputTop && aboveInput || belowInput)) return null;
 		}
 		return {element, rect, score: rect.right + rect.bottom};
 	}).filter(Boolean).sort((a, b) => b.score - a.score);

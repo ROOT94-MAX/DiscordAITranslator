@@ -57,6 +57,20 @@ test("with a passing slow-mode hint the capsule floats above it, right edges ali
 	finally {harness.restore();}
 });
 
+test("a hint in the strip below the input (this client's layout) is accepted and aligned", () => {
+	// Probe evidence (2026-08-16, PTB 1.0.1214): 51/51 positioning runs detected no
+	// hint because the restored guards only accept the old client's above-input strip,
+	// while this client renders 已开启 BELOW the input. A below-input hint must pass
+	// the guards so the capsule stacks above it with both right edges on one line.
+	const harness = createPositionHarness({hintNodes: [hintNode({left: 1430, top: 1201, right: 1490, bottom: 1217, width: 60, height: 16})]});
+	try {
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+		assert.equal(harness.element.style.left, `${1490 - 180}px`, "the capsule's right edge shares the below-input hint's right edge");
+		assert.equal(harness.element.style.top, `${1201 - 20 - 8}px`, "the capsule floats 8px above the hint");
+	}
+	finally {harness.restore();}
+});
+
 test("a slow-mode-like node away from the composer's top-right is rejected by the guards", () => {
 	// The icon row above the input once matched a text scan and the capsule landed on
 	// the icons; the original proximity guards reject anything not at the composer's

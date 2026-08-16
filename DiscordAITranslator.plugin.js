@@ -4816,8 +4816,8 @@ var require_loaded_status_position = __commonJS({
         let rect = element.getBoundingClientRect();
         if (!rect.width || !rect.height) return null;
         if (anchorRect) {
-          let nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42, nearInputRight = rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45, aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8;
-          if (!nearInputTop || !nearInputRight || !aboveInput) return null;
+          let nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42, aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8, belowInput = rect.top >= anchorRect.bottom - 10 && rect.top <= anchorRect.bottom + 42 && rect.bottom <= anchorRect.bottom + 58;
+          if (!(rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45) || !(nearInputTop && aboveInput || belowInput)) return null;
         }
         return { element, rect, score: rect.right + rect.bottom };
       }).filter(Boolean).sort((a, b) => b.score - a.score);
