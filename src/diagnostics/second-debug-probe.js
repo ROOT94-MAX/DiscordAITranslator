@@ -232,6 +232,33 @@ function createSecondDebugProbe({
 		}, domWalkDelayMs);
 	}
 
+	// Samples the attribute shapes of mounted message rows so the render adapter's
+	// lookup selectors can be compared against the real DOM instead of assumptions.
+	// The 2026-08-16 client proved exact-match selectors can miss every row while the
+	// rebuild primitive itself works.
+	function recordMessageRowShapes({label = "messageRowShapes", scroller = null, limit = 8} = {}) {
+		if (!scroller || typeof scroller.querySelectorAll != "function") return record(label, {error: "no-query-root"});
+		const shapes = [];
+		try {
+			const rows = Array.from(scroller.querySelectorAll('[id^="chat-messages-"], [data-list-item-id*="chat-messages"]'));
+			for (const row of rows.slice(0, limit)) {
+				const shape = {};
+				for (const attribute of ["id", "data-list-item-id", "aria-labelledby"]) {
+					try {
+						const value = row.getAttribute ? row.getAttribute(attribute) : row[attribute];
+						if (value != null) shape[attribute] = String(value).length > 160 ? String(value).slice(0, 160) + "…" : String(value);
+					}
+					catch (error) {}
+				}
+				shapes.push(shape);
+			}
+		}
+		catch (error) {
+			return record(label, {error: error && error.message || String(error)});
+		}
+		return record(label, {sampled: shapes.length, shapes});
+	}
+
 	function recordParentRenderPass(e, {resolveScrollerElement = null} = {}) {
 		parentRenderCount++;
 		const instance = e && e.instance;
@@ -396,6 +423,7 @@ function createSecondDebugProbe({
 				catch (error) {mounted = null;}
 				if (mounted) {
 					ran = true;
+					recordMessageRowShapes({scroller: mounted});
 					await runRefreshExperiment(experimentConfig);
 					return;
 				}
@@ -439,6 +467,7 @@ function createSecondDebugProbe({
 		record,
 		recordParentRenderPass,
 		recordDomFiberWalk,
+		recordMessageRowShapes,
 		runRefreshExperiment,
 		getParentRenderCount: () => parentRenderCount,
 		wrapModule,

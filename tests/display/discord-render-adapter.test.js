@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const {createDiscordRenderAdapter} = require("../../src/display/discord-render-adapter");
 
 function matchesMessageSelector(node, selector) {
-	const match = selector.match(/^\[(id|data-list-item-id)(=|\$=|\*=)"((?:\\.|[^"\\])*)"\]$/);
+	const match = selector.match(/^\[(id|data-list-item-id|aria-labelledby)(=|\$=|\*=)"((?:\\.|[^"\\])*)"\]$/);
 	assert.ok(match, `unsupported message selector: ${selector}`);
 	const [, attribute, operator, escapedValue] = match;
 	const expectedValue = escapedValue.replace(/\\(["\\])/g, "$1");
@@ -52,10 +52,17 @@ function createHarness({
 	const document = {
 		querySelector(selector) {
 			if (selector === ".messages-scroller") return scrollerAvailable ? scroller : null;
-			const selectors = selector.split(",").map(part => part.trim());
-			return messageNodes.find(node => selectors.some(part => matchesMessageSelector(node, part))) || null;
+			return queryMessageNodes(selector)[0] || null;
+		},
+		querySelectorAll(selector) {
+			return queryMessageNodes(selector);
 		}
 	};
+	function queryMessageNodes(selector) {
+		if (selector === ".messages-scroller") return scrollerAvailable ? [scroller] : [];
+		const selectors = selector.split(",").map(part => part.trim());
+		return messageNodes.filter(node => selectors.some(part => matchesMessageSelector(node, part)));
+	}
 	const BDFDB = {
 		dotCN: {messagesscroller: ".messages-scroller"},
 		ReactUtils: {
@@ -315,6 +322,33 @@ test("message lookup ignores a same-ID node outside supported Discord roots", as
 	assert.equal(calls.rerenderAll, 1);
 	assert.deepEqual(outcome.confirmedIds, []);
 	assert.deepEqual(outcome.missingIds, [messageId]);
+});
+
+test("message lookup finds rows whose list id carries unknown decorations", async () => {
+	// 2026-08-16 real client (PTB 1.0.1214): the probe proved rerenderAll repaints the
+	// chat, yet no transaction ever rebuilt - the exact-match selectors never matched
+	// this client's data-list-item-id shapes, so every mounted row read as virtualised.
+	// A row inside the chat-messages namespace that carries the message id at a token
+	// boundary must still be found through the tolerant ladder.
+	const messageId = "323456789012345678";
+	const {adapter, calls} = createHarness({
+		messageNodeDefinitions: [{
+			key: messageId,
+			id: `unknown-decorations-${messageId}___row`,
+			dataListItemId: `chat-messages___${messageId}___message`
+		}],
+		confirmRevisions: [[messageId, 21]]
+	});
+	const outcome = await adapter.refreshMessages({
+		transactionId: 5,
+		channelId: "c1",
+		messageIds: [messageId],
+		views: [{messageId, revision: 21}]
+	});
+
+	assert.equal(calls.rerenderAll, 1, "a mounted row in an unknown DOM shape must still trigger its rebuild");
+	assert.deepEqual(outcome.confirmedIds, [messageId]);
+	assert.deepEqual(outcome.deferredIds, []);
 });
 
 test("conflicting duplicate views remain ambiguous and unconfirmed", async () => {

@@ -631,3 +631,31 @@ test("installGlobal exposes dump and clipboard copy on the provided window objec
 	assert.equal(JSON.parse(copied[0]).marker, SECOND_DEBUG_MARKER);
 	assert.match(message, /copied|已复制/i);
 });
+
+test("message row DOM shapes are sampled from the live scroller for selector evidence", () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+	const row = {
+		id: "chat-messages___1480670779761885264___message-123",
+		getAttribute(name) {
+			if (name == "id") return this.id;
+			if (name == "data-list-item-id") return "chat-messages___1480670779761885264";
+			return null;
+		}
+	};
+	const scroller = {querySelectorAll: selector => selector.includes("chat-messages") ? [row] : []};
+
+	const entry = probe.recordMessageRowShapes({scroller});
+
+	assert.equal(entry.kind, "messageRowShapes");
+	assert.equal(entry.sampled, 1);
+	assert.equal(entry.shapes[0].id, "chat-messages___1480670779761885264___message-123");
+	assert.equal(entry.shapes[0]["data-list-item-id"], "chat-messages___1480670779761885264");
+	assert.equal(entry.shapes[0]["aria-labelledby"], undefined, "absent attributes stay absent");
+});
+
+test("recordMessageRowShapes survives a scroller without querySelectorAll", () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+	const entry = probe.recordMessageRowShapes({scroller: {}});
+	assert.equal(entry.kind, "messageRowShapes");
+	assert.equal(typeof entry.error, "string");
+});

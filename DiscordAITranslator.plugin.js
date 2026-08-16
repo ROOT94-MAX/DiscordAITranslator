@@ -770,13 +770,74 @@ var require_discord_render_adapter = __commonJS({
         return String(value).replace(/(["\\])/g, "\\$1");
       }
       __name(escapeAttributeValue, "escapeAttributeValue");
-      function findMessageElement(messageId) {
-        let escapedId = escapeAttributeValue(messageId);
-        try {
-          return document2.querySelector(`[id="chat-messages-${escapedId}"], [data-list-item-id="chat-messages-${escapedId}"], [data-list-item-id="chat-messages___chat-messages-${escapedId}"]`);
-        } catch {
-          return null;
+      let MESSAGE_ROOT_SELECTOR = '[id^="chat-messages-"], [data-list-item-id*="chat-messages"]';
+      function getElementAttribute(element, name) {
+        if (element.getAttribute)
+          try {
+            let value = element.getAttribute(name);
+            if (value != null) return String(value);
+          } catch {
+          }
+        return element[name] != null ? String(element[name]) : null;
+      }
+      __name(getElementAttribute, "getElementAttribute");
+      function isSupportedMessageRoot(element) {
+        if (!element) return !1;
+        if (typeof element.id == "string" && element.id.startsWith("chat-messages-")) return !0;
+        let listId = getElementAttribute(element, "data-list-item-id");
+        if (typeof listId == "string" && listId.includes("chat-messages")) return !0;
+        if (typeof element.closest == "function")
+          try {
+            if (element.closest(MESSAGE_ROOT_SELECTOR)) return !0;
+          } catch {
+          }
+        return !1;
+      }
+      __name(isSupportedMessageRoot, "isSupportedMessageRoot");
+      function elementRepresentsMessageId(element, messageId) {
+        let target = String(messageId), values = [
+          getElementAttribute(element, "data-list-item-id"),
+          getElementAttribute(element, "aria-labelledby"),
+          typeof element.id == "string" ? element.id : null
+        ].filter(Boolean);
+        for (let rawValue of values) {
+          let value = String(rawValue), index = value.indexOf(target);
+          for (; index !== -1; ) {
+            let before = index > 0 ? value.charAt(index - 1) : "";
+            if (!before || /[^0-9A-Za-z]/.test(before)) return !0;
+            index = value.indexOf(target, index + 1);
+          }
         }
+        return !1;
+      }
+      __name(elementRepresentsMessageId, "elementRepresentsMessageId");
+      function querySelectorCandidates(selector) {
+        if (typeof document2.querySelectorAll == "function")
+          try {
+            return Array.from(document2.querySelectorAll(selector));
+          } catch {
+            return [];
+          }
+        try {
+          let element = document2.querySelector(selector);
+          return element ? [element] : [];
+        } catch {
+          return [];
+        }
+      }
+      __name(querySelectorCandidates, "querySelectorCandidates");
+      function findMessageElement(messageId) {
+        let escapedId = escapeAttributeValue(messageId), selectors = [
+          `[id="chat-messages-${escapedId}"]`,
+          `[id$="-${escapedId}"]`,
+          `[data-list-item-id$="-${escapedId}"]`,
+          `[data-list-item-id*="${escapedId}"]`,
+          `[aria-labelledby*="${escapedId}"]`
+        ];
+        for (let selector of selectors)
+          for (let element of querySelectorCandidates(selector))
+            if (isSupportedMessageRoot(element) && elementRepresentsMessageId(element, messageId)) return element;
+        return null;
       }
       __name(findMessageElement, "findMessageElement");
       function waitForPaint() {

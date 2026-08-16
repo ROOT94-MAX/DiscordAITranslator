@@ -17,6 +17,8 @@ function createHarness({confirmAfterFallback = true, mountedMessageIds = null} =
 		if (mounted && !mounted.has(id)) return null;
 		if (!messageElements.has(id)) messageElements.set(id, {
 			messageId: id,
+			id: `chat-messages-${id}`,
+			"data-list-item-id": `chat-messages___chat-messages-${id}`,
 			querySelector(selector) {
 				const match = typeof selector == "string" ? selector.match(/data-translator-revision="(\d+)"/) : null;
 				if (!match) return null;
@@ -25,6 +27,16 @@ function createHarness({confirmAfterFallback = true, mountedMessageIds = null} =
 			}
 		});
 		return messageElements.get(id);
+	}
+	// The adapter's lookup ladder probes suffix/containment selectors whose quoted
+	// values are not always the bare message id, so the fake document normalises any
+	// quoted attribute value back to the id it addresses.
+	function extractMessageIdFromSelector(selector) {
+		if (typeof selector != "string" || selector.charAt(0) != "[") return null;
+		const quoted = selector.match(/"((?:\\.|[^"\\])*)"/);
+		if (!quoted) return null;
+		const value = quoted[1].replace(/\\(["\\])/g, "$1");
+		return value.replace(/^chat-messages___chat-messages-/, "").replace(/^chat-messages-/, "").replace(/^[-_]+/, "") || null;
 	}
 	const scroller = {
 		scrollTop: 100,
@@ -37,15 +49,14 @@ function createHarness({confirmAfterFallback = true, mountedMessageIds = null} =
 	global.document = {
 		querySelector(selector) {
 			if (selector === ".messages-scroller") return scroller;
-			// Must match the adapter selectors ([id="chat-messages-<id>"], ...). The old
-			// "message-" needle never did, so the element read as unmounted and every
-			// refresh in this harness leaned on the full-list fallback - which stopped
-			// matching reality once virtualised rows no longer trigger that fallback.
-			if (typeof selector == "string" && selector.includes("chat-messages")) {
-				const match = selector.match(/chat-messages-([^"\]]+)/);
-				return match ? getMessageElement(match[1]) : null;
-			}
-			return null;
+			const id = extractMessageIdFromSelector(selector);
+			return id && getMessageElement(id) || null;
+		},
+		querySelectorAll(selector) {
+			if (selector === ".messages-scroller") return [];
+			const id = extractMessageIdFromSelector(selector);
+			const element = id && getMessageElement(id);
+			return element ? [element] : [];
 		},
 		getElementById: () => null
 	};

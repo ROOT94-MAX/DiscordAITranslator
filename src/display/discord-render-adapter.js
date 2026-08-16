@@ -21,14 +21,86 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 		return String(value).replace(/(["\\])/g, "\\$1");
 	}
 
-	function findMessageElement(messageId) {
-		const escapedId = escapeAttributeValue(messageId);
+	// Real-client evidence (2026-08-16, PTB 1.0.1214): data-list-item-id shapes exist
+	// that the exact-match selectors never hit, which made every mounted row read as
+	// virtualised and suppressed all rebuilds while the hover bug persisted. Lookup
+	// scans candidates through the tolerant ladder the viewport store already ships
+	// and accepts a node only inside the chat-messages namespace carrying the id at a
+	// token boundary, so a colliding snowflake (9<id>) or a same-id node in another
+	// subtree (reply-preview-<id>) is rejected and the scan continues.
+	const MESSAGE_ROOT_SELECTOR = '[id^="chat-messages-"], [data-list-item-id*="chat-messages"]';
+
+	function getElementAttribute(element, name) {
+		if (element.getAttribute) {
+			try {
+				const value = element.getAttribute(name);
+				if (value != null) return String(value);
+			}
+			catch (err) {}
+		}
+		return element[name] != null ? String(element[name]) : null;
+	}
+
+	function isSupportedMessageRoot(element) {
+		if (!element) return false;
+		if (typeof element.id == "string" && element.id.startsWith("chat-messages-")) return true;
+		const listId = getElementAttribute(element, "data-list-item-id");
+		if (typeof listId == "string" && listId.includes("chat-messages")) return true;
+		if (typeof element.closest == "function") {
+			try {if (element.closest(MESSAGE_ROOT_SELECTOR)) return true;}
+			catch (err) {}
+		}
+		return false;
+	}
+
+	function elementRepresentsMessageId(element, messageId) {
+		const target = String(messageId);
+		const values = [
+			getElementAttribute(element, "data-list-item-id"),
+			getElementAttribute(element, "aria-labelledby"),
+			typeof element.id == "string" ? element.id : null
+		].filter(Boolean);
+		for (const rawValue of values) {
+			const value = String(rawValue);
+			let index = value.indexOf(target);
+			while (index !== -1) {
+				const before = index > 0 ? value.charAt(index - 1) : "";
+				if (!before || /[^0-9A-Za-z]/.test(before)) return true;
+				index = value.indexOf(target, index + 1);
+			}
+		}
+		return false;
+	}
+
+	function querySelectorCandidates(selector) {
+		if (typeof document.querySelectorAll == "function") {
+			try {return Array.from(document.querySelectorAll(selector));}
+			catch (err) {return [];}
+		}
 		try {
-			return document.querySelector(`[id="chat-messages-${escapedId}"], [data-list-item-id="chat-messages-${escapedId}"], [data-list-item-id="chat-messages___chat-messages-${escapedId}"]`);
+			const element = document.querySelector(selector);
+			return element ? [element] : [];
 		}
 		catch (err) {
-			return null;
+			return [];
 		}
+	}
+
+	function findMessageElement(messageId) {
+		const escapedId = escapeAttributeValue(messageId);
+		const selectors = [
+			`[id="chat-messages-${escapedId}"]`,
+			`[id$="-${escapedId}"]`,
+			`[data-list-item-id$="-${escapedId}"]`,
+			`[data-list-item-id*="${escapedId}"]`,
+			`[aria-labelledby*="${escapedId}"]`
+		];
+		for (const selector of selectors) {
+			for (const element of querySelectorCandidates(selector)) {
+				if (isSupportedMessageRoot(element) && elementRepresentsMessageId(element, messageId)) return element;
+			}
+		}
+		return null;
 	}
 
 	function waitForPaint() {
