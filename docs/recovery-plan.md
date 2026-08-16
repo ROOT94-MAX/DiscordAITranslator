@@ -30,11 +30,33 @@ Scroll re-translation, race-damage leftovers, and failure-notice readability are
 
 ## Next Phase: Display System Unification
 
-The modular extraction created modules around a retained god object: `src/legacy/runtime.js` is still the composition root, Discord patch shell, UI coordinator, status DOM owner, and lifecycle dispatcher, directly importing most source modules, and the generated artifact exceeds the documented size guardrails. The next major phase:
+The modular extraction created modules around a retained god object: `src/legacy/runtime.js` is still the composition root, Discord patch shell, UI coordinator, status DOM owner, and lifecycle dispatcher, directly importing most source modules, and the generated artifact exceeds the documented size guardrails.
 
-- Replace the legacy entry with a small composition root and make the architecture gate require progress toward its deletion, not merely prevent line-count growth.
-- Split oversized modules by ownership only after their behavior contracts are captured by tests; file movement alone is not refactoring completion.
-- Keep every migration commit deployable and reversible (architecture.md migration rules).
+**Strategy (decided 2026-08-16, branch `codex/display-unification`): drain the legacy runtime bottom-up by ownership instead of rewriting the composition root top-down.** The runtime is 4,322 lines: a 157-line factory closure (2 shared vars) plus 443 class methods averaging under 10 lines (largest: `translateMessage` 176, `translateText` 128, `onLoad` 85), so a big-bang composition-root rewrite carries uncontrollable risk while per-ownership extraction fits the existing ratchet. The small composition root emerges at the end, when the drained shell is thin enough to replace.
+
+### Slice sequence
+
+0. **Recon (no code changes):** map the live refresh semantics — `repaint-scheduler` internals, `discord-render-adapter` internals, and the three direct `rerenderAll` call sites in the runtime — and determine whether the targeted-repaint path is still live. The scheduler's header comment still describes the disproven owner-update strategy, so the file is known to be half-migrated; slice 1's scope depends on this answer.
+1. **Refresh-path unification:** pin the current contract with failing tests first, then simplify the scheduler to coalesce-plus-one-rebuild and delete the targeted retry cadences if the evidence permits. Display-behavior slices require a DiscordPTB smoke gate (hover-independent display, disable restoration, scroll stability) because render-boundary tests are known false-green with synthetic fixtures. Failure branch: if the retry paths prove load-bearing, downgrade this slice to capturing their contract in tests plus fixing the stale comment, and defer deletion to slice 5.
+2. Status-capsule DOM ownership out of the runtime.
+3. Settings-panel and composer UI wiring out of the runtime.
+4. Manual translation and send/receive pipelines (`translateMessage`, `translateText`) into the orchestrator layer.
+5. Final display-transaction unification: converge the direct `rerenderAll` bypasses into one chain, delete the remaining compatibility layers, and replace the drained shell with the small composition root.
+
+Oversized extracted modules (`provider-client` 1,490; `settings-panel` 1,329; `labels` 1,028; `styles` 899; `message-state-store` 766 lines) split by ownership only after their behavior contracts are captured by tests; file movement alone is not refactoring completion.
+
+### Per-slice rhythm
+
+1. Failing regression test capturing the slice's current contract (real captured shapes for render paths, not synthetic owners).
+2. Move the owning methods into their module with minimal delegation left in the runtime.
+3. Focused tests, full `npm run verify`, deterministic build.
+4. Delete the replaced legacy path and lower `BUDGET.runtimeLines` in the same commit.
+5. Deploy to DiscordPTB and smoke-test whenever display behavior changed.
+6. Every commit deployable and reversible; merge the work branch only with CI green (architecture.md migration rules).
+
+### Sizing expectation
+
+The ≤8,500-line bundle guardrail is the direction metric, not a per-slice target. Slices 1-4 net roughly −800 to −1,500 lines: moves alone delete nothing, and the reduction comes from dead paths, duplicate cadences, and delegation shells. The large reduction arrives only when slice 5 merges the two refresh systems. No minification and no behavior deletion to reach the number (see the architecture-budget test history).
 
 ## Deferred Hardening Backlog
 
