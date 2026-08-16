@@ -1,18 +1,28 @@
 const {createPluginInstance} = require("./createPluginInstance");
 
-function createHarness({confirmDirectly = true, confirmAfterFallback = true, mountedMessageIds = null} = {}) {
+// The render adapter refreshes through one BDFDB.MessageUtils.rerenderAll rebuild and
+// confirms mounted rows by their data-translator-revision marker, so the fake DOM is
+// revision-aware: a rebuild paints exactly the revision each mounted row was last
+// asked to confirm, and a stale painted revision reads back unconfirmed.
+function createHarness({confirmAfterFallback = true, mountedMessageIds = null} = {}) {
 	const originalDocument = global.document;
 	const originalRequestAnimationFrame = global.requestAnimationFrame;
-	const calls = {forceUpdate: 0, forceUpdateBatches: [], rerenderAll: 0};
+	const calls = {rerenderAll: 0};
 	const mounted = mountedMessageIds && new Set(mountedMessageIds.map(String));
-	const confirmed = new Set();
+	const paintedRevisions = new Map();
+	const requestedRevisions = new Map();
 	const messageElements = new Map();
 	function getMessageElement(messageId) {
 		const id = String(messageId);
 		if (mounted && !mounted.has(id)) return null;
 		if (!messageElements.has(id)) messageElements.set(id, {
 			messageId: id,
-			querySelector: () => confirmed.has(id) ? {} : null
+			querySelector(selector) {
+				const match = typeof selector == "string" ? selector.match(/data-translator-revision="(\d+)"/) : null;
+				if (!match) return null;
+				requestedRevisions.set(id, Number(match[1]));
+				return paintedRevisions.get(id) === Number(match[1]) ? {} : null;
+			}
 		});
 		return messageElements.get(id);
 	}
@@ -28,9 +38,9 @@ function createHarness({confirmDirectly = true, confirmAfterFallback = true, mou
 		querySelector(selector) {
 			if (selector === ".messages-scroller") return scroller;
 			// Must match the adapter selectors ([id="chat-messages-<id>"], ...). The old
-		// "message-" needle never did, so the element read as unmounted and every
-		// refresh in this harness leaned on the full-list fallback - which stopped
-		// matching reality once virtualised rows no longer trigger that fallback.
+			// "message-" needle never did, so the element read as unmounted and every
+			// refresh in this harness leaned on the full-list fallback - which stopped
+			// matching reality once virtualised rows no longer trigger that fallback.
 			if (typeof selector == "string" && selector.includes("chat-messages")) {
 				const match = selector.match(/chat-messages-([^"\]]+)/);
 				return match ? getMessageElement(match[1]) : null;
@@ -50,18 +60,12 @@ function createHarness({confirmDirectly = true, confirmAfterFallback = true, mou
 			LibraryComponents: {TooltipContainer: "TooltipContainer"},
 			ReactUtils: {
 				createElement: (type, props) => ({type, key: props && props.key, props: props || {}}),
-				findOwner: element => element ? {props: {message: {id: element.messageId}, channelStream: []}} : null,
-				forceUpdate: (...owners) => {
-					calls.forceUpdate++;
-					const messageIds = owners.map(owner => owner && owner.props && owner.props.message && String(owner.props.message.id)).filter(Boolean);
-					calls.forceUpdateBatches.push(messageIds);
-					if (confirmDirectly) for (const messageId of messageIds) confirmed.add(messageId);
-				}
+				findOwner: () => null
 			},
 			MessageUtils: {
 				rerenderAll: () => {
 					calls.rerenderAll++;
-					if (confirmAfterFallback) for (const messageId of messageElements.keys()) confirmed.add(messageId);
+					if (confirmAfterFallback) for (const [id, revision] of requestedRevisions) paintedRevisions.set(id, revision);
 				}
 			}
 		}

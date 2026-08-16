@@ -353,6 +353,9 @@ function createSecondDebugProbe({
 			}
 			try {await waitForPaint();}
 			catch (error) {}
+			// A chat-layer rebuild lands over several passes plus a timeout(0), so a
+			// strategy may declare a longer settle window than one paint.
+			if (strategy.settleMs && setTimeoutFn) await new Promise(resolve => setTimeoutFn(resolve, strategy.settleMs));
 			const after = getRenderCount();
 			entry.renderedDelta = after - before;
 			entry.caused = after > before;
@@ -373,10 +376,10 @@ function createSecondDebugProbe({
 		return JSON.stringify({marker: SECOND_DEBUG_MARKER, generatedAt: now(), entryCount: entries.length, entries});
 	}
 
-	function installGlobal(target, {resolveScrollerElement = null, forceUpdate = null, getRenderCount = null, waitForPaint = defaultWaitForPaint, autoRunExperiment = false, autoRunDelayMs = 8000, autoRunMaxAttempts = 15} = {}) {
+	function installGlobal(target, {resolveScrollerElement = null, forceUpdate = null, rerenderAll = null, getRenderCount = null, waitForPaint = defaultWaitForPaint, autoRunExperiment = false, autoRunDelayMs = 8000, autoRunMaxAttempts = 15} = {}) {
 		if (!target) return;
 		const experimentConfig = resolveScrollerElement && forceUpdate ? {
-			strategies: createMessageRefreshStrategies({resolveScrollerElement, forceUpdate}),
+			strategies: createMessageRefreshStrategies({resolveScrollerElement, forceUpdate, rerenderAll}),
 			getRenderCount: getRenderCount || (() => parentRenderCount),
 			waitForPaint
 		} : null;
@@ -462,7 +465,7 @@ function createSecondDebugEvidenceSink({fs, path, pluginsFolder, fileName = "tra
 // Candidate parent-refresh strategies to try on the real client. Each resolves the
 // mounted messages scroller fiber fresh (nothing is cached across a click) and throws a
 // clear reason when its target is absent, so the experiment records a usable failure.
-function createMessageRefreshStrategies({resolveScrollerElement, forceUpdate, walkDepth = 40} = {}) {
+function createMessageRefreshStrategies({resolveScrollerElement, forceUpdate, rerenderAll = null, walkDepth = 40} = {}) {
 	function resolveStartFiber() {
 		const element = resolveScrollerElement && resolveScrollerElement();
 		if (!element) throw new Error("no element: messages scroller is not mounted");
@@ -487,7 +490,7 @@ function createMessageRefreshStrategies({resolveScrollerElement, forceUpdate, wa
 		}
 		throw new Error("no ancestor: no updateable class ancestor found");
 	}
-	return [
+	const strategies = [
 		{
 			name: "channelStreamOwnerFiber",
 			run: () => forceUpdate(findChannelStreamOwner(resolveStartFiber()))
@@ -504,6 +507,15 @@ function createMessageRefreshStrategies({resolveScrollerElement, forceUpdate, wa
 			run: () => forceUpdate(findUpdateableAncestor(findChannelStreamOwner(resolveStartFiber())).stateNode)
 		}
 	];
+	// The mechanism the 2026-06 plugin shipped with: BDFDB unmounts and rebuilds the
+	// chat layer, which crosses every memo boundary. It settles asynchronously
+	// (timeout(0) plus two render passes), hence the longer measurement window.
+	if (typeof rerenderAll == "function") strategies.push({
+		name: "messageUtilsRerenderAll",
+		settleMs: 500,
+		run: () => rerenderAll(true)
+	});
+	return strategies;
 }
 
 module.exports = {

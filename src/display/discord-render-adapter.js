@@ -1,3 +1,21 @@
+// Turns one committed display transaction into one visible refresh.
+//
+// Real-client evidence (docs/recovery-plan.md, 2026-08-13): message rows are
+// functional/memoized components, and React forceUpdate on every candidate around the
+// channel-stream boundary is a measured no-op (caused: false) - the strategy that
+// froze the client when deployed. The mechanism users actually saw working is the one
+// the 2026-06 plugin shipped: BDFDB.MessageUtils.rerenderAll(true) unmounts and
+// rebuilds the chat layer, which crosses every memo boundary.
+//
+// What made the old plugin freeze was frequency, not the primitive. This adapter keeps
+// the rebuild affordable with three rules:
+// - at most ONE rebuild per transaction, never a rebuild-per-retry;
+// - rows already showing their expected revision confirm from the DOM without any
+//   rebuild, so scheduler retries are read-only once the paint landed;
+// - a batch whose rows are all virtualised (no DOM node) never rebuilds - absent rows
+//   paint from the store when they mount.
+// Scroll safety (bottom lock, anchor restore, user-gesture guard) lives in the
+// injected captureScrollState/restoreScrollState from the viewport store.
 function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, getUserScrollIntentSequence, captureScrollState, restoreScrollState, isRuntimeActive = () => true}) {
 	function escapeAttributeValue(value) {
 		return String(value).replace(/(["\\])/g, "\\$1");
@@ -11,26 +29,6 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 		catch (err) {
 			return null;
 		}
-	}
-
-	function findMessageOwner(element, messageId) {
-		const ownerConfig = {
-			up: true,
-			unlimited: true,
-			filter: instance => {
-				const props = instance && (instance.stateNode && instance.stateNode.props || instance.props || instance.memoizedProps);
-				return !!(props && props.message && String(props.message.id) === String(messageId));
-			}
-		};
-		const directOwner = BDFDB.ReactUtils.findOwner(element, ownerConfig);
-		if (directOwner) return directOwner;
-		// Discord can attach the list-row DOM node above the React message owner.
-		// The loading marker is injected by this plugin inside MessageContent, so it is
-		// a reliable lower starting point for the same exact-owner walk.
-		let loadingElement = null;
-		try {loadingElement = element && element.querySelector && element.querySelector(".translator-translation-loading");}
-		catch (err) {loadingElement = null;}
-		return loadingElement ? BDFDB.ReactUtils.findOwner(loadingElement, ownerConfig) : null;
 	}
 
 	function waitForPaint() {
@@ -76,62 +74,40 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 		});
 	}
 
-	function updateMessageOwners(messageIds, elementsByMessageId) {
-		const owners = [];
-		const seen = new Set();
-		for (const messageId of messageIds) {
-			const element = elementsByMessageId.get(String(messageId));
-			const owner = element && findMessageOwner(element, messageId);
-			if (!owner || seen.has(owner)) continue;
-			seen.add(owner);
-			owners.push(owner);
-		}
-		if (owners.length) BDFDB.ReactUtils.forceUpdate(...owners);
-		return owners.length;
-	}
-
 	return {
 		async refreshMessages({messageIds = [], ownerMessageIds = [], views = []}) {
 			const uniqueMessageIds = getUniqueMessageIds(messageIds);
-			const targetMessageIds = getUniqueMessageIds(uniqueMessageIds.concat(ownerMessageIds));
 			const viewsByMessageId = getViewsByMessageId(views);
-			const scroller = document.querySelector(BDFDB.dotCN.messagesscroller);
+			const presentIds = uniqueMessageIds.filter(messageId => !!findMessageElement(messageId));
+			const deferredIds = uniqueMessageIds.filter(messageId => !presentIds.includes(messageId));
+			// Read-only pre-check: whatever the last rebuild already painted needs no
+			// further work. This is what breaks the rebuild-per-retry loop.
+			let confirmedIds = confirmViews(presentIds, viewsByMessageId);
+			let unconfirmedIds = presentIds.filter(messageId => !confirmedIds.includes(messageId));
+			// Reply-preview hosts carry no revision marker; a mounted host is reason
+			// enough to rebuild so its preview repaints with the list.
+			const hostNeedsPaint = getUniqueMessageIds(ownerMessageIds).some(messageId => !!findMessageElement(messageId));
+			const needsRebuild = unconfirmedIds.length > 0 || hostNeedsPaint;
+			if (!needsRebuild) return {confirmedIds, missingIds: [], deferredIds, retryIds: [], fallbackUsed: false};
+			if (!isRuntimeActive()) return {confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], fallbackUsed: false};
 			const intentSequence = getUserScrollIntentSequence();
+			const scroller = document.querySelector(BDFDB.dotCN.messagesscroller);
 			const scrollState = scroller ? captureScrollState() : null;
-			let outcome;
 			let renderError;
 			let hasRenderError = false;
 			try {
-				const elementsByMessageId = new Map();
-				for (const messageId of targetMessageIds) {
-					const element = findMessageElement(messageId);
-					if (element) elementsByMessageId.set(String(messageId), element);
-				}
-				const presentTargetIds = targetMessageIds.filter(messageId => elementsByMessageId.has(String(messageId)));
-				const presentIds = uniqueMessageIds.filter(messageId => elementsByMessageId.has(String(messageId)));
-				if (isRuntimeActive()) updateMessageOwners(presentTargetIds, elementsByMessageId);
+				BDFDB.MessageUtils.rerenderAll(true);
 				await waitForPaint();
-				let confirmedIds = confirmViews(presentIds, viewsByMessageId);
-				let unconfirmedIds = presentIds.filter(messageId => !confirmedIds.map(String).includes(String(messageId)));
-				if (unconfirmedIds.length && isRuntimeActive()) {
-					updateMessageOwners(unconfirmedIds, elementsByMessageId);
+				confirmedIds = confirmViews(presentIds, viewsByMessageId);
+				unconfirmedIds = presentIds.filter(messageId => !confirmedIds.includes(messageId));
+				// The rebuild settles asynchronously (a timeout plus two render passes),
+				// so an unconfirmed row gets one more read-only look after another paint.
+				// Never a second rebuild: retries go through the bounded scheduler path.
+				if (unconfirmedIds.length) {
 					await waitForPaint();
 					confirmedIds = confirmViews(presentIds, viewsByMessageId);
-					unconfirmedIds = presentIds.filter(messageId => !confirmedIds.map(String).includes(String(messageId)));
+					unconfirmedIds = presentIds.filter(messageId => !confirmedIds.includes(messageId));
 				}
-				const deferredIds = uniqueMessageIds.filter(messageId => !elementsByMessageId.has(String(messageId)));
-				if (!isRuntimeActive()) {
-					const confirmedIdSet = new Set(confirmedIds.map(String));
-					deferredIds.push(...presentIds.filter(messageId => !confirmedIdSet.has(String(messageId))));
-					unconfirmedIds = [];
-				}
-				outcome = {
-					confirmedIds,
-					missingIds: unconfirmedIds,
-					deferredIds,
-					retryIds: unconfirmedIds.slice(),
-					fallbackUsed: false
-				};
 			}
 			catch (err) {
 				renderError = err;
@@ -149,7 +125,14 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 				}
 			}
 			if (hasRenderError) throw renderError;
-			return outcome;
+			if (!isRuntimeActive()) return {confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], fallbackUsed: false};
+			return {
+				confirmedIds,
+				missingIds: unconfirmedIds,
+				deferredIds,
+				retryIds: unconfirmedIds.slice(),
+				fallbackUsed: false
+			};
 		}
 	};
 }

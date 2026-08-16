@@ -442,6 +442,60 @@ test("createMessageRefreshStrategies strategies throw a clear error when nothing
 	for (const strategy of strategies) assert.throws(() => strategy.run(), /no (element|fiber|owner|ancestor)/i);
 });
 
+test("createMessageRefreshStrategies adds the proven old-plugin rerenderAll strategy when the helper is provided", () => {
+	const rerenderCalls = [];
+	const strategies = createMessageRefreshStrategies({
+		resolveScrollerElement: () => null,
+		forceUpdate: () => {},
+		rerenderAll: instant => rerenderCalls.push(instant)
+	});
+
+	const rerenderStrategy = strategies.find(strategy => strategy.name === "messageUtilsRerenderAll");
+	assert.ok(rerenderStrategy, "the experiment must include the BDFDB.MessageUtils.rerenderAll candidate");
+	// The chat-layer rebuild settles over multiple render passes plus a timeout(0),
+	// so the experiment needs a longer measurement window than one paint.
+	assert.ok(rerenderStrategy.settleMs >= 300);
+	rerenderStrategy.run();
+	assert.deepEqual(rerenderCalls, [true], "the strategy must request the instant rebuild exactly once");
+});
+
+test("createMessageRefreshStrategies omits the rerenderAll strategy when no helper exists", () => {
+	const strategies = createMessageRefreshStrategies({resolveScrollerElement: () => null, forceUpdate: () => {}});
+	assert.equal(strategies.some(strategy => strategy.name === "messageUtilsRerenderAll"), false);
+});
+
+test("the refresh experiment waits a strategy's settle window before measuring the delta", async () => {
+	const settledCallbacks = [];
+	const probe = createSecondDebugProbe({log: () => {}, setTimeoutFn: (callback, delay) => {
+		settledCallbacks.push(delay);
+		callback();
+	}});
+	let renderCount = 0;
+	let settled = false;
+	const strategies = [{
+		name: "slowRebuild",
+		settleMs: 500,
+		run: () => {
+			// The rebuild lands asynchronously: the render count only advances after
+			// the settle window, never by the immediate paint.
+			Promise.resolve().then(() => {settled = true;});
+		}
+	}];
+
+	await probe.runRefreshExperiment({
+		strategies,
+		getRenderCount: () => {
+			if (settled) renderCount = 1;
+			return renderCount;
+		},
+		waitForPaint: () => Promise.resolve()
+	});
+
+	assert.ok(settledCallbacks.includes(500), "the experiment must arm the settle timer with the strategy's window");
+	const results = probe.list().filter(entry => entry.kind === "refreshExperiment");
+	assert.equal(results[0].caused, true, "the delta must be measured after the settle window");
+});
+
 test("the refresh experiment runs each strategy sequentially and records the render-count delta", async () => {
 	const probe = createSecondDebugProbe({log: () => {}});
 	let renderCount = 0;

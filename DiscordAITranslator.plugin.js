@@ -779,25 +779,6 @@ var require_discord_render_adapter = __commonJS({
         }
       }
       __name(findMessageElement, "findMessageElement");
-      function findMessageOwner(element, messageId) {
-        let ownerConfig = {
-          up: !0,
-          unlimited: !0,
-          filter: /* @__PURE__ */ __name((instance) => {
-            let props = instance && (instance.stateNode && instance.stateNode.props || instance.props || instance.memoizedProps);
-            return !!(props && props.message && String(props.message.id) === String(messageId));
-          }, "filter")
-        }, directOwner = BDFDB.ReactUtils.findOwner(element, ownerConfig);
-        if (directOwner) return directOwner;
-        let loadingElement = null;
-        try {
-          loadingElement = element && element.querySelector && element.querySelector(".translator-translation-loading");
-        } catch {
-          loadingElement = null;
-        }
-        return loadingElement ? BDFDB.ReactUtils.findOwner(loadingElement, ownerConfig) : null;
-      }
-      __name(findMessageOwner, "findMessageOwner");
       function waitForPaint() {
         return new Promise((resolve) => requestAnimationFrame2(() => requestAnimationFrame2(resolve)));
       }
@@ -836,40 +817,14 @@ var require_discord_render_adapter = __commonJS({
           }
         });
       }
-      __name(confirmViews, "confirmViews");
-      function updateMessageOwners(messageIds, elementsByMessageId) {
-        let owners = [], seen = /* @__PURE__ */ new Set();
-        for (let messageId of messageIds) {
-          let element = elementsByMessageId.get(String(messageId)), owner = element && findMessageOwner(element, messageId);
-          !owner || seen.has(owner) || (seen.add(owner), owners.push(owner));
-        }
-        return owners.length && BDFDB.ReactUtils.forceUpdate(...owners), owners.length;
-      }
-      return __name(updateMessageOwners, "updateMessageOwners"), {
+      return __name(confirmViews, "confirmViews"), {
         async refreshMessages({ messageIds = [], ownerMessageIds = [], views = [] }) {
-          let uniqueMessageIds = getUniqueMessageIds(messageIds), targetMessageIds = getUniqueMessageIds(uniqueMessageIds.concat(ownerMessageIds)), viewsByMessageId = getViewsByMessageId(views), scroller = document2.querySelector(BDFDB.dotCN.messagesscroller), intentSequence = getUserScrollIntentSequence(), scrollState = scroller ? captureScrollState() : null, outcome, renderError, hasRenderError = !1;
+          let uniqueMessageIds = getUniqueMessageIds(messageIds), viewsByMessageId = getViewsByMessageId(views), presentIds = uniqueMessageIds.filter((messageId) => !!findMessageElement(messageId)), deferredIds = uniqueMessageIds.filter((messageId) => !presentIds.includes(messageId)), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), hostNeedsPaint = getUniqueMessageIds(ownerMessageIds).some((messageId) => !!findMessageElement(messageId));
+          if (!(unconfirmedIds.length > 0 || hostNeedsPaint)) return { confirmedIds, missingIds: [], deferredIds, retryIds: [], fallbackUsed: !1 };
+          if (!isRuntimeActive()) return { confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], fallbackUsed: !1 };
+          let intentSequence = getUserScrollIntentSequence(), scrollState = document2.querySelector(BDFDB.dotCN.messagesscroller) ? captureScrollState() : null, renderError, hasRenderError = !1;
           try {
-            let elementsByMessageId = /* @__PURE__ */ new Map();
-            for (let messageId of targetMessageIds) {
-              let element = findMessageElement(messageId);
-              element && elementsByMessageId.set(String(messageId), element);
-            }
-            let presentTargetIds = targetMessageIds.filter((messageId) => elementsByMessageId.has(String(messageId))), presentIds = uniqueMessageIds.filter((messageId) => elementsByMessageId.has(String(messageId)));
-            isRuntimeActive() && updateMessageOwners(presentTargetIds, elementsByMessageId), await waitForPaint();
-            let confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.map(String).includes(String(messageId)));
-            unconfirmedIds.length && isRuntimeActive() && (updateMessageOwners(unconfirmedIds, elementsByMessageId), await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.map(String).includes(String(messageId))));
-            let deferredIds = uniqueMessageIds.filter((messageId) => !elementsByMessageId.has(String(messageId)));
-            if (!isRuntimeActive()) {
-              let confirmedIdSet = new Set(confirmedIds.map(String));
-              deferredIds.push(...presentIds.filter((messageId) => !confirmedIdSet.has(String(messageId)))), unconfirmedIds = [];
-            }
-            outcome = {
-              confirmedIds,
-              missingIds: unconfirmedIds,
-              deferredIds,
-              retryIds: unconfirmedIds.slice(),
-              fallbackUsed: !1
-            };
+            BDFDB.MessageUtils.rerenderAll(!0), await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), unconfirmedIds.length && (await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)));
           } catch (err) {
             renderError = err, hasRenderError = !0;
           } finally {
@@ -880,7 +835,13 @@ var require_discord_render_adapter = __commonJS({
             }
           }
           if (hasRenderError) throw renderError;
-          return outcome;
+          return isRuntimeActive() ? {
+            confirmedIds,
+            missingIds: unconfirmedIds,
+            deferredIds,
+            retryIds: unconfirmedIds.slice(),
+            fallbackUsed: !1
+          } : { confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], fallbackUsed: !1 };
         }
       };
     }
@@ -10090,7 +10051,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
           RECEIVED: "received",
           SENT: "sent"
         }, AI_SKIP_TRANSLATION_TOKEN = "__SKIP_TRANSLATION__", protectionLogic = createProtectionLogic({ BDFDB }), secondDebugProbe = null;
-        secondDebugProbe && typeof window < "u" && secondDebugProbe.installGlobal(window, { resolveScrollerElement: /* @__PURE__ */ __name(() => document.querySelector(BDFDB.dotCN.messagesscroller), "resolveScrollerElement"), forceUpdate: /* @__PURE__ */ __name((...targets) => BDFDB.ReactUtils.forceUpdate(...targets), "forceUpdate"), getRenderCount: /* @__PURE__ */ __name(() => secondDebugProbe.getParentRenderCount(), "getRenderCount"), autoRunExperiment: !0 });
+        secondDebugProbe && typeof window < "u" && secondDebugProbe.installGlobal(window, { resolveScrollerElement: /* @__PURE__ */ __name(() => document.querySelector(BDFDB.dotCN.messagesscroller), "resolveScrollerElement"), forceUpdate: /* @__PURE__ */ __name((...targets) => BDFDB.ReactUtils.forceUpdate(...targets), "forceUpdate"), rerenderAll: /* @__PURE__ */ __name((instant) => BDFDB.MessageUtils.rerenderAll(instant), "rerenderAll"), getRenderCount: /* @__PURE__ */ __name(() => secondDebugProbe.getParentRenderCount(), "getRenderCount"), autoRunExperiment: !0 });
         let { receivedTranslationRuntime } = createReceivedTranslationRuntime({ BDFDB, loadedTranslationStatusStore }), translationDisplayLogic = createTranslationDisplayLogic({ BDFDB });
         return _a = class extends Plugin {
           getVersion() {
@@ -12286,7 +12247,7 @@ __________________ __________________ __________________
             return this.receivedDisplayRuntimeInstance || (this.receivedDisplayRuntimeInstance = createDisplayRuntime({
               BDFDB: {
                 dotCN: BDFDB.dotCN || {},
-                ReactUtils: BDFDB.ReactUtils
+                MessageUtils: BDFDB.MessageUtils
               },
               document: {
                 querySelector: /* @__PURE__ */ __name((selector) => typeof document > "u" || !document || !selector ? null : document.querySelector(selector), "querySelector")

@@ -43,7 +43,7 @@ test("a translated result cannot produce text without translated decoration", as
 });
 
 test("render acknowledgement failure keeps the record inspectable", async () => {
-	const harness = createHarness({confirmDirectly: false, confirmAfterFallback: false});
+	const harness = createHarness({confirmAfterFallback: false});
 	try {
 		const {plugin} = harness;
 		plugin.captureReceivedMessageSource(sourceSnapshot());
@@ -64,8 +64,7 @@ test("a confirmed render acknowledgement marks the committed revision confirmed"
 		const outcome = await plugin.commitReceivedDisplayResult(translatedResult());
 
 		assert.deepEqual(outcome, {confirmedIds: ["message-1"], missingIds: [], fallbackUsed: false});
-		assert.equal(calls.forceUpdate, 1);
-		assert.equal(calls.rerenderAll, 0);
+		assert.equal(calls.rerenderAll, 1);
 		assert.equal(plugin.getReceivedDisplayView("message-1").renderStatus, "confirmed");
 	}
 	finally {harness.restore();}

@@ -42,18 +42,16 @@ test("disabling a channel restores automatic and manual originals in one targete
 		const runtime = plugin.ensureReceivedDisplayRuntime();
 		runtime.suppress("message-1");
 		runtime.suppress("message-3");
-		const updatesBeforeDisable = calls.forceUpdate;
+			const rebuildsBeforeDisable = calls.rerenderAll;
 
-		await plugin.toggleTranslation("channel-a");
+			await plugin.toggleTranslation("channel-a");
 
-		assert.equal(plugin.getReceivedDisplayView("message-1").content, "message-1 original");
-		assert.equal(plugin.getReceivedDisplayView("message-2").content, "message-2 original");
-		assert.equal(plugin.getReceivedDisplayView("message-3").content, "message-3 translated");
-		assert.equal(runtime.isSuppressed("message-1"), false);
-		assert.equal(runtime.isSuppressed("message-3"), true);
-		assert.equal(calls.forceUpdate, updatesBeforeDisable + 1);
-		assert.deepEqual(calls.forceUpdateBatches.at(-1), ["message-1", "message-2"]);
-		assert.equal(calls.rerenderAll, 0);
+			assert.equal(plugin.getReceivedDisplayView("message-1").content, "message-1 original");
+			assert.equal(plugin.getReceivedDisplayView("message-2").content, "message-2 original");
+			assert.equal(plugin.getReceivedDisplayView("message-3").content, "message-3 translated");
+			assert.equal(runtime.isSuppressed("message-1"), false);
+			assert.equal(runtime.isSuppressed("message-3"), true);
+			assert.equal(calls.rerenderAll, rebuildsBeforeDisable + 1, "the disable restore must repaint through exactly one rebuild");
 	}
 	finally {harness.restore();}
 });
@@ -98,15 +96,14 @@ test("disabling clears a preview-only translation by refreshing its replying hos
 		}}};
 		plugin.processMessageReply(event);
 		assert.equal(event.instance.props.referencedMessage.message.content, "translated preview");
-		const updatesBeforeDisable = calls.forceUpdate;
+		const rebuildsBeforeDisable = calls.rerenderAll;
 
 		await plugin.toggleTranslation("channel-a");
 		plugin.processMessageReply(event);
 
 		assert.equal(event.instance.props.referencedMessage.message.content, "original preview");
 		assert.equal(runtime.getPreviewTranslation("referenced-message"), null);
-		assert.equal(calls.forceUpdate, updatesBeforeDisable + 1, "preview cleanup must join the one disable refresh");
-		assert.deepEqual(calls.forceUpdateBatches.at(-1), ["reply-message"], "the preview is painted by the replying row, not the referenced row");
+		assert.equal(calls.rerenderAll, rebuildsBeforeDisable + 1, "preview cleanup must join the one disable rebuild");
 	}
 	finally {harness.restore();}
 });
@@ -128,7 +125,7 @@ test("reply preview commit and restore refresh every host in one scoped transact
 			referencedMessage: {message: {id: "other-reference", channel_id: "channel-b", content: "other original"}},
 			baseMessage: {id: "other-channel-reply", channel_id: "channel-b", content: "other reply"}
 		}}});
-		const beforeCommit = calls.forceUpdate;
+		const beforeCommit = calls.rerenderAll;
 
 		await runtime.commitPreviewResult({
 			messageId: "referenced",
@@ -137,16 +134,12 @@ test("reply preview commit and restore refresh every host in one scoped transact
 			translation: {translatedContent: "translated preview", channelId: "channel-a", auto: true}
 		});
 
-		assert.equal(calls.forceUpdate, beforeCommit + 1, "one preview commit must perform one owner transaction");
-		assert.deepEqual(calls.forceUpdateBatches.at(-1), ["reply-1", "reply-2"]);
-		assert.equal(calls.forceUpdateBatches.at(-1).includes("referenced"), false, "the referenced row does not paint its reply preview");
-		assert.equal(calls.rerenderAll, 0);
-		const beforeRestore = calls.forceUpdate;
+		assert.equal(calls.rerenderAll, beforeCommit + 1, "one preview commit must perform one rebuild");
+		const beforeRestore = calls.rerenderAll;
 
 		await plugin.restoreReceivedDisplayChannel("channel-a", {clearPreviews: true});
 
-		assert.equal(calls.forceUpdate, beforeRestore + 1, "preview restore must use one transaction too");
-		assert.deepEqual(calls.forceUpdateBatches.at(-1), ["reply-1", "reply-2"]);
+		assert.equal(calls.rerenderAll, beforeRestore + 1, "preview restore must use one rebuild too");
 		assert.equal(runtime.getPreviewTranslation("referenced"), null);
 		assert.deepEqual(runtime.getPreviewHostMessageIds("channel-b"), ["other-channel-reply"], "another channel stays isolated");
 	}
@@ -177,7 +170,7 @@ test("a deleted message is removed from display cache live history and reply pre
 		liveQueue.markMessageQueued(message.id, liveRequest);
 		plugin.collectHistoricalTranslationMessage({message, channel: {id: channelId}, originalContentData: {content: message.content}, historicalLoad: true, deferHistoricalSnapshotStart: true});
 		const historicalJob = plugin.getHistoricalTranslationJobQueue(channelId, false).jobs[0];
-		const updatesBeforeDelete = calls.forceUpdate;
+		const rebuildsBeforeDelete = calls.rerenderAll;
 
 		await plugin.handleMessageDeletionAction({type: "MESSAGE_DELETE", id: message.id, channelId});
 
@@ -187,8 +180,7 @@ test("a deleted message is removed from display cache live history and reply pre
 		assert.equal(liveQueue.isMessageQueued(message.id), false);
 		assert.equal(historicalJob.items.get(message.id).status, "cancelled");
 		assert.deepEqual(runtime.getPreviewHostMessageIds(channelId), []);
-		assert.equal(calls.forceUpdate, updatesBeforeDelete + 1);
-		assert.deepEqual(calls.forceUpdateBatches.at(-1), ["reply-host"]);
+		assert.equal(calls.rerenderAll, rebuildsBeforeDelete + 1, "the deletion refresh must repaint through one rebuild");
 		assert.equal(runtime.getDisplayState(otherMessage.id).translation.content, "other translated", "another channel remains untouched");
 		const late = await plugin.commitReceivedDisplayResult({messageId: message.id, channelId, generation: 1, sourceSignature: "delete-signature", origin: "automatic", status: "translated", translation: {content: "late"}});
 		assert.deepEqual(late.rejectedIds, [message.id]);
