@@ -1,0 +1,26 @@
+name: verify
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Deterministic build check, syntax check, and tests
+        run: npm run verify
+      - name: Artifact identity
+        run: |
+          grep -m1 -oE "@version [0-9.]+" DiscordAITranslator.plugin.js
+          grep -m1 -oE "@buildId [0-9a-f]+" DiscordAITranslator.plugin.js
+          sha256sum DiscordAITranslator.plugin.js
