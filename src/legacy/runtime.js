@@ -110,7 +110,6 @@ module.exports = (_ => {
 
 		var _this;
 		const translationProtectionSignatureVersion = TRANSLATION_PROTECTION_SIGNATURE_VERSION;
-		
 		const {TranslateButtonComponent} = createTranslateComponents({
 			BDFDB,
 			// _this is assigned in onLoad(), long after this line runs, so the components
@@ -125,7 +124,6 @@ module.exports = (_ => {
 		const morseConverter = {
 			"0":"−−−−−", "1":"·−−−−", "2":"··−−−", "3":"···−−", "4":"····−", "5":"·····", "6":"−····", "7":"−−···", "8":"−−−··", "9":"−−−−·", "!":"−·−·−−", "\"":"·−··−·", "$":"···−··−", "&":"·−···", "'":"·−−−−·", "(":"−·−−·", ")":"−·−−·−", "+":"·−·−·", ",":"−−··−−", "-":"−····−", ".":"·−·−·−", "/":"−··−·", ":":"−−−···", ";":"−·−·−·", "=":"−···−", "?":"··−−··", "@":"·−−·−·", "a":"·−", "b":"−···", "c":"−·−·", "d":"−··", "e":"·", "f":"··−·", "g":"−−·", "h":"····", "i":"··", "j":"·−−−", "k":"−·−", "l":"·−··", "m":"−−", "n":"−·", "o":"−−−", "p":"·−−·", "q":"−−·−", "r":"·−·", "s":"···", "t":"−", "u":"··−", "v":"···−", "w":"·−−", "x":"−··−", "y":"−·−−", "z":"−−··", "·":"e", "··":"i", "···":"s", "····":"h", "·····":"5", "····−":"4", "···−":"v", "···−··−":"$", "···−−":"3", "··−":"u", "··−·":"f", "··−−··":"?", "··−−·−":"_", "··−−−":"2", "·−":"a", "·−·":"r", "·−··":"l", "·−···":"&", "·−··−·":"\"", "·−·−·":"+", "·−·−·−":".", "·−−":"w", "·−−·":"p", "·−−·−·":"@", "·−−−":"j", "·−−−−":"1", "·−−−−·":"'", "−":"t", "−·":"n", "−··":"d", "−···":"b", "−····":"6", "−····−":"-", "−···−":"=", "−··−":"x", "−··−·":"/", "−·−":"k", "−·−·":"c", "−·−·−·":";", "−·−·−−":"!", "−·−−":"y", "−·−−·":"(", "−·−−·−":")", "−−":"m", "−−·":"g", "−−··":"z", "−−···":"7", "−−··−−":",", "−−·−":"q", "−−−":"o", "−−−··":"8", "−−−···":":", "−−−−·":"9", "−−−−−":"0", "_":"··−−·−"
 		};
-		
 		const channelTitleStore = createChannelTitleStore();
 		const loadedTranslationStatusStore = createLoadedTranslationStatusStore({isChineseUiLanguage: () => _this && _this.isChineseUiLanguage()});
 		const historicalDisplayTracker = createHistoricalDisplayTracker({isStatusForChannel: channelId => loadedTranslationStatusStore.isForChannel(channelId), getRevision: (_channelId, messageId) => {const view = _this && _this.getReceivedDisplayRuntimeView(messageId); return view ? view.revision : null;}, updateStatus: updates => _this && _this.updateLoadedAutoTranslationStatus(updates)});
@@ -134,7 +132,6 @@ module.exports = (_ => {
 		const LOADED_AUTO_TRANSLATE_LIMIT_MIN = 1;
 		const LOADED_AUTO_TRANSLATE_LIMIT_MAX = 100;
 		const DISCORD_EPOCH = 1420070400000;
-		
 		const defaultLanguages = {
 			INPUT: "auto",
 			OUTPUT: "$discord"
@@ -2528,6 +2525,9 @@ module.exports = (_ => {
 
 			isHistoricalTranslationJobItemCurrent (item, job) {
 				if (!item || !item.message || !job || !job.channelId) return false;
+				// A live translation that landed or is still in flight owns the message; a historical overwrite strands the row without decoration.
+				const racingDisplayView = this.getReceivedDisplayRuntimeView(item.message.id);
+				if (racingDisplayView && (racingDisplayView.translated || racingDisplayView.showLoading)) return false;
 				let currentMessage = null;
 				try {
 					const messageStore = BDFDB.LibraryStores && BDFDB.LibraryStores.MessageStore;

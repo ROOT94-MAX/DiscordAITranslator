@@ -2674,3 +2674,39 @@ test("the loaded-status capsule ticks processed counts while provider chunks set
 	pendingChunks[1].resolve(Object.fromEntries(pendingChunks[1].ids.map(id => [id, `translated ${id}`])));
 	await plugin.waitForHistoricalTranslationJobs(channelId);
 });
+
+test("a historical commit does not overwrite a live translation that landed mid-batch", async () => {
+	const plugin = configureHistoricalCoordinatorPlugin({scheduleAutomatically: true});
+	const channelId = "channel-history-live-race";
+	plugin.getReceivedAutoTranslateLoadedLimit = () => 2;
+	plugin.isUserActivelyScrollingMessages = () => true;
+	const requestedIds = [];
+	let resolveBatch;
+	plugin.requestAiBatchTranslation = (_engineKey, preparedItems) => {
+		requestedIds.push(preparedItems.map(item => String(item.message.id)));
+		return new Promise(resolve => {resolveBatch = resolve;});
+	};
+
+	const messages = [createMessage("501", "live raced message one"), createMessage("502", "live raced message two")];
+	for (const message of messages) plugin.queueAutoTranslateMessage(message, {id: channelId}, {content: message.content}, {historicalLoad: true, deferHistoricalSnapshotStart: true});
+	await new Promise(resolve => setImmediate(resolve));
+	assert.equal(requestedIds.length, 1, "setup: the historical batch is in flight");
+
+	// The live lane lands a translation for 501 while the historical batch is pending.
+	plugin.captureReceivedMessageSource({messageId: "501", channelId, generation: plugin.getReceivedDisplayCommitGeneration(channelId), sourceSignature: plugin.createReceivedTranslationSignature(messages[0], channelId, {content: messages[0].content}), source: {content: messages[0].content, embeds: []}});
+	await plugin.commitReceivedDisplayResult({
+		messageId: "501",
+		channelId,
+		generation: plugin.getReceivedDisplayCommitGeneration(channelId),
+		sourceSignature: plugin.createReceivedTranslationSignature(messages[0], channelId, {content: messages[0].content}),
+		origin: "automatic",
+		status: "translated",
+		translation: {content: "live translation 501", translatedContent: "live translation 501", originalContent: messages[0].content, channelId, auto: true}
+	}, {refresh: false});
+
+	resolveBatch({"501": "historical translation 501", "502": "historical translation 502"});
+	await plugin.waitForHistoricalTranslationJobs(channelId);
+
+	assert.deepEqual((plugin.historicalDisplayBatchCommits[0] || []).map(result => String(result.messageId)), ["502"], "the historical commit must drop the message the live lane already owns");
+	assert.equal(plugin.getReceivedDisplayRuntimeView("501").translation.content, "live translation 501", "the newer live command must keep ownership of the message");
+});

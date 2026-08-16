@@ -11928,6 +11928,8 @@ __________________ __________________ __________________
           }
           isHistoricalTranslationJobItemCurrent(item, job) {
             if (!item || !item.message || !job || !job.channelId) return !1;
+            let racingDisplayView = this.getReceivedDisplayRuntimeView(item.message.id);
+            if (racingDisplayView && (racingDisplayView.translated || racingDisplayView.showLoading)) return !1;
             let currentMessage = null;
             try {
               let messageStore = BDFDB.LibraryStores && BDFDB.LibraryStores.MessageStore;
