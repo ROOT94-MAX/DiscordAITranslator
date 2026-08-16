@@ -134,7 +134,6 @@ module.exports = (_ => {
 		const DEFAULT_LOADED_AUTO_TRANSLATE_LIMIT = 50;
 		const LOADED_AUTO_TRANSLATE_LIMIT_MIN = 1;
 		const LOADED_AUTO_TRANSLATE_LIMIT_MAX = 100;
-		const TRANSLATION_MESSAGE_PATCH_TYPES = ["Messages", "MessageReply", "MessageButtons", "MessageContent", "Embed"];
 		const DISCORD_EPOCH = 1420070400000;
 		
 		const defaultLanguages = {
@@ -155,7 +154,7 @@ module.exports = (_ => {
 
 		// Debug-build-only evidence probe, stripped from release bundles by the compile-time constant, as in display-runtime.js. It also persists to disk because DevTools is not reachable on every client.
 		const secondDebugProbe = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? (secondDebugModule => secondDebugModule.createSecondDebugProbe({log: line => console.info(line), sink: secondDebugModule.createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder})}))(require("../diagnostics/second-debug-probe")) : null;
-		if (secondDebugProbe && typeof window != "undefined") secondDebugProbe.installGlobal(window, {resolveScrollerElement: () => document.querySelector(BDFDB.dotCN.messagesscroller), forceUpdate: (...targets) => BDFDB.ReactUtils.forceUpdate(...targets), rerenderAll: instant => BDFDB.MessageUtils.rerenderAll(instant), getRenderCount: () => secondDebugProbe.getParentRenderCount(), autoRunExperiment: true});
+		if (secondDebugProbe && typeof window != "undefined") secondDebugProbe.installGlobal(window, {resolveScrollerElement: () => document.querySelector(BDFDB.dotCN.messagesscroller), forceUpdate: (...targets) => BDFDB.ReactUtils.forceUpdate(...targets), rerenderAll: instant => BDFDB.MessageUtils.rerenderAll(instant), getRenderCount: () => secondDebugProbe.getParentRenderCount(), autoRunExperiment: true, autoRunMaxAttempts: 60});
 
 		const {receivedTranslationRuntime} = createReceivedTranslationRuntime({BDFDB, loadedTranslationStatusStore});
 
@@ -1388,7 +1387,7 @@ module.exports = (_ => {
 				this.attachAutoTranslationScrollWatcher();
 				const manualAnchor = this.getActiveManualTranslationScrollAnchor();
 				const scrollerState = manualAnchor ? null : this.captureMessageScrollerState();
-				BDFDB.PatchUtils.forceAllUpdates(this, TRANSLATION_MESSAGE_PATCH_TYPES);
+				BDFDB.MessageUtils.rerenderAll(true);
 				if (manualAnchor) this.restoreMessageAnchorState(manualAnchor);
 				else this.restoreMessageScrollerState(scrollerState);
 			}

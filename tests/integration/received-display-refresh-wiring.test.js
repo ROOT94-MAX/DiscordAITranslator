@@ -29,6 +29,28 @@ test("a committed translation repaints the chat through the injected rerenderAll
 	}
 });
 
+test("a legacy full repaint rebuilds the chat through MessageUtils instead of forceAllUpdates", async () => {
+	// Manual translate/untranslate and several restore paths still schedule the legacy
+	// full repaint. Its old primitive, PatchUtils.forceAllUpdates, is a measured no-op
+	// on this client (same family as the forceUpdate strategies the probe disproved),
+	// which left manual translations invisible until a channel switch. The legacy
+	// repaint must use the same rebuild primitive the adapter already proved.
+	const harness = createHarness();
+	try {
+		const {plugin, calls} = harness;
+		const rebuildsBefore = calls.rerenderAll;
+
+		plugin.scheduleTranslationRerender();
+		await new Promise(resolve => setTimeout(resolve, 30));
+
+		assert.equal(calls.rerenderAll, rebuildsBefore + 1, "the legacy full repaint must rebuild the chat");
+	}
+	finally {
+		harness.plugin.clearReceivedDisplayFlushQueue();
+		harness.restore();
+	}
+});
+
 test("a virtualised-only commit never asks for a chat rebuild", async () => {
 	const harness = createHarness({mountedMessageIds: []});
 	try {

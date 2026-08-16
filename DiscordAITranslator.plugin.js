@@ -10102,7 +10102,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
           return view ? view.revision : null;
         }, "getRevision"), updateStatus: /* @__PURE__ */ __name((updates) => _this && _this.updateLoadedAutoTranslationStatus(updates), "updateStatus") });
         var pluginRuntimeActive = !0;
-        let DEFAULT_LOADED_AUTO_TRANSLATE_LIMIT = 50, LOADED_AUTO_TRANSLATE_LIMIT_MIN = 1, LOADED_AUTO_TRANSLATE_LIMIT_MAX = 100, TRANSLATION_MESSAGE_PATCH_TYPES = ["Messages", "MessageReply", "MessageButtons", "MessageContent", "Embed"], DISCORD_EPOCH = 14200704e5, defaultLanguages = {
+        let DEFAULT_LOADED_AUTO_TRANSLATE_LIMIT = 50, LOADED_AUTO_TRANSLATE_LIMIT_MIN = 1, LOADED_AUTO_TRANSLATE_LIMIT_MAX = 100, DISCORD_EPOCH = 14200704e5, defaultLanguages = {
           INPUT: "auto",
           OUTPUT: "$discord"
         }, languageTypes = {
@@ -10112,7 +10112,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
           RECEIVED: "received",
           SENT: "sent"
         }, AI_SKIP_TRANSLATION_TOKEN = "__SKIP_TRANSLATION__", protectionLogic = createProtectionLogic({ BDFDB }), secondDebugProbe = null;
-        secondDebugProbe && typeof window < "u" && secondDebugProbe.installGlobal(window, { resolveScrollerElement: /* @__PURE__ */ __name(() => document.querySelector(BDFDB.dotCN.messagesscroller), "resolveScrollerElement"), forceUpdate: /* @__PURE__ */ __name((...targets) => BDFDB.ReactUtils.forceUpdate(...targets), "forceUpdate"), rerenderAll: /* @__PURE__ */ __name((instant) => BDFDB.MessageUtils.rerenderAll(instant), "rerenderAll"), getRenderCount: /* @__PURE__ */ __name(() => secondDebugProbe.getParentRenderCount(), "getRenderCount"), autoRunExperiment: !0 });
+        secondDebugProbe && typeof window < "u" && secondDebugProbe.installGlobal(window, { resolveScrollerElement: /* @__PURE__ */ __name(() => document.querySelector(BDFDB.dotCN.messagesscroller), "resolveScrollerElement"), forceUpdate: /* @__PURE__ */ __name((...targets) => BDFDB.ReactUtils.forceUpdate(...targets), "forceUpdate"), rerenderAll: /* @__PURE__ */ __name((instant) => BDFDB.MessageUtils.rerenderAll(instant), "rerenderAll"), getRenderCount: /* @__PURE__ */ __name(() => secondDebugProbe.getParentRenderCount(), "getRenderCount"), autoRunExperiment: !0, autoRunMaxAttempts: 60 });
         let { receivedTranslationRuntime } = createReceivedTranslationRuntime({ BDFDB, loadedTranslationStatusStore }), translationDisplayLogic = createTranslationDisplayLogic({ BDFDB });
         return _a = class extends Plugin {
           getVersion() {
@@ -11026,7 +11026,7 @@ __________________ __________________ __________________
           rerenderMessagesWithScrollPreserved() {
             this.attachAutoTranslationScrollWatcher();
             let manualAnchor = this.getActiveManualTranslationScrollAnchor(), scrollerState = manualAnchor ? null : this.captureMessageScrollerState();
-            BDFDB.PatchUtils.forceAllUpdates(this, TRANSLATION_MESSAGE_PATCH_TYPES), manualAnchor ? this.restoreMessageAnchorState(manualAnchor) : this.restoreMessageScrollerState(scrollerState);
+            BDFDB.MessageUtils.rerenderAll(!0), manualAnchor ? this.restoreMessageAnchorState(manualAnchor) : this.restoreMessageScrollerState(scrollerState);
           }
           getLoadedAutoTranslationStatusText(status) {
             return loadedTranslationStatusStore.getStatusText(status);

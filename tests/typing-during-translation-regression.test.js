@@ -19,20 +19,24 @@ test("channel text area editor is not disabled while translations are running", 
 	assert.equal(props.disabled, false);
 });
 
-test("the retained legacy manual-path refresh updates message components without remounting the chat layer", () => {
-	let chatLayerRerenders = 0;
-	const targetedUpdates = [];
+test("the retained legacy manual-path refresh repaints through the proven chat rebuild", () => {
+	// Real-client evidence (2026-08-16, PTB 1.0.1214): PatchUtils.forceAllUpdates is a
+	// no-op on this client - same family as the forceUpdate strategies the probe
+	// disproved - so manual translations stayed invisible until a channel switch. The
+	// manual path must use the same rebuild primitive the display adapter proved.
+	let chatLayerRerenders = [];
+	let instantFlags = [];
 	const plugin = createBasePluginInstance({
 		callSetLanguages: false,
 		bdfdb: {
 			MessageUtils: {
-				rerenderAll: () => {
-					chatLayerRerenders++;
+				rerenderAll: instant => {
+					chatLayerRerenders.push(instant);
 				}
 			},
 			PatchUtils: {
-				forceAllUpdates: (_plugin, componentTypes) => {
-					targetedUpdates.push(componentTypes);
+				forceAllUpdates: () => {
+					throw new Error("forceAllUpdates is a proven no-op on this client and must not be used for message repaints");
 				}
 			}
 		}
@@ -41,8 +45,7 @@ test("the retained legacy manual-path refresh updates message components without
 
 	plugin.rerenderMessagesWithScrollPreserved();
 
-	assert.equal(chatLayerRerenders, 0);
-	assert.deepEqual(targetedUpdates, [["Messages", "MessageReply", "MessageButtons", "MessageContent", "Embed"]]);
+	assert.deepEqual(chatLayerRerenders, [true], "the manual-path refresh must rebuild the chat once with the instant variant");
 });
 
 function createScrollRestoreHarness() {
