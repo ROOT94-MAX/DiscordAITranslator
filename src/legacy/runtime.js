@@ -20,7 +20,6 @@ module.exports = (_ => {
 		getAuthor () {return this.author;}
 		getVersion () {return normalizeSemverVersion(this.version);}
 		getDescription () {return `The Library Plugin needed for ${this.name} is missing. Open the Plugin Settings to download it. \n\n${this.description}`;}
-		
 		downloadLibrary () {
 			BdApi.Net.fetch("https://mwittrien.github.io/BetterDiscordAddons/Library/0BDFDB.plugin.js").then(r => {
 				if (!r || r.status != 200) throw new Error();
@@ -32,7 +31,6 @@ module.exports = (_ => {
 				BdApi.UI.alert("Error", "Could not download BDFDB Library Plugin. Try again later or download it manually from GitHub: https://mwittrien.github.io/downloader/?library");
 			});
 		}
-		
 		load () {
 			if (!window.BDFDB_Global || !Array.isArray(window.BDFDB_Global.pluginQueue)) window.BDFDB_Global = Object.assign({}, window.BDFDB_Global, {pluginQueue: []});
 			if (!window.BDFDB_Global.downloadModal) {
@@ -78,6 +76,7 @@ module.exports = (_ => {
 		const {createHistoricalJobRegistry} = require("../orchestrator/historical-job-registry");
 		const channelToggleOperations = require("../orchestrator/channel-toggle-operations").createChannelToggleOperations();
 		const {HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX} = require("../orchestrator/historical-translation-job");
+		const {runChunkedHistoricalBatch} = require("../orchestrator/historical-provider-chunking");
 		const {createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION} = require("../protection/protection-logic");
 		const {parseStoredEmbedTranslations} = require("../received/embed-translation-parser");
 		const {
@@ -2468,7 +2467,8 @@ module.exports = (_ => {
 				if (!preparedItems.length || !this.isHistoricalTranslationJobCurrent(job)) return Promise.resolve(null);
 				const engineKey = this.getHistoricalAiBatchEngineKey(job.channelId);
 				if (!engineKey) return Promise.resolve(null);
-				return this.requestAiBatchTranslationDetailed(engineKey, preparedItems);
+				// Sequential provider chunks tick the capsule's processed count while the job is in flight; the job still validates and commits once.
+				return runChunkedHistoricalBatch({preparedItems, requestChunk: chunk => this.requestAiBatchTranslationDetailed(engineKey, chunk), isCurrent: () => this.isHistoricalTranslationJobCurrent(job), onChunkSettled: progress => this.updateLoadedAutoTranslationStatus({channelId: job.channelId, processed: progress.answered})});
 			}
 
 			repairHistoricalTranslationJobBatch (preparedItems, job) {

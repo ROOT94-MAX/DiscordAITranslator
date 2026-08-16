@@ -295,6 +295,7 @@ class HistoricalTranslationJob {
 }
 
 module.exports = {
+	normalizeBatchOutcome,
 	HISTORICAL_TERMINAL_ITEM_STATES,
 	HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX,
 	HistoricalTranslationJob

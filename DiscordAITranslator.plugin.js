@@ -6617,10 +6617,51 @@ var require_historical_translation_job = __commonJS({
     __name(_HistoricalTranslationJob, "HistoricalTranslationJob");
     var HistoricalTranslationJob = _HistoricalTranslationJob;
     module2.exports = {
+      normalizeBatchOutcome,
       HISTORICAL_TERMINAL_ITEM_STATES,
       HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX,
       HistoricalTranslationJob
     };
+  }
+});
+
+// src/orchestrator/historical-provider-chunking.js
+var require_historical_provider_chunking = __commonJS({
+  "src/orchestrator/historical-provider-chunking.js"(exports2, module2) {
+    var { normalizeBatchOutcome } = require_historical_translation_job(), HISTORICAL_PROVIDER_CHUNK_SIZE = 10;
+    function chunkPreparedItems(preparedItems, chunkSize) {
+      let chunks = [];
+      for (let offset = 0; offset < preparedItems.length; offset += chunkSize) chunks.push(preparedItems.slice(offset, offset + chunkSize));
+      return chunks;
+    }
+    __name(chunkPreparedItems, "chunkPreparedItems");
+    function isTerminalFailure(failureKind) {
+      return ["auth", "configuration", "permanent"].includes(failureKind);
+    }
+    __name(isTerminalFailure, "isTerminalFailure");
+    function runChunkedHistoricalBatch({ preparedItems, chunkSize = HISTORICAL_PROVIDER_CHUNK_SIZE, requestChunk, isCurrent = null, onChunkSettled = null }) {
+      if (!Array.isArray(preparedItems) || !preparedItems.length) return Promise.resolve(null);
+      let size = Math.max(1, Math.floor(chunkSize) || HISTORICAL_PROVIDER_CHUNK_SIZE);
+      if (!requestChunk) return Promise.resolve(null);
+      if (preparedItems.length <= size) return Promise.resolve(requestChunk(preparedItems)).then(normalizeBatchOutcome);
+      let chunks = chunkPreparedItems(preparedItems, size);
+      return (async () => {
+        let translations = {}, firstFailure = null, answered = 0;
+        for (let index = 0; index < chunks.length && !(isCurrent && !isCurrent()); index++) {
+          let outcome = normalizeBatchOutcome(await requestChunk(chunks[index]));
+          if (outcome && outcome.translations ? Object.assign(translations, outcome.translations) : !firstFailure && outcome && outcome.failureKind && (firstFailure = { failureKind: outcome.failureKind, statusCode: outcome.statusCode == null ? null : outcome.statusCode }), answered += chunks[index].length, onChunkSettled)
+            try {
+              onChunkSettled({ answered, total: preparedItems.length, chunkIndex: index, chunkCount: chunks.length });
+            } catch {
+            }
+          if (!Object.keys(translations).length && firstFailure && isTerminalFailure(firstFailure.failureKind))
+            return { translations: null, failureKind: firstFailure.failureKind, statusCode: firstFailure.statusCode };
+        }
+        return Object.keys(translations).length ? { translations, failureKind: null, statusCode: null } : firstFailure ? { translations: null, failureKind: firstFailure.failureKind, statusCode: firstFailure.statusCode } : null;
+      })();
+    }
+    __name(runChunkedHistoricalBatch, "runChunkedHistoricalBatch");
+    module2.exports = { runChunkedHistoricalBatch, HISTORICAL_PROVIDER_CHUNK_SIZE };
   }
 });
 
@@ -9834,7 +9875,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { LOADED_STATUS_COMPLETION_HIDE_MS, LOADED_STATUS_REFRESH_MS, createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { LOADED_STATUS_COMPLETION_HIDE_MS, LOADED_STATUS_REFRESH_MS, createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -11841,7 +11882,7 @@ __________________ __________________ __________________
           translateHistoricalTranslationJobBatch(preparedItems, job) {
             if (!preparedItems.length || !this.isHistoricalTranslationJobCurrent(job)) return Promise.resolve(null);
             let engineKey = this.getHistoricalAiBatchEngineKey(job.channelId);
-            return engineKey ? this.requestAiBatchTranslationDetailed(engineKey, preparedItems) : Promise.resolve(null);
+            return engineKey ? runChunkedHistoricalBatch({ preparedItems, requestChunk: /* @__PURE__ */ __name((chunk) => this.requestAiBatchTranslationDetailed(engineKey, chunk), "requestChunk"), isCurrent: /* @__PURE__ */ __name(() => this.isHistoricalTranslationJobCurrent(job), "isCurrent"), onChunkSettled: /* @__PURE__ */ __name((progress) => this.updateLoadedAutoTranslationStatus({ channelId: job.channelId, processed: progress.answered }), "onChunkSettled") }) : Promise.resolve(null);
           }
           repairHistoricalTranslationJobBatch(preparedItems, job) {
             if (!preparedItems.length || !this.isHistoricalTranslationJobCurrent(job)) return Promise.resolve(null);

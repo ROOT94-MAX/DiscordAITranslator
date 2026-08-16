@@ -519,11 +519,17 @@ test("a historical snapshot starts translating as soon as its configured limit i
 	await new Promise(resolve => setImmediate(resolve));
 
 	assert.equal(requestedIds.length, 1, "a full snapshot must not remain stuck in collecting while the user scrolls");
-	assert.equal(requestedIds[0].length, 20);
+	assert.equal(requestedIds[0].length, 10, "the provider batch starts as its first chunk");
 	assert.equal(plugin.historicalDisplayBatchCommits.length, 0, "display still waits for the existing idle commit gate");
 
-	resolveBatch(Object.fromEntries(requestedIds[0].map(id => [id, `translated ${id}`])));
+	// Chunks settle sequentially; answer each one as it starts until the job finishes.
+	for (let guard = 0; guard < 5 && plugin.historicalDisplayBatchCommits.length === 0; guard++) {
+		resolveBatch(Object.fromEntries(requestedIds[requestedIds.length - 1].map(id => [id, `translated ${id}`])));
+		await new Promise(resolve => setImmediate(resolve));
+	}
 	await plugin.waitForHistoricalTranslationJobs(channelId);
+	assert.equal(requestedIds.length, 2, "a 20-item job splits into two provider chunks");
+	assert.deepEqual(requestedIds.flat(), Array.from({length: 20}, (_, index) => String(1000 + index)));
 });
 
 test("a full historical snapshot still starts when queueMicrotask is unavailable", async () => {
@@ -913,7 +919,7 @@ test("initial loaded-message pass stops at the configured historical job limit",
 	await plugin.startCollectedHistoricalTranslationJobs("channel-history-job");
 	await plugin.waitForHistoricalTranslationJobs("channel-history-job");
 
-	assert.equal(requestedIds.length, 1);
+	assert.equal(requestedIds.length, 5, "a 50-item job moves as five provider chunks of ten");
 	assert.equal(requestedIds.flat().length, 50);
 	assert.equal(acceptedCount, 50);
 	assert.equal(commitCount, 1);
@@ -981,11 +987,11 @@ test("initial loaded-message pass seals one 50-ID snapshot from rendered cached 
 
 	assert.deepEqual(fetchCalls.map(request => ({channelId: request.channelId, beforeMessageId: request.beforeMessageId, limit: request.limit})), [{channelId, beforeMessageId: "61", limit: 10}]);
 	assert.ok(fetchCalls[0].signal);
-	assert.equal(requestedIds.length, 1);
-	assert.equal(requestedIds[0].length, 50);
-	assert.deepEqual(requestedIds[0], createLoadedMessages(100, 50, "expected", channelId).map(message => message.id));
+	assert.equal(requestedIds.length, 5);
+	assert.equal(requestedIds[0].length, 10, "the provider batch moves in chunks so capsule progress can tick");
+	assert.deepEqual(requestedIds.flat(), createLoadedMessages(100, 50, "expected", channelId).map(message => message.id));
 	assert.equal(plugin.historicalDisplayBatchCommits.length, 1);
-	assert.deepEqual(plugin.historicalDisplayBatchCommits[0].map(result => result.messageId), requestedIds[0]);
+	assert.deepEqual(plugin.historicalDisplayBatchCommits[0].map(result => result.messageId), requestedIds.flat());
 	assert.equal(JSON.stringify(cachedMessages), cacheSnapshot);
 	assert.equal(JSON.stringify(prefetchedMessages), prefetchedSnapshot);
 });
@@ -2634,4 +2640,37 @@ test("the historical repair path honours the provider backoff instead of throwin
 	assert.equal(result, "batched");
 	assert.equal(requested.engineKey, "deepseek");
 	assert.deepEqual(waits, [2500, "awaited"]);
+});
+
+test("the loaded-status capsule ticks processed counts while provider chunks settle", async () => {
+	const plugin = configureHistoricalCoordinatorPlugin({scheduleAutomatically: true});
+	const channelId = "channel-history-chunk-progress";
+	const statusUpdates = [];
+	plugin.updateLoadedAutoTranslationStatus = updates => statusUpdates.push(Object.assign({}, updates));
+	plugin.getReceivedAutoTranslateLoadedLimit = () => 20;
+	plugin.isUserActivelyScrollingMessages = () => true;
+	const pendingChunks = [];
+	plugin.requestAiBatchTranslation = (_engineKey, preparedItems) => new Promise(resolve => {
+		pendingChunks.push({ids: preparedItems.map(item => String(item.message.id)), resolve});
+	});
+
+	for (let index = 0; index < 20; index++) {
+		const message = createMessage(String(1000 + index), `loaded message ${index}`);
+		plugin.queueAutoTranslateMessage(message, {id: channelId}, {content: message.content}, {historicalLoad: true, deferHistoricalSnapshotStart: true});
+	}
+	await new Promise(resolve => setImmediate(resolve));
+
+	assert.equal(pendingChunks.length, 1, "the first provider chunk must start without waiting for the whole job");
+	assert.equal(pendingChunks[0].ids.length, 10, "the first chunk carries the provider chunk size");
+
+	pendingChunks[0].resolve(Object.fromEntries(pendingChunks[0].ids.map(id => [id, `translated ${id}`])));
+	await new Promise(resolve => setImmediate(resolve));
+	await new Promise(resolve => setImmediate(resolve));
+
+	const progressTicks = statusUpdates.filter(update => update.processed > 0 && !update.done);
+	assert.ok(progressTicks.some(update => update.processed === 10), "a settled chunk must tick the capsule's processed count immediately");
+	assert.equal(pendingChunks.length, 2, "the next chunk starts after the previous one settles");
+
+	pendingChunks[1].resolve(Object.fromEntries(pendingChunks[1].ids.map(id => [id, `translated ${id}`])));
+	await plugin.waitForHistoricalTranslationJobs(channelId);
 });
