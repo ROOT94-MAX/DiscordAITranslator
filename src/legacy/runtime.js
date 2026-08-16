@@ -1576,8 +1576,8 @@ module.exports = (_ => {
 				element.title = this.getLoadedAutoTranslationStatusTitleText(currentStatus);
 				this.updateInlineLoadedAutoTranslationStatusElements();
 				loadedTranslationStatusStore.schedulePosition(_ => this.positionLoadedAutoTranslationStatusElement(element));
-				if (currentStatus.active) loadedTranslationStatusStore.scheduleRefresh(LOADED_STATUS_REFRESH_MS, () => this.updateLoadedAutoTranslationStatus({}));
-				else if (currentStatus.done && !Math.max(0, currentStatus.displayPending || 0) && !retryableCount && !Math.max(0, currentStatus.failed || currentStatus.aiDropped || 0)) loadedTranslationStatusStore.scheduleHide(LOADED_STATUS_COMPLETION_HIDE_MS, () => this.removeLoadedAutoTranslationStatusElement());
+				loadedTranslationStatusStore.scheduleRefresh(LOADED_STATUS_REFRESH_MS, () => this.updateLoadedAutoTranslationStatus({}));
+				if (!currentStatus.active && currentStatus.done && !Math.max(0, currentStatus.displayPending || 0) && !retryableCount && !Math.max(0, currentStatus.failed || currentStatus.aiDropped || 0)) loadedTranslationStatusStore.scheduleHide(LOADED_STATUS_COMPLETION_HIDE_MS, () => this.removeLoadedAutoTranslationStatusElement());
 			}
 
 			clearLoadedAutoTranslationStatus () {

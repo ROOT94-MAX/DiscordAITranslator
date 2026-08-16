@@ -103,3 +103,47 @@ test("without a composer anchor the capsule falls back to the viewport's bottom-
 	}
 	finally {harness.restore();}
 });
+
+test("a retry-state capsule disappears once the user leaves its channel", async () => {
+	const realDocument = global.document;
+	let selectedChannelId = "channel-a";
+	const elements = new Map();
+	const created = [];
+	global.document = {
+		body: {appendChild: node => elements.set(node.id, node)},
+		querySelector: () => null,
+		querySelectorAll: () => [],
+		getElementById: id => elements.get(id) || null,
+		createElement: () => {
+			const node = {
+				style: {},
+				children: [],
+				appendChild: child => node.children.push(child),
+				querySelector: () => null,
+				remove: () => elements.delete("DiscordAITranslator-loaded-status"),
+				getBoundingClientRect: () => ({width: 120, height: 20})
+			};
+			created.push(node);
+			return node;
+		}
+	};
+	const plugin = createPluginInstance({callSetLanguages: false});
+	plugin.getReceivedAutoTranslateScope = () => "loaded_messages";
+	plugin.isTranslationEnabled = () => true;
+	global.window.addEventListener = () => {};
+	global.window.removeEventListener = () => {};
+	const BDFDB = plugin._testBdfdb;
+	BDFDB.LibraryStores.SelectedChannelStore = {getChannelId: () => selectedChannelId};
+	plugin.attachAutoTranslationScrollWatcher = () => {};
+	plugin.ensureLoadedAutoTranslationStatusPositionWatcher = () => {};
+	plugin.updateLoadedAutoTranslationStatus({active: false, done: true, channelId: "channel-a", total: 10, processed: 10, displayed: 9, retryable: 1, failed: 1});
+	assert.equal(!!global.document.getElementById("DiscordAITranslator-loaded-status"), true, "setup: the retry capsule is visible in its channel");
+
+	selectedChannelId = "channel-b";
+	await new Promise(resolve => setTimeout(resolve, 1150));
+
+	assert.equal(!!global.document.getElementById("DiscordAITranslator-loaded-status"), false, "the capsule must not linger over unrelated surfaces after leaving the channel");
+	delete global.window.addEventListener;
+	delete global.window.removeEventListener;
+	global.document = realDocument;
+});

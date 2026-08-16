@@ -2221,19 +2221,23 @@ test("failed historical status exposes a visible retry action", () => {
 		assert.match(statusElement.innerHTML, /<svg/);
 		assert.equal(text.textContent, "0/2 · 2!");
 		assert.match(statusElement.title, /Loaded translation: batch 1 done, shown 0\/2, failed 2/);
-		assert.equal(timers.size, 0, "a retryable failure remains visible");
+		const retryDelays = [...timers.values()].map(timer => timer.delay);
+		assert.ok(retryDelays.includes(1000), "a retryable failure keeps its visibility heartbeat");
+		assert.ok(!retryDelays.includes(3000), "a retryable failure is never completion-hidden");
 		retryButton.onclick({stopPropagation: () => {}});
 		assert.equal(retriedChannelId, "channel-history-retry-ui");
 
 		plugin.updateLoadedAutoTranslationStatus({active: false, collecting: false, done: true, total: 2, processed: 2, displayed: 1, displayPending: 1, failed: 0, retryable: 0, phase: "done"});
 		assert.equal(text.textContent, "1/2 · 1↻");
-		assert.equal(timers.size, 0, "a completed request with an unpainted mounted row remains visible");
+		const pendingDelays = [...timers.values()].map(timer => timer.delay);
+		assert.ok(pendingDelays.includes(1000), "an unpainted row keeps its visibility heartbeat");
+		assert.ok(!pendingDelays.includes(3000), "pending paint rows are never completion-hidden");
 
 		plugin.updateLoadedAutoTranslationStatus({active: false, collecting: false, done: true, total: 2, processed: 2, displayed: 2, displayPending: 0, failed: 0, retryable: 0, phase: "done"});
 		assert.equal(text.textContent, "2/2");
-		assert.equal(timers.size, 1);
-		const completionTimer = [...timers.values()][0];
-		assert.equal(completionTimer.delay, 3000, "successful completion uses the agreed three-second hide");
+		const completionEntry = [...timers.entries()].find(([, timer]) => timer.delay === 3000);
+		assert.ok(completionEntry, "successful completion uses the agreed three-second hide alongside the heartbeat");
+		const completionTimer = completionEntry[1];
 		completionTimer.callback();
 		assert.equal(body.children.includes(statusElement), false);
 	}

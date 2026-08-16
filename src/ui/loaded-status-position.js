@@ -99,6 +99,26 @@ function positionLoadedStatusElement({BDFDB, document: documentRef, window: wind
 			left: Math.round(left),
 			top: Math.round(top)
 		});
+		// Every hint guess so far failed on the real client (85 positioning runs, zero
+		// detections), so while detection comes up empty the whole document is surveyed
+		// once per positioning pass and every slow-mode-text node is recorded with its
+		// tag, class and rect. The next calibration reads where the hint really lives.
+		if (!nativeHintRect && documentRef.querySelectorAll) {
+			try {
+				const found = [];
+				for (const node of documentRef.querySelectorAll("div, span, time, label")) {
+					const text = (node.textContent || "").trim();
+					if (!text || text.length > 40 || !/慢速模式|slow\s*mode|slowmode|已开启/i.test(text)) continue;
+					if (!node.getBoundingClientRect) continue;
+					const rect = node.getBoundingClientRect();
+					if (!rect.width || !rect.height) continue;
+					found.push({tag: node.tagName, cls: String(node.className).slice(0, 80), text: text.slice(0, 24), top: Math.round(rect.top), left: Math.round(rect.left), right: Math.round(rect.right), bottom: Math.round(rect.bottom)});
+					if (found.length >= 20) break;
+				}
+				if (found.length) windowRef.TranslatorDebug.recordPositioning({survey: found});
+			}
+			catch (err) {}
+		}
 	}
 }
 
