@@ -2687,6 +2687,9 @@ test("a historical commit does not overwrite a live translation that landed mid-
 		return new Promise(resolve => {resolveBatch = resolve;});
 	};
 
+	const statusUpdates = [];
+	plugin.updateLoadedAutoTranslationStatus = updates => statusUpdates.push(Object.assign({}, updates));
+
 	const messages = [createMessage("501", "live raced message one"), createMessage("502", "live raced message two")];
 	for (const message of messages) plugin.queueAutoTranslateMessage(message, {id: channelId}, {content: message.content}, {historicalLoad: true, deferHistoricalSnapshotStart: true});
 	await new Promise(resolve => setImmediate(resolve));
@@ -2709,4 +2712,8 @@ test("a historical commit does not overwrite a live translation that landed mid-
 
 	assert.deepEqual((plugin.historicalDisplayBatchCommits[0] || []).map(result => String(result.messageId)), ["502"], "the historical commit must drop the message the live lane already owns");
 	assert.equal(plugin.getReceivedDisplayRuntimeView("501").translation.content, "live translation 501", "the newer live command must keep ownership of the message");
+	const finalStatus = statusUpdates.filter(update => update.done).at(-1);
+	assert.ok(finalStatus, "the job must report a final status");
+	assert.equal(finalStatus.total, 2);
+	assert.equal(finalStatus.displayed, 2, "a live-displayed message must count as displayed, not as a pending failure");
 });

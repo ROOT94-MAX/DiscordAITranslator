@@ -11150,7 +11150,17 @@ __________________ __________________ __________________
             element.style.right = "auto", element.style.bottom = "auto";
             let maxStatusWidth = Math.max(180, Math.min(360, innerWidth - viewportPadding * 2));
             scrollerRect && scrollerRect.width && (maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(scrollerRect.width * 0.55), scrollerRect.width - 16))), element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
-            let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20), anchorRight = scrollerRect && scrollerRect.width ? scrollerRect.right : innerWidth, anchorBottom = scrollerRect && scrollerRect.height ? scrollerRect.bottom : innerHeight, left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth - viewportPadding, innerWidth - statusWidth - viewportPadding)), top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight - viewportPadding, innerHeight - statusHeight - viewportPadding));
+            let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20), anchorRight = scrollerRect && scrollerRect.width ? scrollerRect.right : innerWidth, composerTop = null;
+            try {
+              let composer = document.querySelector("form");
+              if (composer && composer.getBoundingClientRect) {
+                let composerRect = composer.getBoundingClientRect();
+                composerRect && composerRect.width && composerRect.top && (composerTop = composerRect.top);
+              }
+            } catch {
+              composerTop = null;
+            }
+            let anchorBottom = scrollerRect && scrollerRect.height ? scrollerRect.bottom : innerHeight, bottomBoundary = composerTop != null ? Math.min(anchorBottom, composerTop) : anchorBottom, left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth - viewportPadding, innerWidth - statusWidth - viewportPadding)), top = Math.max(viewportPadding, Math.min(bottomBoundary - statusHeight - (composerTop != null ? 8 : viewportPadding), innerHeight - statusHeight - viewportPadding));
             element.style.left = `${Math.round(left)}px`, element.style.top = `${Math.round(top)}px`;
           }
           isChannelTextAreaFocused() {
@@ -11935,8 +11945,11 @@ __________________ __________________ __________________
               } catch {
                 batchOutcome = null;
               }
-            let failedCount = this.updateFailedHistoricalTranslationSnapshots(summary, job.channelId), blockedIds = new Set([].concat(batchOutcome && batchOutcome.missingIds || [], batchOutcome && batchOutcome.retryIds || [], batchOutcome && batchOutcome.rejectedIds || [], batchOutcome && batchOutcome.staleIds || []).map(String)), displayReadyIds = new Set([].concat(batchOutcome && batchOutcome.confirmedIds || [], batchOutcome && batchOutcome.deferredIds || []).map(String).filter((messageId) => !blockedIds.has(messageId))), displayed = summary.translated.filter((item) => item && item.message && displayReadyIds.has(String(item.message.id))).length, displayPending = historicalDisplayTracker.begin({ channelId: job.channelId, batchKey: job.id, outcome: batchOutcome, displayed, displayableIds: summary.translated.map((item) => item && item.message && String(item.message.id)).filter(Boolean), schedule: /* @__PURE__ */ __name((messageId, trackingKey) => this.scheduleReceivedDisplayFlush(job.channelId, messageId, null, trackingKey), "schedule") });
-            this.updateLoadedAutoTranslationStatus({ active: !1, collecting: !1, done: !0, channelId: job.channelId, total: job.items.size, processed: job.items.size, displayed, displayPending, skipped: summary.skipped.length, failed: summary.failed.length, retryable: failedCount, aiDropped: summary.failed.length });
+            let failedCount = this.updateFailedHistoricalTranslationSnapshots(summary, job.channelId), blockedIds = new Set([].concat(batchOutcome && batchOutcome.missingIds || [], batchOutcome && batchOutcome.retryIds || [], batchOutcome && batchOutcome.rejectedIds || [], batchOutcome && batchOutcome.staleIds || []).map(String)), displayReadyIds = new Set([].concat(batchOutcome && batchOutcome.confirmedIds || [], batchOutcome && batchOutcome.deferredIds || []).map(String).filter((messageId) => !blockedIds.has(messageId))), displayed = summary.translated.filter((item) => item && item.message && displayReadyIds.has(String(item.message.id))).length, liveDisplayed = [...job.items.keys()].filter((messageId) => {
+              let liveView = this.getReceivedDisplayRuntimeView(String(messageId));
+              return liveView && liveView.translated && !displayReadyIds.has(String(messageId));
+            }).length, displayPending = historicalDisplayTracker.begin({ channelId: job.channelId, batchKey: job.id, outcome: batchOutcome, displayed, displayableIds: summary.translated.map((item) => item && item.message && String(item.message.id)).filter(Boolean), schedule: /* @__PURE__ */ __name((messageId, trackingKey) => this.scheduleReceivedDisplayFlush(job.channelId, messageId, null, trackingKey), "schedule") });
+            this.updateLoadedAutoTranslationStatus({ active: !1, collecting: !1, done: !0, channelId: job.channelId, total: job.items.size, processed: job.items.size, displayed: displayed + liveDisplayed, displayPending, skipped: summary.skipped.length, failed: summary.failed.length, retryable: failedCount, aiDropped: summary.failed.length });
           }
           updateHistoricalTranslationJobStatus(job) {
             if (!job || !job.channelId || job.state == "committed") return;

@@ -250,7 +250,6 @@ module.exports = (_ => {
 
 				this.css = createTranslatorStyles(BDFDB);
 			}
-			
 			handleEditedMessageSubmit (methodArguments, originalMethod) {
 				const args = Array.from(methodArguments || []);
 				const channelId = args[0];
@@ -352,7 +351,6 @@ module.exports = (_ => {
 			}
 
 			getSettingsPanel (collapseStates = {}) {return renderSettingsPanel(this, collapseStates, {BDFDB});}
-		
 			onSettingsClosed () {
 				if (this.ensureReceivedDisplayRepaintScheduler().hasDeferredFullRepaint()) this.flushDeferredTranslationRerender();
 				if (this.SettingsUpdated) {
@@ -1481,9 +1479,21 @@ module.exports = (_ => {
 				const statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth));
 				const statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20);
 				const anchorRight = scrollerRect && scrollerRect.width ? scrollerRect.right : innerWidth;
+				// The composer (chat form) owns the strip under the chat, slow-mode text
+				// included; floating above its top edge keeps the capsule off both.
+				let composerTop = null;
+				try {
+					const composer = document.querySelector("form");
+					if (composer && composer.getBoundingClientRect) {
+						const composerRect = composer.getBoundingClientRect();
+						if (composerRect && composerRect.width && composerRect.top) composerTop = composerRect.top;
+					}
+				}
+				catch (err) {composerTop = null;}
 				const anchorBottom = scrollerRect && scrollerRect.height ? scrollerRect.bottom : innerHeight;
+				const bottomBoundary = composerTop != null ? Math.min(anchorBottom, composerTop) : anchorBottom;
 				const left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth - viewportPadding, innerWidth - statusWidth - viewportPadding));
-				const top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight - viewportPadding, innerHeight - statusHeight - viewportPadding));
+				const top = Math.max(viewportPadding, Math.min(bottomBoundary - statusHeight - (composerTop != null ? 8 : viewportPadding), innerHeight - statusHeight - viewportPadding));
 				element.style.left = `${Math.round(left)}px`;
 				element.style.top = `${Math.round(top)}px`;
 			}
@@ -2538,8 +2548,15 @@ module.exports = (_ => {
 				const blockedIds = new Set([].concat(batchOutcome && batchOutcome.missingIds || [], batchOutcome && batchOutcome.retryIds || [], batchOutcome && batchOutcome.rejectedIds || [], batchOutcome && batchOutcome.staleIds || []).map(String));
 				const displayReadyIds = new Set([].concat(batchOutcome && batchOutcome.confirmedIds || [], batchOutcome && batchOutcome.deferredIds || []).map(String).filter(messageId => !blockedIds.has(messageId)));
 				const displayed = summary.translated.filter(item => item && item.message && displayReadyIds.has(String(item.message.id))).length;
+				// Items handed to a live translation (race guard) are displayed by the live
+				// lane; the capsule must count them as shown instead of reporting a gap
+				// that reads like an invisible failure.
+				const liveDisplayed = [...job.items.keys()].filter(messageId => {
+					const liveView = this.getReceivedDisplayRuntimeView(String(messageId));
+					return liveView && liveView.translated && !displayReadyIds.has(String(messageId));
+				}).length;
 				const displayPending = historicalDisplayTracker.begin({channelId: job.channelId, batchKey: job.id, outcome: batchOutcome, displayed, displayableIds: summary.translated.map(item => item && item.message && String(item.message.id)).filter(Boolean), schedule: (messageId, trackingKey) => this.scheduleReceivedDisplayFlush(job.channelId, messageId, null, trackingKey)});
-				this.updateLoadedAutoTranslationStatus({active: false, collecting: false, done: true, channelId: job.channelId, total: job.items.size, processed: job.items.size, displayed, displayPending, skipped: summary.skipped.length, failed: summary.failed.length, retryable: failedCount, aiDropped: summary.failed.length});
+				this.updateLoadedAutoTranslationStatus({active: false, collecting: false, done: true, channelId: job.channelId, total: job.items.size, processed: job.items.size, displayed: displayed + liveDisplayed, displayPending, skipped: summary.skipped.length, failed: summary.failed.length, retryable: failedCount, aiDropped: summary.failed.length});
 			}
 
 			updateHistoricalTranslationJobStatus (job) {
@@ -2613,7 +2630,6 @@ module.exports = (_ => {
 				this.ensureLiveTranslationQueue().setLiveAutoTranslating(false);
 				this.ensureReceivedDisplayRuntime().clearPreviews(null);
 				this.ensureReceivedDisplayRepaintScheduler().cancelFullRepaintTimers();
-				
 				this.setLanguages();
 				BDFDB.PatchUtils.forceAllUpdates(this);
 				BDFDB.MessageUtils.rerenderAll();
@@ -2637,11 +2653,9 @@ module.exports = (_ => {
 					this.injectSearchItem(e, false, e.instance.props.channel.id);
 				}
 			}
-			
 			onTextAreaContextMenu (e) {
 				this.injectSearchItem(e, true);
 			}
-			
 			injectSearchItem (e, ownMessage, channelId = null) {
 				let text = document.getSelection().toString();
 				if (text) {
@@ -2701,7 +2715,6 @@ module.exports = (_ => {
 					}));
 				}
 			}
-			
 			processMessageButtons (e) {
 				if (!e.instance.props.message || !e.instance.props.channel) return;
 				let [children, index] = BDFDB.ReactUtils.findParent(e.returnvalue, {props: [["className", BDFDB.disCN.messagebuttons]]});
@@ -2735,23 +2748,19 @@ module.exports = (_ => {
 					}
 				}));
 			}
-			
 			processChannelTextAreaContainer (e) {
 				if (e.instance.props.type != BDFDB.DiscordConstants.ChannelTextAreaTypes.NORMAL && e.instance.props.type != BDFDB.DiscordConstants.ChannelTextAreaTypes.SIDEBAR) return;
 				BDFDB.PatchUtils.patch(this, e.instance.props, "onSubmit", {instead: e2 => {
 					if (e2.methodArguments[0].value) {
 						const text = e2.methodArguments[0].value;
-						
 						// Check for translation prefixes
 						const prefixMap = {};
 						const prefixData = this.settings.prefixes && this.settings.prefixes.translationPrefixData || [];
 						for (const entry of prefixData) {
 							prefixMap[entry.prefix] = entry.language;
 						}
-						
 						let foundPrefix = null;
 						let targetLanguage = null;
-						
 						// Check for prefixes more efficiently
 						for (const prefix in prefixMap) {
 							if (text.trim().startsWith(prefix)) {
@@ -2760,26 +2769,22 @@ module.exports = (_ => {
 								break;
 							}
 						}
-						
 						if (foundPrefix) {
 							e2.stopOriginalMethodCall();
 							// Remove the prefix from the message
 							const cleanText = text.trim().substring(foundPrefix.length).trim();
-							
 							this.shouldAutoTranslateSentMessage(cleanText, e.instance.props.channel.id, shouldTranslate => {
 								if (!shouldTranslate) return e2.originalMethod(Object.assign({}, e2.methodArguments[0], {value: cleanText}));
 								// Translate with the specific target language
 								this.translateText(cleanText, messageTypes.SENT, (translation, input, output) => {
 									// Override the output language with the one from the prefix
 									output = {id: targetLanguage, name: (this.ensureSettingsStore().getLanguage(targetLanguage) || {}).name || targetLanguage};
-									
 									translation = this.buildSentTranslationMessageValue(cleanText, translation, input, output);
 									Promise.resolve(e2.originalMethod(Object.assign({}, e2.methodArguments[0], {value: translation}))).then(_ => {
 										this.trackPendingSentOriginal(e.instance.props.channel.id, cleanText, translation);
 									});
 								}, targetLanguage, {channelId: e.instance.props.channel.id});
 							}, targetLanguage);
-							
 							return Promise.resolve({
 								shouldClear: true,
 								shouldRefocus: true
@@ -2807,12 +2812,10 @@ module.exports = (_ => {
 					return e2.callOriginalMethodAfterwards();
 				}}, {noCache: true});
 			}
-			
 			processChannelTextAreaEditor (e) {
 				// Do not disable the text area while background/manual message translations are running.
 				// Disabling here interrupts draft typing and can drop unsent text during message list refreshes.
 			}
-			
 			processChannelTextAreaButtons (e) {
 				if (e.instance.props.disabled || ![BDFDB.DiscordConstants.ChannelTextAreaTypes.NORMAL, BDFDB.DiscordConstants.ChannelTextAreaTypes.SIDEBAR, "normal", "sidebar"].includes(typeof e.instance.props.type == "string" ? e.instance.props.type : e.instance.props.type && e.instance.props.type.analyticsName)) return;
 				if (!e.returnvalue || !e.returnvalue.props) return;
@@ -3456,7 +3459,6 @@ module.exports = (_ => {
 				this.scheduleTranslationRerender();
 				this.processAutoTranslationQueue();
 			}
-			
 			isTranslationEnabled (channelId) {
 				return this.ensureSettingsStore().isTranslationEnabled(channelId);
 			}
@@ -3954,7 +3956,6 @@ module.exports = (_ => {
 				let output = forcedOutputLanguage ? 
 					Object.assign({}, this.ensureSettingsStore().getLanguage(forcedOutputLanguage) || {id: forcedOutputLanguage, name: forcedOutputLanguage}) :
 					Object.assign({}, this.ensureSettingsStore().getLanguage(this.getLanguageChoice(languageTypes.OUTPUT, place, channelId)));
-				
 				if (translate && input.id != output.id) {
 					let specialCase = this.checkForSpecialCase(newText, input);
 					if (specialCase) {
@@ -3980,7 +3981,6 @@ module.exports = (_ => {
 							if (trackBusy) this.ensureLiveTranslationQueue().setBusyTranslating(true);
 							if (toast) toast.close();
 							BDFDB.TimeUtils.clear(toastInterval);
-							
 							if (showToast) toast = BDFDB.NotificationUtils.toast(`${this.labels.toast_translating} (${translationEngines[engine].name}) - ${BDFDB.LanguageUtils.LibraryStrings.please_wait}`, {
 								timeout: 0,
 								ellipsis: true,
