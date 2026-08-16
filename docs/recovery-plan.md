@@ -38,7 +38,7 @@ The 2026-08-04 component-scoped display task is retained below as implementation
 - The source graph has no relative-import cycle, but `src/plugin/index.js` still delegates entirely to the 4,428-line legacy runtime, which directly imports 27 of 38 source modules. The current ratchet prevents growth without forcing the final composition-root migration.
 - The generated release is 13,305 readable lines and 904,357 bytes, and multiple extracted files remain 700-1,490 lines. Structural extraction is therefore incomplete even though the runtime line ratchet passes.
 - The release metadata has no commit/build fingerprint. Current source renders a compact numeric floating status, while the observed client rendered the older sentence-style status; the loaded artifact cannot be identified from the UI or metadata alone.
-- This file is 2,106 lines and mixes active work with checked implementation history; `extraction-plan.md` is an additional unlisted plan with conflicting completion language. After the debug evidence is sealed, retain only the active sequence here and archive the historical implementation transcript outside the repository.
+- This file mixes active work with checked implementation history. The conflicting extraction plan was archived outside Git on 2026-08-16; after the debug evidence is sealed, retain only the active sequence here and archive the remaining historical implementation transcript outside the repository.
 - DOM confirmation currently proves only a `MessageContent` revision marker. It does not prove body text, translated decoration, embed, reply preview, or title content, so a partial child render can be reported as complete.
 - Manual/live/history do not share a latest-command identity. Late automatic results can overwrite manual results, and old manual callbacks survive channel disable, edit, and deletion.
 - One stale item makes `MessageStateStore.commitBatch` discard every otherwise valid item in the same historical batch without reporting the collateral drops.
@@ -67,7 +67,8 @@ The 2026-08-04 component-scoped display task is retained below as implementation
 - [ ] Replace the legacy-runtime entry with a small composition root and make the architecture gate require progress toward its deletion, not merely prevent line-count growth.
 - [ ] Split oversized extracted modules by ownership only after their behavior contracts are captured; do not treat file movement or minification as refactoring completion.
 - [ ] Embed a deterministic source/build fingerprint in the generated artifact and expose it in a non-localized diagnostics/about surface so repository, installed file, and loaded runtime can be compared exactly.
-- [ ] Compress this canonical plan after the audit and archive superseded task transcripts plus `extraction-plan.md` outside Git; keep no second active plan.
+- [x] Archive the conflicting extraction plan outside Git so the repository keeps no second active plan. (2026-08-16)
+- [ ] Compress this canonical plan after the audit and archive the remaining superseded task transcript outside Git.
 - [ ] Introduce one runtime epoch, one channel operation generation, and one message latest-command identity shared by manual, live, historical, edit, delete, preview, and display completion paths.
 - [ ] Separate provider-result validation from atomic visual commit: reject stale items individually, account for every dropped item, then reveal all remaining valid results in one channel transaction.
 - [ ] Make DOM acknowledgement surface-specific and content-aware for body text, decoration, embeds, reply previews, and titles; never infer complete display from a child revision marker alone.
@@ -2135,7 +2136,7 @@ git commit -m "docs: record display milestone verification"
 - DiscordPTB smoke gate: first operator pass FAILED and the defect is fixed — the loaded-history capsule stalled at `0/N` with N growing while the client janked, because per-commit scroll restores fired scroll events that kept extending the user-scroll idle window, starving the snapshot seal; reproduced in `tests/integration/received-display-throughput.test.js`, fixed in `443a54a` (programmatic-scroll grace window plus coalesced live display flushes), redeployed. The eight observation checks now need a fresh operator pass.
 - Bounded display-state follow-up (2026-07-29): channel-session exit now prunes recoverable automatic, idle, and settled preview records while retaining in-flight work, manual translations, suppression, cancelled restore state, and source archives. Focused red/green coverage proves channel indexes and generations are released when empty and that revisiting a pruned channel restores from the bounded persistent cache without another provider request. The DiscordPTB smoke gate above remains required before marking the display milestone fully observed.
 
-## Later Milestones — RETIRED, superseded by `docs/extraction-plan.md`
+## Later Milestones — RETIRED, superseded by the archived extraction plan
 
 The original list cut milestones by feature and by layer and scheduled legacy removal last:
 
@@ -2156,7 +2157,7 @@ anywhere while modules must be hand-injected.
 
 The replacement cuts by state ownership and deletes the owned state in the same commit, with a
 ratchet (`tests/architecture-budget.test.js`) that fails the suite whenever `runtime.js` or its
-module-level var count grows. See `docs/extraction-plan.md`.
+module-level var count grows. The detailed replacement plan is retained in the external project archive.
 
 The display milestone recorded above stands as completed history; its outstanding debt is
-listed in the replacement plan and paid in that plan's M0.
+captured by the architecture audit and the active recovery sequence above.

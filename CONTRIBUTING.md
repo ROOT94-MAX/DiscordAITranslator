@@ -10,18 +10,21 @@
 
 1. Read `docs/README.md` and the relevant canonical document.
 2. Reproduce the behavior with a focused test.
-3. Run the test and confirm it fails for the expected reason.
-4. Implement the smallest behavior change.
-5. Run the focused test, then `npm run verify`.
-6. Review the diff for unrelated settings, documentation, and metadata changes.
-7. Back up and deploy the plugin for a Discord smoke test when runtime behavior changed.
+3. If the focused test loads `DiscordAITranslator.plugin.js`, run `npm run build` first so it exercises the current `src/` tree.
+4. Run the test and confirm it fails for the expected reason.
+5. Implement the smallest behavior change.
+6. Rebuild when `src/` changed, run the focused test, then `npm run verify`.
+7. Review the diff for unrelated settings, documentation, and metadata changes.
+8. Back up and deploy the plugin for a Discord smoke test when runtime behavior changed.
 
 ## Commands
 
 ```powershell
-npm run check
-npm test
-npm run verify
+npm run build        # regenerate DiscordAITranslator.plugin.js from src/
+npm run build:check  # confirm the committed plugin matches a fresh build
+npm run check        # syntax-check the generated plugin
+npm test             # run the full test suite
+npm run verify       # build check + syntax check + full test suite
 ```
 
 Run one test file:
@@ -30,9 +33,11 @@ Run one test file:
 npm test -- tests/channel-primary-engine-regression.test.js
 ```
 
+After changing `src/`, run `npm run build` before a focused test that instantiates the generated plugin. Otherwise the test may load an older bundle.
+
 ## Release Metadata
 
-The BetterDiscord `@version` header in `DiscordAITranslator.plugin.js` is the runtime version source. Keep `package.json`, `README.md`, and `CHANGELOG.md` aligned with it.
+`src/plugin/metadata.json` is the source of truth for the BetterDiscord metadata banner, including `@version`. The build copies it into `DiscordAITranslator.plugin.js`; keep `package.json`, `README.md`, and `CHANGELOG.md` aligned with that source.
 
 The distributed plugin metadata must use an English description and include the repository through `@authorLink`, `@website`, or `@source` metadata.
 

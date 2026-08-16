@@ -186,39 +186,28 @@ https://refact0r.github.io/system24/build/system24.css
 
 ## 项目结构与测试
 
+自 v0.3.38 起源码已模块化：`src/` 下的模块由构建脚本确定性打包为单文件产物，BetterDiscord 用户只需安装一个 `DiscordAITranslator.plugin.js`。
+
 ```text
 discord翻译/
-├── AGENTS.md                        # 项目规则与文档权威顺序
-├── CONTRIBUTING.md                  # 开发、测试与部署流程
-├── DiscordAITranslator.plugin.js   # 主插件文件 (BetterDiscord 入口)
-├── package.json                    # 统一检查与测试命令
-├── CHANGELOG.md                    # 版本变更日志
-├── README.md                       # 项目说明
-├── LICENSE                         # GPL-2.0 协议
-├── docs/
-│   ├── README.md                    # 文档索引与权威规则
-│   ├── product.md                   # 已确认的产品行为
-│   ├── settings.md                  # 频道与全局设置边界
-│   ├── providers.md                 # 翻译与语言检测服务契约
-│   ├── architecture.md              # 当前架构与目标模块边界
-│   └── recovery-plan.md              # 唯一恢复与实施顺序
-└── tests/                          # 自动化回归测试套件
-    ├── helpers/
-    │   └── createPluginInstance.js
-    ├── channel-enablement-regression.test.js
-    ├── channel-primary-engine-regression.test.js
-    ├── channel-title-regression.test.js
-    ├── historical-translation-job.test.js
-    ├── provider-regression.test.js
-    ├── settings-contract-regression.test.js
-    ├── popout-scope-regression.test.js
-    ├── translation-regression.test.js
-    ├── protection-regression.test.js
-    ├── local-language-precheck.test.js
-    ├── auto-translate-precheck-regression.test.js
-    ├── ai-decision-allcaps-regression.test.js
-    ├── manual-translation-button-regression.test.js
-    └── typing-during-translation-regression.test.js
+├── DiscordAITranslator.plugin.js   # 构建产物（BetterDiscord 安装入口，勿手改）
+├── src/                            # 模块化源码
+│   ├── plugin/                     # 入口与插件元数据（版本号在此维护）
+│   ├── legacy/                     # 迁移中的组合根与补丁外壳
+│   ├── display/                    # 显示状态仓库、事务控制器、渲染适配
+│   ├── orchestrator/               # 实时/历史队列、频道切换、分块传输
+│   ├── received/                   # 接收消息翻译管线与历史消息源
+│   ├── sent/                       # 发送消息翻译管线
+│   ├── providers/                  # 翻译服务商客户端
+│   ├── settings/                   # 设置存储与迁移
+│   ├── status/                     # 状态胶囊
+│   ├── ui/                         # 设置面板与交互组件
+│   └── cache/ viewport/ language/ protection/ …
+├── scripts/build-plugin.mjs        # 确定性构建（esbuild，含 @buildId 指纹）
+├── tests/                          # 自动化回归测试套件
+├── docs/                           # 权威文档（索引见 docs/README.md）
+├── AGENTS.md / CONTRIBUTING.md     # 项目规则与开发流程
+└── package.json                    # 构建、检查与测试命令
 ```
 
 ### 本地测试校验
@@ -226,10 +215,11 @@ discord翻译/
 安装 Node.js 20 或更高版本后，统一运行：
 
 ```powershell
-npm run verify
+npm run build      # 从 src/ 重新生成插件文件
+npm run verify     # 构建校验 + 语法检查 + 全部测试（部署前必跑）
 ```
 
-只运行某一个回归文件时可以使用 `npm test -- tests/translation-regression.test.js`。
+注意：测试会加载生成的插件文件，改动 `src/` 后请先 `npm run build` 再跑聚焦测试，否则执行的是旧产物。只运行某一个回归文件时可以使用 `npm test -- tests/translation-regression.test.js`。
 
 完整版本历史见 [CHANGELOG.md](./CHANGELOG.md)，技术细节见 [docs/](./docs/)。
 
