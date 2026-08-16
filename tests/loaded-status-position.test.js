@@ -18,9 +18,14 @@ function createPositionHarness({anchorRect, hintNodes} = {}) {
 	// a document-wide survey sees the hint every time - its container depth varies.
 	// The scan WALKS UP from the composer; only the deepest level of this fixture
 	// carries the hint nodes, so a fixed-depth scan cannot find them.
+	let levelScans = 0;
 	const makeLevel = rect => ({getBoundingClientRect: () => rect, querySelectorAll: () => [], parentElement: null});
 	const hintScope = makeLevel({left: 820, top: 1100, right: 1501, bottom: 1193});
-	hintScope.querySelectorAll = selector => selector == "div, span" ? (hintNodes || []) : [];
+	hintScope.querySelectorAll = selector => {
+		if (selector != "div, span") return [];
+		levelScans++;
+		return hintNodes || [];
+	};
 	const levelTwo = makeLevel({left: 820, top: 1100, right: 1501, bottom: 1193});
 	const composerWrapper = makeLevel({left: 820, top: 1120, right: 1493, bottom: 1193});
 	composerWrapper.parentElement = levelTwo;
@@ -44,6 +49,7 @@ function createPositionHarness({anchorRect, hintNodes} = {}) {
 	return {
 		plugin,
 		element,
+		levelScans: () => levelScans,
 		restore() {
 			global.document = realDocument;
 			global.window = realWindow;
@@ -167,4 +173,23 @@ test("a retry-state capsule disappears once the user leaves its channel", async 
 	delete global.window.addEventListener;
 	delete global.window.removeEventListener;
 	global.document = realDocument;
+});
+
+test("a repeated heartbeat tick on the same composer costs zero hint scans", () => {
+	// Real-client regression (2026-08-16): the once-per-second heartbeat re-ran the
+	// ancestor walk every tick and read textContent across the composer subtrees each
+	// second - the same layout-thrash flicker as the old document-wide scan. The scan
+	// result is cached per anchor: a second positioning pass must not rescan.
+	const harness = createPositionHarness();
+	try {
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+		const firstPassScans = harness.levelScans();
+		assert.ok(firstPassScans >= 1, "setup: the first pass scans the composer levels");
+
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+
+		assert.equal(harness.levelScans(), firstPassScans, "heartbeat ticks reuse the cached scan result");
+	}
+	finally {harness.restore();}
 });

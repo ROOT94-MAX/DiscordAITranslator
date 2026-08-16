@@ -5,8 +5,25 @@
 // sits at the composer's top-right; without a hint the capsule returns to the
 // original spot - directly above the input, right side. Debug builds record the
 // anchor/hint geometry so future drift is calibrated from evidence, not guesses.
+// Real-client regression (2026-08-16): the heartbeat repositions once per second, and
+// re-running the ancestor walk every tick read textContent across the composer's
+// ancestor subtrees each second - the same layout-thrash cost profile as the old
+// document-wide scan, and the user saw the same flicker. Detection also never
+// succeeded on this client (149 recorded runs), so the repeated scans were pure
+// cost. The result is now cached per anchor element: a new composer (channel switch,
+// window rebuild) rescans once; a cached hit is reused while it stays connected, and
+// a cached miss rescans at most every 15 seconds in case slow mode turns on later.
+const hintScanCache = new WeakMap();
+const HINT_MISS_RESCAN_MS = 15000;
+
 function findNativeTextAreaStatusElement({document: documentRef, anchorRect = null, anchorElement = null}) {
 	if (!documentRef) return null;
+	const now = Date.now();
+	const cached = anchorElement && hintScanCache.get(anchorElement) || null;
+	if (cached) {
+		if (cached.hint && (!cached.hint.isConnected || typeof cached.hint.isConnected != "boolean")) hintScanCache.delete(anchorElement);
+		else if (cached.hint || now - cached.scannedAt < HINT_MISS_RESCAN_MS) return cached.hint;
+	}
 	// Survey evidence (2026-08-16): two fixed-depth scope guesses both found nothing
 	// while a document-wide survey saw the hint every time - its container depth
 	// varies with the client build. The scan WALKS UP from the composer one wrapper
@@ -36,16 +53,18 @@ function findNativeTextAreaStatusElement({document: documentRef, anchorRect = nu
 		}).filter(Boolean).sort((a, b) => b.score - a.score);
 	};
 	let scope = anchorElement && anchorElement.parentElement || null;
+	let found = null;
 	for (let level = 0; scope && level < 8; level++) {
 		let scopeRect = null;
 		try {scopeRect = scope.getBoundingClientRect && scope.getBoundingClientRect() || null;}
 		catch (err) {scopeRect = null;}
 		if (anchorRect && scopeRect && scopeRect.top < anchorRect.top - 150) break;
 		const matches = matchIn(scope);
-		if (matches.length) return matches[0] && matches[0].element || null;
+		if (matches.length) {found = matches[0] && matches[0].element || null; break;}
 		scope = scope.parentElement;
 	}
-	return null;
+	if (anchorElement) hintScanCache.set(anchorElement, {hint: found, scannedAt: now});
+	return found;
 }
 
 function positionLoadedStatusElement({BDFDB, document: documentRef, window: windowRef, element}) {

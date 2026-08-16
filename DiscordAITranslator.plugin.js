@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId 7ed929eb351cc295
+ * @buildId a1e4a1a6aa06224e
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -4807,8 +4807,14 @@ var require_translate_components = __commonJS({
 // src/ui/loaded-status-position.js
 var require_loaded_status_position = __commonJS({
   "src/ui/loaded-status-position.js"(exports2, module2) {
+    var hintScanCache = /* @__PURE__ */ new WeakMap(), HINT_MISS_RESCAN_MS = 15e3;
     function findNativeTextAreaStatusElement({ document: documentRef, anchorRect = null, anchorElement = null }) {
       if (!documentRef) return null;
+      let now = Date.now(), cached = anchorElement && hintScanCache.get(anchorElement) || null;
+      if (cached) {
+        if (cached.hint && (!cached.hint.isConnected || typeof cached.hint.isConnected != "boolean")) hintScanCache.delete(anchorElement);
+        else if (cached.hint || now - cached.scannedAt < HINT_MISS_RESCAN_MS) return cached.hint;
+      }
       let matchIn = /* @__PURE__ */ __name((scope2) => {
         let candidates = [];
         try {
@@ -4828,7 +4834,7 @@ var require_loaded_status_position = __commonJS({
           }
           return { element, rect, score: rect.right + rect.bottom };
         }).filter(Boolean).sort((a, b) => b.score - a.score);
-      }, "matchIn"), scope = anchorElement && anchorElement.parentElement || null;
+      }, "matchIn"), scope = anchorElement && anchorElement.parentElement || null, found = null;
       for (let level = 0; scope && level < 8; level++) {
         let scopeRect = null;
         try {
@@ -4838,10 +4844,13 @@ var require_loaded_status_position = __commonJS({
         }
         if (anchorRect && scopeRect && scopeRect.top < anchorRect.top - 150) break;
         let matches = matchIn(scope);
-        if (matches.length) return matches[0] && matches[0].element || null;
+        if (matches.length) {
+          found = matches[0] && matches[0].element || null;
+          break;
+        }
         scope = scope.parentElement;
       }
-      return null;
+      return anchorElement && hintScanCache.set(anchorElement, { hint: found, scannedAt: now }), found;
     }
     __name(findNativeTextAreaStatusElement, "findNativeTextAreaStatusElement");
     function positionLoadedStatusElement({ BDFDB, document: documentRef, window: windowRef, element }) {
@@ -10274,7 +10283,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "7ed929eb351cc295";
+            return "a1e4a1a6aa06224e";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
