@@ -11127,28 +11127,6 @@ __________________ __________________ __________________
             for (let element of elements)
               element && element.remove && element.remove();
           }
-          findNativeTextAreaStatusElement(anchorRect = null, anchorElement = null) {
-            if (typeof document > "u") return null;
-            let candidates = [];
-            try {
-              candidates = Array.from((anchorElement && anchorElement.parentElement || anchorElement || document).querySelectorAll("div, span"));
-            } catch {
-              return null;
-            }
-            let matches = candidates.map((element) => {
-              if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
-              let text = (element.textContent || "").trim();
-              if (!text || !/慢速模式|slow\s*mode|slowmode/i.test(text)) return null;
-              let rect = element.getBoundingClientRect();
-              if (!rect.width || !rect.height) return null;
-              if (anchorRect) {
-                let nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42, nearInputRight = rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45, aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8;
-                if (!nearInputTop || !nearInputRight || !aboveInput) return null;
-              }
-              return { element, rect, score: rect.right + rect.bottom };
-            }).filter(Boolean).sort((a, b) => b.score - a.score);
-            return matches[0] && matches[0].element || null;
-          }
           isTranslateMasterSwitchVisuallyEnabled(channelId) {
             if (!channelId || !this.isTranslationEnabled(channelId) || typeof document > "u") return !1;
             let buttons = [];
@@ -11162,37 +11140,18 @@ __________________ __________________ __________________
           }
           positionLoadedAutoTranslationStatusElement(element) {
             if (!element || typeof document > "u") return;
-            let selectors = ['[class*="channelTextArea"]', 'form [role="textbox"]'], anchors = [];
-            for (let selector of selectors)
-              if (selector)
-                try {
-                  anchors = anchors.concat(Array.from(document.querySelectorAll(selector)).filter(Boolean));
-                } catch {
-                }
-            anchors = anchors.map((anchor2) => {
-              if (!anchor2 || !anchor2.getBoundingClientRect) return null;
-              let rect = anchor2.getBoundingClientRect();
-              if (!rect.width || !rect.height || !(rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth)) return null;
-              let nearBottom = Math.max(0, window.innerHeight - rect.bottom), score = Math.min(rect.width, 900) - nearBottom * 2 + rect.right * 0.05;
-              return { anchor: anchor2, rect, score };
-            }).filter(Boolean).sort((a, b) => b.score - a.score);
-            let anchorData = anchors[0], anchor = anchorData && anchorData.anchor, viewportPadding = 12, maxStatusWidth = Math.max(180, Math.min(360, window.innerWidth - viewportPadding * 2));
-            if (anchor && anchor.getBoundingClientRect) {
-              let anchorRect = anchor.getBoundingClientRect();
-              anchorRect && anchorRect.width && (maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(anchorRect.width * 0.55), anchorRect.width - 16)));
+            let viewportPadding = 12, innerWidth = typeof window < "u" && window.innerWidth || 1280, innerHeight = typeof window < "u" && window.innerHeight || 720, scrollerRect = null;
+            try {
+              let scroller = document.querySelector(BDFDB.dotCN && BDFDB.dotCN.messagesscroller || ".messages-scroller");
+              scroller && scroller.getBoundingClientRect && (scrollerRect = scroller.getBoundingClientRect());
+            } catch {
+              scrollerRect = null;
             }
-            element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
-            let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20);
-            if (element.style.right = "auto", element.style.bottom = "auto", anchor && anchor.getBoundingClientRect) {
-              let rect = anchor.getBoundingClientRect(), nativeStatus = this.findNativeTextAreaStatusElement(rect, anchor), left = rect.right - statusWidth - viewportPadding, top = rect.top - statusHeight - 8;
-              if (nativeStatus && nativeStatus.getBoundingClientRect) {
-                let nativeRect = nativeStatus.getBoundingClientRect();
-                left = Math.max(rect.left + 8, Math.min(nativeRect.right - statusWidth, rect.right - statusWidth - 8)), top = nativeRect.top - statusHeight - 8;
-              } else
-                left = Math.max(rect.left + 8, Math.min(left, rect.right - statusWidth - 8));
-              top = Math.max(viewportPadding, Math.min(top, window.innerHeight - statusHeight - viewportPadding)), element.style.left = `${Math.round(left)}px`, element.style.top = `${Math.round(top)}px`;
-            } else
-              element.style.left = `${Math.max(viewportPadding, window.innerWidth - statusWidth - 108)}px`, element.style.top = `${Math.max(viewportPadding, window.innerHeight - statusHeight - 54)}px`;
+            element.style.right = "auto", element.style.bottom = "auto";
+            let maxStatusWidth = Math.max(180, Math.min(360, innerWidth - viewportPadding * 2));
+            scrollerRect && scrollerRect.width && (maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(scrollerRect.width * 0.55), scrollerRect.width - 16))), element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
+            let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20), anchorRight = scrollerRect && scrollerRect.width ? scrollerRect.right : innerWidth, anchorBottom = scrollerRect && scrollerRect.height ? scrollerRect.bottom : innerHeight, left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth - viewportPadding, innerWidth - statusWidth - viewportPadding)), top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight - viewportPadding, innerHeight - statusHeight - viewportPadding));
+            element.style.left = `${Math.round(left)}px`, element.style.top = `${Math.round(top)}px`;
           }
           isChannelTextAreaFocused() {
             return this.ensureMessageViewportStore().isChannelTextAreaFocused();

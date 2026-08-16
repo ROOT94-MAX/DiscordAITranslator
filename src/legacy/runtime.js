@@ -1445,30 +1445,6 @@ module.exports = (_ => {
 				}
 			}
 
-			findNativeTextAreaStatusElement (anchorRect = null, anchorElement = null) {
-				if (typeof document == "undefined") return null;
-				let candidates = [];
-				// Scoped to the input container: a document-wide scan read textContent off every
-				// div and span in the app, once per status update, once per message.
-				try {candidates = Array.from((anchorElement && anchorElement.parentElement || anchorElement || document).querySelectorAll("div, span"));}
-				catch (err) {return null;}
-				const matches = candidates.map(element => {
-					if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
-					const text = (element.textContent || "").trim();
-					if (!text || !(/慢速模式|slow\s*mode|slowmode/i.test(text))) return null;
-					const rect = element.getBoundingClientRect();
-					if (!rect.width || !rect.height) return null;
-					if (anchorRect) {
-						const nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42;
-						const nearInputRight = rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45;
-						const aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8;
-						if (!nearInputTop || !nearInputRight || !aboveInput) return null;
-					}
-					return {element, rect, score: rect.right + rect.bottom};
-				}).filter(Boolean).sort((a, b) => b.score - a.score);
-				return matches[0] && matches[0].element || null;
-			}
-
 			isTranslateMasterSwitchVisuallyEnabled (channelId) {
 				if (!channelId || !this.isTranslationEnabled(channelId)) return false;
 				if (typeof document == "undefined") return false;
@@ -1484,60 +1460,32 @@ module.exports = (_ => {
 
 			positionLoadedAutoTranslationStatusElement (element) {
 				if (!element || typeof document == "undefined") return;
-				const selectors = ['[class*="channelTextArea"]', 'form [role="textbox"]'];
-				let anchors = [];
-				for (const selector of selectors) {
-					if (!selector) continue;
-					try {anchors = anchors.concat(Array.from(document.querySelectorAll(selector)).filter(Boolean));}
-					catch (err) {}
-				}
-				anchors = anchors.map(anchor => {
-					if (!anchor || !anchor.getBoundingClientRect) return null;
-					const rect = anchor.getBoundingClientRect();
-					if (!rect.width || !rect.height) return null;
-					const visible = rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
-					if (!visible) return null;
-					const nearBottom = Math.max(0, window.innerHeight - rect.bottom);
-					const widthScore = Math.min(rect.width, 900);
-					const score = widthScore - nearBottom * 2 + rect.right * 0.05;
-					return {anchor, rect, score};
-				}).filter(Boolean).sort((a, b) => b.score - a.score);
-				const anchorData = anchors[0];
-				const anchor = anchorData && anchorData.anchor;
+				// The chat scroller is the one anchor the 2026-08-16 probe proved stable
+				// across client updates; guessing textarea containers drifted and floated
+				// the capsule into the wrong corner.
 				const viewportPadding = 12;
-				let maxStatusWidth = Math.max(180, Math.min(360, window.innerWidth - viewportPadding * 2));
-				if (anchor && anchor.getBoundingClientRect) {
-					const anchorRect = anchor.getBoundingClientRect();
-					if (anchorRect && anchorRect.width) maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(anchorRect.width * 0.55), anchorRect.width - 16));
+				const innerWidth = typeof window != "undefined" && window.innerWidth || 1280;
+				const innerHeight = typeof window != "undefined" && window.innerHeight || 720;
+				let scrollerRect = null;
+				try {
+					const scroller = document.querySelector(BDFDB.dotCN && BDFDB.dotCN.messagesscroller || ".messages-scroller");
+					if (scroller && scroller.getBoundingClientRect) scrollerRect = scroller.getBoundingClientRect();
 				}
+				catch (err) {scrollerRect = null;}
+				element.style.right = "auto";
+				element.style.bottom = "auto";
+				let maxStatusWidth = Math.max(180, Math.min(360, innerWidth - viewportPadding * 2));
+				if (scrollerRect && scrollerRect.width) maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(scrollerRect.width * 0.55), scrollerRect.width - 16));
 				element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
 				const measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null;
 				const statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth));
 				const statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20);
-				element.style.right = "auto";
-				element.style.bottom = "auto";
-				if (anchor && anchor.getBoundingClientRect) {
-					const rect = anchor.getBoundingClientRect();
-					const nativeStatus = this.findNativeTextAreaStatusElement(rect, anchor);
-					let left = rect.right - statusWidth - viewportPadding;
-					let top = rect.top - statusHeight - 8;
-					if (nativeStatus && nativeStatus.getBoundingClientRect) {
-						const nativeRect = nativeStatus.getBoundingClientRect();
-						// 检测到 Discord 原生“慢速模式已开启”时，放在它的上方并右对齐，不再横向挪到频道列表。
-						left = Math.max(rect.left + 8, Math.min(nativeRect.right - statusWidth, rect.right - statusWidth - 8));
-						top = nativeRect.top - statusHeight - 8;
-					}
-					else {
-						left = Math.max(rect.left + 8, Math.min(left, rect.right - statusWidth - 8));
-					}
-					top = Math.max(viewportPadding, Math.min(top, window.innerHeight - statusHeight - viewportPadding));
-					element.style.left = `${Math.round(left)}px`;
-					element.style.top = `${Math.round(top)}px`;
-				}
-				else {
-					element.style.left = `${Math.max(viewportPadding, window.innerWidth - statusWidth - 108)}px`;
-					element.style.top = `${Math.max(viewportPadding, window.innerHeight - statusHeight - 54)}px`;
-				}
+				const anchorRight = scrollerRect && scrollerRect.width ? scrollerRect.right : innerWidth;
+				const anchorBottom = scrollerRect && scrollerRect.height ? scrollerRect.bottom : innerHeight;
+				const left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth - viewportPadding, innerWidth - statusWidth - viewportPadding));
+				const top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight - viewportPadding, innerHeight - statusHeight - viewportPadding));
+				element.style.left = `${Math.round(left)}px`;
+				element.style.top = `${Math.round(top)}px`;
 			}
 
 			isChannelTextAreaFocused () {
