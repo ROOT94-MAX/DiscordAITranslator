@@ -189,6 +189,42 @@ test("a deleted message is removed from display cache live history and reply pre
 	finally {harness.restore();}
 });
 
+test("disabling restores a manually translated message even when it carries a legacy display entry", async () => {
+	const harness = createHarness();
+	try {
+		const {plugin} = harness;
+		const channelId = "channel-manual-disable";
+		delete plugin.isTranslationEnabled;
+		plugin.setChannelEnablementStateValue(channelId, true);
+		const message = {id: "manual-message", channel_id: channelId, content: "original text", embeds: [], attachments: [], author: {id: "other-user"}};
+		plugin.captureReceivedMessageSource({messageId: message.id, channelId, generation: 1, sourceSignature: "manual-sig", source: {content: message.content, embeds: []}});
+		await plugin.commitReceivedDisplayResult({messageId: message.id, channelId, generation: 1, sourceSignature: "manual-sig", origin: "automatic", status: "translated", translation: {content: "自动译文", auto: true}});
+		// The real manual path paints through applyStoredTranslationToMessage: it writes the
+		// legacy per-message display entry AND commits the manual store record.
+		plugin.applyStoredTranslationToMessage(message, {
+			channelId,
+			auto: false,
+			manual: true,
+			content: "手动译文",
+			translatedContent: "手动译文",
+			originalContent: "original text",
+			embeds: {}
+		}, {content: message.content, embeds: []});
+		assert.equal(plugin.isMessageDisplayTranslated(message, channelId), true, "setup: the manual translation must be displayed first");
+
+		await plugin.toggleTranslation(channelId);
+
+		assert.equal(plugin.isMessageDisplayTranslated(message, channelId), false, "a channel disable must restore manually translated messages too");
+		assert.equal(plugin.getReceivedDisplayView(message.id).content, "original text");
+		// The store is only half the display system: the next render pass must not paint
+		// the legacy per-message entry back over the restored original.
+		const stream = {content: Object.assign({}, message, {content: "手动译文"})};
+		plugin.processMessages({instance: {props: {channel: {id: channelId}, channelStream: [stream]}}});
+		assert.equal(stream.content.content, "original text", "the next render pass must keep the original after disable");
+	}
+	finally {harness.restore();}
+});
+
 test("disabling restores an already-painted manual reply preview", async () => {
 	const harness = createHarness({mountedMessageIds: ["reply-message"]});
 	try {

@@ -10559,7 +10559,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             if (!message || !message.id || !this.ensureReceivedDisplayRuntime().hasSourceArchive(message.id)) return !1;
             let currentContent = this.normalizeExtractedMessageText(message.content).trim();
             if (!currentContent) return !1;
-            let storedOriginal = this.ensureReceivedDisplayRuntime().peekSourceArchive(message.id).message, storedOriginalData = storedOriginal.originalContentData || {}, editRecord = this.ensureReceivedDisplayRuntime().getDisplayState(message.id), translation = editRecord && editRecord.translation || {};
+            let storedOriginal = this.ensureReceivedDisplayRuntime().peekSourceArchive(message.id).message, storedOriginalData = storedOriginal.originalContentData || {}, editRecord = this.ensureReceivedDisplayRuntime().getDisplayState(message.id), translation = editRecord && (editRecord.translation || editRecord.restoredTranslation) || {};
             return [
               storedOriginal.content,
               storedOriginalData.content,
@@ -11269,9 +11269,9 @@ __________________ __________________ __________________
               channelId && this.getDisplayedTranslationChannelId(record.messageId) != channelId || this.clearDisplayedTranslationState(record.messageId);
             this.ensureReceivedDisplayRuntime().clearPreviews(channelId);
           }
-          clearDisplayedAutoTranslations(channelId = null) {
+          clearDisplayedAutoTranslations(channelId = null, options = {}) {
             for (let record of this.ensureReceivedDisplayRuntime().listTranslated())
-              !record.translation || !record.translation.auto || channelId && this.getDisplayedTranslationChannelId(record.messageId) != channelId || this.clearDisplayedTranslationState(record.messageId);
+              !record.translation || !record.translation.auto && !(options && options.includeManual) || channelId && this.getDisplayedTranslationChannelId(record.messageId) != channelId || this.clearDisplayedTranslationState(record.messageId);
             for (let record of this.ensureReceivedDisplayRuntime().listPreviewed())
               !record.preview || !record.preview.auto || channelId && record.preview.channelId != channelId || this.ensureReceivedDisplayRuntime().clearPreview(record.messageId);
             this.clearChannelTitleTranslations(channelId);
@@ -12658,7 +12658,7 @@ __________________ __________________ __________________
               try {
                 await this.restoreReceivedDisplayChannel(channelId, { clearPreviews: !0, clearSuppressions: !0 });
               } finally {
-                channelToggleOperations.isCurrent(channelId, operationVersion) && !this.isTranslationEnabled(channelId) && (this.clearDisplayedAutoTranslations(channelId), this.processAutoTranslationQueue());
+                channelToggleOperations.isCurrent(channelId, operationVersion) && !this.isTranslationEnabled(channelId) && (this.clearDisplayedAutoTranslations(channelId, { includeManual: !0 }), this.processAutoTranslationQueue());
               }
               return;
             }

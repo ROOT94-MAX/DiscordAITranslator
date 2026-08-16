@@ -766,7 +766,7 @@ module.exports = (_ => {
 				const storedOriginal = this.ensureReceivedDisplayRuntime().peekSourceArchive(message.id).message;
 				const storedOriginalData = storedOriginal.originalContentData || {};
 				const editRecord = this.ensureReceivedDisplayRuntime().getDisplayState(message.id);
-				const translation = editRecord && editRecord.translation || {};
+				const translation = editRecord && (editRecord.translation || editRecord.restoredTranslation) || {};
 				const knownContents = [
 					storedOriginal.content,
 					storedOriginalData.content,
@@ -1744,11 +1744,10 @@ module.exports = (_ => {
 				this.ensureReceivedDisplayRuntime().clearPreviews(channelId);
 			}
 
-			clearDisplayedAutoTranslations (channelId = null) {
+			clearDisplayedAutoTranslations (channelId = null, options = {}) {
 				for (const record of this.ensureReceivedDisplayRuntime().listTranslated()) {
-					// auto lives inside the stored translation payload and is not the same
-					// predicate as the record origin, so it stays the filter here.
-					if (!record.translation || !record.translation.auto) continue;
+					// A channel disable passes includeManual so its restore covers manual paints too.
+					if (!record.translation || (!record.translation.auto && !(options && options.includeManual))) continue;
 					if (channelId && this.getDisplayedTranslationChannelId(record.messageId) != channelId) continue;
 					this.clearDisplayedTranslationState(record.messageId);
 				}
@@ -3500,7 +3499,7 @@ module.exports = (_ => {
 					this.resetAutoTranslationTracking(channelId);
 					try {await this.restoreReceivedDisplayChannel(channelId, {clearPreviews: true, clearSuppressions: true});}
 					finally {if (channelToggleOperations.isCurrent(channelId, operationVersion) && !this.isTranslationEnabled(channelId)) {
-							this.clearDisplayedAutoTranslations(channelId);
+							this.clearDisplayedAutoTranslations(channelId, {includeManual: true});
 							this.processAutoTranslationQueue();
 						}}
 					return;
