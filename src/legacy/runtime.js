@@ -65,6 +65,7 @@ module.exports = (_ => {
 		const {createTranslatorStyles} = require("../ui/styles");
 		const {renderSettingsPanel} = require("../ui/settings-panel");
 		const {createTranslateComponents, translateIcon, translateIconUntranslate} = require("../ui/translate-components");
+		const loadedStatusPosition = require("../ui/loaded-status-position");
 		const {createChannelTitleStore} = require("../channel-title/channel-title-store");
 		const {createMessageViewportStore} = require("../viewport/message-viewport-store");
 		const {LOADED_STATUS_COMPLETION_HIDE_MS, LOADED_STATUS_REFRESH_MS, createLoadedTranslationStatusStore} = require("../status/loaded-translation-status-store");
@@ -1457,53 +1458,7 @@ module.exports = (_ => {
 			}
 
 			positionLoadedAutoTranslationStatusElement (element) {
-				if (!element || typeof document == "undefined") return;
-				// Product rule (2026-08-16): the capsule's right edge sits on the same
-				// vertical line as the native hint's right edge (slow mode etc.), floating
-				// above the hint; without a hint it takes the hint's own row, right-aligned
-				// to the chat area. The hint scan scopes to the chat wrapper - the proven
-				// scroller's parent - because the hint lives outside the composer form.
-				const viewportPadding = 12;
-				const innerWidth = typeof window != "undefined" && window.innerWidth || 1280;
-				const innerHeight = typeof window != "undefined" && window.innerHeight || 720;
-				let scroller = null, scrollerRect = null;
-				try {
-					scroller = document.querySelector(BDFDB.dotCN && BDFDB.dotCN.messagesscroller || ".messages-scroller");
-					if (scroller && scroller.getBoundingClientRect) scrollerRect = scroller.getBoundingClientRect();
-				}
-				catch (err) {scroller = null; scrollerRect = null;}
-				let composerRect = null, nativeHintRect = null;
-				try {
-					const composer = document.querySelector("form");
-					if (composer && composer.getBoundingClientRect) composerRect = composer.getBoundingClientRect() || null;
-					const hintScope = scroller && scroller.parentElement || composer && composer.parentElement || null;
-					if (hintScope && hintScope.querySelectorAll) {
-						const nativeHint = Array.from(hintScope.querySelectorAll("div, span")).map(node => {
-							if (!node || !node.getBoundingClientRect) return null;
-							const text = (node.textContent || "").trim();
-							if (!text || !(/慢速模式|slow\s*mode|slowmode|已开启/i.test(text))) return null;
-							const rect = node.getBoundingClientRect();
-							if (!rect.width || !rect.height) return null;
-							return {rect, score: rect.right + rect.bottom};
-						}).filter(Boolean).sort((a, b) => b.score - a.score)[0];
-						nativeHintRect = nativeHint && nativeHint.rect || null;
-					}
-				}
-				catch (err) {composerRect = null;}
-				element.style.right = "auto";
-				element.style.bottom = "auto";
-				let maxStatusWidth = Math.max(180, Math.min(360, innerWidth - viewportPadding * 2));
-				if (scrollerRect && scrollerRect.width) maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(scrollerRect.width * 0.55), scrollerRect.width - 16));
-				element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
-				const measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null;
-				const statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth));
-				const statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20);
-				const anchorRight = nativeHintRect ? nativeHintRect.right : scrollerRect && scrollerRect.width ? scrollerRect.right - viewportPadding : composerRect && composerRect.width ? composerRect.right - viewportPadding : innerWidth - viewportPadding;
-				const anchorBottom = nativeHintRect ? nativeHintRect.top - 6 : composerRect && composerRect.height ? composerRect.bottom - 6 : scrollerRect && scrollerRect.height ? scrollerRect.bottom - viewportPadding : innerHeight - viewportPadding;
-				const left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth, innerWidth - statusWidth - viewportPadding));
-				const top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight, innerHeight - statusHeight - viewportPadding));
-				element.style.left = `${Math.round(left)}px`;
-				element.style.top = `${Math.round(top)}px`;
+				loadedStatusPosition.positionLoadedStatusElement({BDFDB, document: typeof document != "undefined" ? document : null, window: typeof window != "undefined" ? window : null, element});
 			}
 
 			isChannelTextAreaFocused () {

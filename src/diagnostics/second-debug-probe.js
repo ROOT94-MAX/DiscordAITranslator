@@ -434,6 +434,7 @@ function createSecondDebugProbe({
 		target.TranslatorDebug = {
 			marker: SECOND_DEBUG_MARKER,
 			list: () => entries.slice(),
+			recordPositioning: entry => record("statusPositioning", entry),
 			tryRefresh: options => runRefreshExperiment(options || experimentConfig || {}),
 			dump,
 			copy() {

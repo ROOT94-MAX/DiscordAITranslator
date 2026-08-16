@@ -4798,6 +4798,48 @@ var require_translate_components = __commonJS({
   }
 });
 
+// src/ui/loaded-status-position.js
+var require_loaded_status_position = __commonJS({
+  "src/ui/loaded-status-position.js"(exports2, module2) {
+    function positionLoadedStatusElement({ BDFDB, document: documentRef, window: windowRef, element }) {
+      if (!element || !documentRef || typeof documentRef.querySelector != "function") return;
+      let viewportPadding = 12, innerWidth = windowRef && windowRef.innerWidth || 1280, innerHeight = windowRef && windowRef.innerHeight || 720, scroller = null, scrollerRect = null;
+      try {
+        scroller = documentRef.querySelector(BDFDB && BDFDB.dotCN && BDFDB.dotCN.messagesscroller || ".messages-scroller"), scroller && scroller.getBoundingClientRect && (scrollerRect = scroller.getBoundingClientRect());
+      } catch {
+        scroller = null, scrollerRect = null;
+      }
+      let composerRect = null, nativeHintRect = null, positioningCandidates = [];
+      try {
+        let composer = documentRef.querySelector("form");
+        composer && composer.getBoundingClientRect && (composerRect = composer.getBoundingClientRect() || null);
+        let hintScope = scroller && scroller.parentElement || composer && composer.parentElement || null, stripFloor = (composerRect && composerRect.bottom || scrollerRect && scrollerRect.bottom || innerHeight) - 48;
+        if (hintScope && hintScope.querySelectorAll) {
+          let matches = Array.from(hintScope.querySelectorAll("div, span")).map((node) => {
+            if (!node || !node.getBoundingClientRect) return null;
+            let text = (node.textContent || "").trim();
+            if (!text || !/慢速模式|slow\s*mode|slowmode|已开启/i.test(text)) return null;
+            let rect = node.getBoundingClientRect();
+            return !rect.width || !rect.height ? null : { rect, area: rect.width * rect.height };
+          }).filter((match) => match && match.rect.bottom >= stripFloor && match.area <= 12800);
+          for (let match of matches.slice(0, 6)) positioningCandidates.push({ top: Math.round(match.rect.top), right: Math.round(match.rect.right), bottom: Math.round(match.rect.bottom), area: Math.round(match.area) });
+          let nativeHint = matches.sort((a, b) => a.area - b.area)[0];
+          nativeHintRect = nativeHint && nativeHint.rect || null;
+        }
+      } catch {
+        composerRect = null;
+      }
+      element.style.right = "auto", element.style.bottom = "auto";
+      let maxStatusWidth = Math.max(180, Math.min(360, innerWidth - viewportPadding * 2));
+      scrollerRect && scrollerRect.width && (maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(scrollerRect.width * 0.55), scrollerRect.width - 16))), element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
+      let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20), anchorRight = nativeHintRect ? nativeHintRect.right : scrollerRect && scrollerRect.width ? scrollerRect.right - viewportPadding : composerRect && composerRect.width ? composerRect.right - viewportPadding : innerWidth - viewportPadding, anchorBottom = nativeHintRect ? nativeHintRect.top - 6 : composerRect && composerRect.height ? composerRect.bottom - 6 : scrollerRect && scrollerRect.height ? scrollerRect.bottom - viewportPadding : innerHeight - viewportPadding, left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth, innerWidth - statusWidth - viewportPadding)), top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight, innerHeight - statusHeight - viewportPadding));
+      element.style.left = `${Math.round(left)}px`, element.style.top = `${Math.round(top)}px`;
+    }
+    __name(positionLoadedStatusElement, "positionLoadedStatusElement");
+    module2.exports = { positionLoadedStatusElement };
+  }
+});
+
 // src/channel-title/channel-title-store.js
 var require_channel_title_store = __commonJS({
   "src/channel-title/channel-title-store.js"(exports2, module2) {
@@ -9899,7 +9941,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { LOADED_STATUS_COMPLETION_HIDE_MS, LOADED_STATUS_REFRESH_MS, createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), loadedStatusPosition = require_loaded_status_position(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { LOADED_STATUS_COMPLETION_HIDE_MS, LOADED_STATUS_REFRESH_MS, createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -11163,36 +11205,7 @@ __________________ __________________ __________________
             return buttons.length ? buttons.some((button) => button && button.classList && button.classList.contains(BDFDB.disCN._translatortranslating)) : !1;
           }
           positionLoadedAutoTranslationStatusElement(element) {
-            if (!element || typeof document > "u") return;
-            let viewportPadding = 12, innerWidth = typeof window < "u" && window.innerWidth || 1280, innerHeight = typeof window < "u" && window.innerHeight || 720, scroller = null, scrollerRect = null;
-            try {
-              scroller = document.querySelector(BDFDB.dotCN && BDFDB.dotCN.messagesscroller || ".messages-scroller"), scroller && scroller.getBoundingClientRect && (scrollerRect = scroller.getBoundingClientRect());
-            } catch {
-              scroller = null, scrollerRect = null;
-            }
-            let composerRect = null, nativeHintRect = null;
-            try {
-              let composer = document.querySelector("form");
-              composer && composer.getBoundingClientRect && (composerRect = composer.getBoundingClientRect() || null);
-              let hintScope = scroller && scroller.parentElement || composer && composer.parentElement || null;
-              if (hintScope && hintScope.querySelectorAll) {
-                let nativeHint = Array.from(hintScope.querySelectorAll("div, span")).map((node) => {
-                  if (!node || !node.getBoundingClientRect) return null;
-                  let text = (node.textContent || "").trim();
-                  if (!text || !/慢速模式|slow\s*mode|slowmode|已开启/i.test(text)) return null;
-                  let rect = node.getBoundingClientRect();
-                  return !rect.width || !rect.height ? null : { rect, score: rect.right + rect.bottom };
-                }).filter(Boolean).sort((a, b) => b.score - a.score)[0];
-                nativeHintRect = nativeHint && nativeHint.rect || null;
-              }
-            } catch {
-              composerRect = null;
-            }
-            element.style.right = "auto", element.style.bottom = "auto";
-            let maxStatusWidth = Math.max(180, Math.min(360, innerWidth - viewportPadding * 2));
-            scrollerRect && scrollerRect.width && (maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(scrollerRect.width * 0.55), scrollerRect.width - 16))), element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
-            let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20), anchorRight = nativeHintRect ? nativeHintRect.right : scrollerRect && scrollerRect.width ? scrollerRect.right - viewportPadding : composerRect && composerRect.width ? composerRect.right - viewportPadding : innerWidth - viewportPadding, anchorBottom = nativeHintRect ? nativeHintRect.top - 6 : composerRect && composerRect.height ? composerRect.bottom - 6 : scrollerRect && scrollerRect.height ? scrollerRect.bottom - viewportPadding : innerHeight - viewportPadding, left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth, innerWidth - statusWidth - viewportPadding)), top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight, innerHeight - statusHeight - viewportPadding));
-            element.style.left = `${Math.round(left)}px`, element.style.top = `${Math.round(top)}px`;
+            loadedStatusPosition.positionLoadedStatusElement({ BDFDB, document: typeof document < "u" ? document : null, window: typeof window < "u" ? window : null, element });
           }
           isChannelTextAreaFocused() {
             return this.ensureMessageViewportStore().isChannelTextAreaFocused();

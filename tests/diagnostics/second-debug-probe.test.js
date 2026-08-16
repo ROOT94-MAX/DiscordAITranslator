@@ -659,3 +659,14 @@ test("recordMessageRowShapes survives a scroller without querySelectorAll", () =
 	assert.equal(entry.kind, "messageRowShapes");
 	assert.equal(typeof entry.error, "string");
 });
+
+test("installGlobal exposes recordPositioning so capsule geometry lands in the evidence file", () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+	const fakeWindow = {};
+	probe.installGlobal(fakeWindow);
+	assert.equal(typeof fakeWindow.TranslatorDebug.recordPositioning, "function");
+	fakeWindow.TranslatorDebug.recordPositioning({composerRect: {top: 640}, finalLeft: 808});
+	const entry = probe.list().filter(item => item.kind === "statusPositioning").at(-1);
+	assert.deepEqual(entry.composerRect, {top: 640});
+	assert.equal(entry.finalLeft, 808);
+});

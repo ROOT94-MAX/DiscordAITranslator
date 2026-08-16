@@ -23,9 +23,15 @@ function createPositionHarness({scrollerRect, composerRect, nativeRect} = {}) {
 		getBoundingClientRect: () => ({...fixture.nativeRect}),
 		textContent: "已开启"
 	};
+	// A large wrapper whose textContent also contains the hint words must never win
+	// the hint pick: matching it put the capsule on the icons above the input.
+	const wrapperNode = {
+		getBoundingClientRect: () => ({left: 220, top: 560, right: 980, bottom: 700, width: 760, height: 140}),
+		textContent: "已开启 slow mode"
+	};
 	// The chat wrapper contains both the scroller and the hint strip below it.
 	const chatWrapper = {
-		querySelectorAll: selector => selector == "div, span" && nativeNode ? [nativeNode] : []
+		querySelectorAll: selector => selector == "div, span" && nativeNode ? [wrapperNode, nativeNode] : []
 	};
 	const scroller = fixture.scrollerRect && {
 		getBoundingClientRect: () => ({...fixture.scrollerRect}),
