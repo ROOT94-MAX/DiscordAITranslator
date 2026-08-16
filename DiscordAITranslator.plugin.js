@@ -4801,42 +4801,70 @@ var require_translate_components = __commonJS({
 // src/ui/loaded-status-position.js
 var require_loaded_status_position = __commonJS({
   "src/ui/loaded-status-position.js"(exports2, module2) {
-    function positionLoadedStatusElement({ BDFDB, document: documentRef, window: windowRef, element }) {
-      if (!element || !documentRef || typeof documentRef.querySelector != "function") return;
-      let viewportPadding = 12, innerWidth = windowRef && windowRef.innerWidth || 1280, innerHeight = windowRef && windowRef.innerHeight || 720, scroller = null, scrollerRect = null;
+    function findNativeTextAreaStatusElement({ document: documentRef, anchorRect = null, anchorElement = null }) {
+      if (!documentRef) return null;
+      let candidates = [];
       try {
-        scroller = documentRef.querySelector(BDFDB && BDFDB.dotCN && BDFDB.dotCN.messagesscroller || ".messages-scroller"), scroller && scroller.getBoundingClientRect && (scrollerRect = scroller.getBoundingClientRect());
+        candidates = Array.from((anchorElement && anchorElement.parentElement || anchorElement || documentRef).querySelectorAll("div, span"));
       } catch {
-        scroller = null, scrollerRect = null;
+        return null;
       }
-      let composerRect = null, nativeHintRect = null, positioningCandidates = [];
-      try {
-        let composer = documentRef.querySelector("form");
-        composer && composer.getBoundingClientRect && (composerRect = composer.getBoundingClientRect() || null);
-        let hintScope = scroller && scroller.parentElement || composer && composer.parentElement || null, stripFloor = (composerRect && composerRect.bottom || scrollerRect && scrollerRect.bottom || innerHeight) - 48;
-        if (hintScope && hintScope.querySelectorAll) {
-          let matches = Array.from(hintScope.querySelectorAll("div, span")).map((node) => {
-            if (!node || !node.getBoundingClientRect) return null;
-            let text = (node.textContent || "").trim();
-            if (!text || !/慢速模式|slow\s*mode|slowmode|已开启/i.test(text)) return null;
-            let rect = node.getBoundingClientRect();
-            return !rect.width || !rect.height ? null : { rect, area: rect.width * rect.height };
-          }).filter((match) => match && match.rect.bottom >= stripFloor && match.area <= 12800);
-          for (let match of matches.slice(0, 6)) positioningCandidates.push({ top: Math.round(match.rect.top), right: Math.round(match.rect.right), bottom: Math.round(match.rect.bottom), area: Math.round(match.area) });
-          let nativeHint = matches.sort((a, b) => a.area - b.area)[0];
-          nativeHintRect = nativeHint && nativeHint.rect || null;
+      let matches = candidates.map((element) => {
+        if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
+        let text = (element.textContent || "").trim();
+        if (!text || !/慢速模式|slow\s*mode|slowmode|已开启/i.test(text)) return null;
+        let rect = element.getBoundingClientRect();
+        if (!rect.width || !rect.height) return null;
+        if (anchorRect) {
+          let nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42, nearInputRight = rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45, aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8;
+          if (!nearInputTop || !nearInputRight || !aboveInput) return null;
         }
-      } catch {
-        composerRect = null;
+        return { element, rect, score: rect.right + rect.bottom };
+      }).filter(Boolean).sort((a, b) => b.score - a.score);
+      return matches[0] && matches[0].element || null;
+    }
+    __name(findNativeTextAreaStatusElement, "findNativeTextAreaStatusElement");
+    function positionLoadedStatusElement({ BDFDB, document: documentRef, window: windowRef, element }) {
+      if (!element || !documentRef || !windowRef || typeof documentRef.querySelectorAll != "function") return;
+      let selectors = ['[class*="channelTextArea"]', 'form [role="textbox"]'], anchors = [];
+      for (let selector of selectors)
+        if (selector)
+          try {
+            anchors = anchors.concat(Array.from(documentRef.querySelectorAll(selector)).filter(Boolean));
+          } catch {
+          }
+      anchors = anchors.map((anchor2) => {
+        if (!anchor2 || !anchor2.getBoundingClientRect) return null;
+        let rect = anchor2.getBoundingClientRect();
+        if (!rect.width || !rect.height || !(rect.bottom > 0 && rect.top < windowRef.innerHeight && rect.right > 0 && rect.left < windowRef.innerWidth)) return null;
+        let nearBottom = Math.max(0, windowRef.innerHeight - rect.bottom), score = Math.min(rect.width, 900) - nearBottom * 2 + rect.right * 0.05;
+        return { anchor: anchor2, rect, score };
+      }).filter(Boolean).sort((a, b) => b.score - a.score);
+      let anchorData = anchors[0], anchor = anchorData && anchorData.anchor, viewportPadding = 12, maxStatusWidth = Math.max(180, Math.min(360, windowRef.innerWidth - viewportPadding * 2));
+      if (anchor && anchor.getBoundingClientRect) {
+        let anchorRect = anchor.getBoundingClientRect();
+        anchorRect && anchorRect.width && (maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(anchorRect.width * 0.55), anchorRect.width - 16)));
       }
+      element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
+      let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20);
       element.style.right = "auto", element.style.bottom = "auto";
-      let maxStatusWidth = Math.max(180, Math.min(360, innerWidth - viewportPadding * 2));
-      scrollerRect && scrollerRect.width && (maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(scrollerRect.width * 0.55), scrollerRect.width - 16))), element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
-      let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth)), statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20), anchorRight = nativeHintRect ? nativeHintRect.right : scrollerRect && scrollerRect.width ? scrollerRect.right - viewportPadding : composerRect && composerRect.width ? composerRect.right - viewportPadding : innerWidth - viewportPadding, anchorBottom = nativeHintRect ? nativeHintRect.top - 6 : composerRect && composerRect.height ? composerRect.bottom - 6 : scrollerRect && scrollerRect.height ? scrollerRect.bottom - viewportPadding : innerHeight - viewportPadding, left = Math.max(viewportPadding, Math.min(anchorRight - statusWidth, innerWidth - statusWidth - viewportPadding)), top = Math.max(viewportPadding, Math.min(anchorBottom - statusHeight, innerHeight - statusHeight - viewportPadding));
+      let anchorRectOut = null, nativeHintRect = null, left = 0, top = 0;
+      if (anchor && anchor.getBoundingClientRect) {
+        let rect = anchor.getBoundingClientRect();
+        anchorRectOut = rect;
+        let nativeStatus = findNativeTextAreaStatusElement({ document: documentRef, anchorRect: rect, anchorElement: anchor });
+        if (left = rect.right - statusWidth - viewportPadding, top = rect.top - statusHeight - 8, nativeStatus && nativeStatus.getBoundingClientRect) {
+          let nativeRect = nativeStatus.getBoundingClientRect();
+          nativeHintRect = nativeRect, left = Math.max(rect.left + 8, Math.min(nativeRect.right - statusWidth, rect.right - statusWidth - 8)), top = nativeRect.top - statusHeight - 8;
+        } else
+          left = Math.max(rect.left + 8, Math.min(left, rect.right - statusWidth - 8));
+        top = Math.max(viewportPadding, Math.min(top, windowRef.innerHeight - statusHeight - viewportPadding));
+      } else
+        left = Math.max(viewportPadding, windowRef.innerWidth - statusWidth - 108), top = Math.max(viewportPadding, windowRef.innerHeight - statusHeight - 54);
       element.style.left = `${Math.round(left)}px`, element.style.top = `${Math.round(top)}px`;
     }
     __name(positionLoadedStatusElement, "positionLoadedStatusElement");
-    module2.exports = { positionLoadedStatusElement };
+    module2.exports = { findNativeTextAreaStatusElement, positionLoadedStatusElement };
   }
 });
 
