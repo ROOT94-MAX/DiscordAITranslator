@@ -198,3 +198,14 @@ test("manual message controls do not use the global translating gate", () => {
 	assert.doesNotMatch(source, /disabled:\s*!translated\s*&&\s*isTranslating/);
 	assert.doesNotMatch(source, /if\s*\(!isTranslating\)\s*_this\.translateMessage/);
 });
+
+test("the settings panel exposes the loaded backfill scope and limit controls", () => {
+	const source = fs.readFileSync(path.resolve(__dirname, "..", "src", "ui", "settings-panel.js"), "utf8");
+
+	// Audit item 39: the panel rewrite dropped these controls while the runtime kept
+	// reading the settings, so users could no longer change how much history each
+	// channel backfills (the capsule total looked hardcoded).
+	assert.match(source, /receivedAutoTranslateScope/, "the panel must write the backfill scope");
+	assert.match(source, /receivedAutoTranslateLoadedLimit/, "the panel must write the backfill limit");
+	assert.match(source, /getReceivedAutoTranslateLoadedLimit\(\)/, "the control reads the effective limit, not the raw stored value");
+});

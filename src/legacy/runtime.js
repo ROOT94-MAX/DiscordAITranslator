@@ -1474,19 +1474,20 @@ module.exports = (_ => {
 				try {
 					const composer = document.querySelector("form");
 					if (composer && composer.getBoundingClientRect) composerRect = composer.getBoundingClientRect() || null;
-				if (composerRect && composerRect.width && composer.querySelectorAll) {
-					// Scoped to the composer: a document-wide scan once per status update
-					// read textContent off every node in the app.
-					const nativeHint = Array.from(composer.querySelectorAll("div, span")).map(node => {
-						if (!node || !node.getBoundingClientRect) return null;
-						const text = (node.textContent || "").trim();
-						if (!text || !(/慢速模式|slow\s*mode|slowmode|已开启/i.test(text))) return null;
-						const rect = node.getBoundingClientRect();
-						if (!rect.width || !rect.height) return null;
-						return {rect, score: rect.right + rect.bottom};
-					}).filter(Boolean).sort((a, b) => b.score - a.score)[0];
-					nativeHintRect = nativeHint && nativeHint.rect || null;
-				}
+					// The slow-mode hint sits outside the form (a sibling below it), so the
+					// scan covers the composer's parent, still one container - not the app.
+					const hintScope = composer && composer.parentElement || composer;
+					if (hintScope && hintScope.querySelectorAll) {
+						const nativeHint = Array.from(hintScope.querySelectorAll("div, span")).map(node => {
+							if (!node || !node.getBoundingClientRect) return null;
+							const text = (node.textContent || "").trim();
+							if (!text || !(/慢速模式|slow\s*mode|slowmode|已开启/i.test(text))) return null;
+							const rect = node.getBoundingClientRect();
+							if (!rect.width || !rect.height) return null;
+							return {rect, score: rect.right + rect.bottom};
+						}).filter(Boolean).sort((a, b) => b.score - a.score)[0];
+						nativeHintRect = nativeHint && nativeHint.rect || null;
+					}
 				}
 				catch (err) {composerRect = null;}
 				element.style.right = "auto";
@@ -4152,7 +4153,6 @@ module.exports = (_ => {
 			baiduTranslate (data, callback) {
 				return this.ensureProviderClient().baiduTranslate(data, callback);
 			}
-			
 			MD5 (e) {
 				return this.ensureProviderClient().MD5(e);
 			}

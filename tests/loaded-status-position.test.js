@@ -22,16 +22,20 @@ function createPositionHarness({scrollerRect, composerRect, nativeRect} = {}) {
 		getBoundingClientRect: () => ({...fixture.nativeRect}),
 		textContent: "已开启"
 	};
+	// The slow-mode hint sits OUTSIDE the form (a sibling below it), so the hint scan
+	// covers the composer's parent; the composer itself still reports its own rect.
+	const composerParent = {
+		getBoundingClientRect: () => ({...fixture.composerRect}),
+		querySelectorAll: selector => selector == "div, span" && nativeNode ? [nativeNode] : []
+	};
+	const composer = {
+		getBoundingClientRect: () => ({...fixture.composerRect}),
+		parentElement: composerParent
+	};
 	global.document = {
 		querySelector: selector => {
 			if (/messages-?scroller/.test(selector)) return fixture.scrollerRect ? {getBoundingClientRect: () => ({...fixture.scrollerRect})} : null;
-			if (selector == "form") {
-				if (!fixture.composerRect) return null;
-				return {
-					getBoundingClientRect: () => ({...fixture.composerRect}),
-					querySelectorAll: selector => selector == "div, span" && nativeNode ? [nativeNode] : []
-				};
-			}
+			if (selector == "form") return fixture.composerRect ? composer : null;
 			return null;
 		}
 	};

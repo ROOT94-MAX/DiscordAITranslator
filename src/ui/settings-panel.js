@@ -993,10 +993,45 @@ function renderSettingsPanel(plugin, collapseStates = {}, dependencies = {}) {
 			const createAutoTranslateDecisionSettings = () => {
 				const aiCapable = plugin.isAiAutoTranslateDecisionAvailable();
 				const currentMode = plugin.getAutoTranslateDecisionMode();
+				// The 2026-08-10 audit (item 39) found the panel rewrite dropped the loaded
+				// scope and limit controls while the runtime still read them; users could
+				// no longer change how much history each channel backfills.
+				const createLoadedScopeSettings = () => BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.FormItem, {
+					title: compactText("补翻范围与数量", "Backfill scope and amount", "Объём перевода истории"),
+					className: BDFDB.disCN.marginbottom8,
+					children: [
+						createStableSelect({
+							value: plugin.getReceivedAutoTranslateScope(),
+							options: [
+								{value: "new_only", label: compactText("仅翻译新消息", "New messages only", "Только новые сообщения")},
+								{value: "loaded_messages", label: compactText("含已加载历史消息", "Include loaded history", "Включая загруженную историю")}
+							],
+							onChange: value => {
+								if (!plugin.settings.filters) plugin.settings.filters = {};
+								plugin.settings.filters.receivedAutoTranslateScope = value;
+								BDFDB.DataUtils.save(value, plugin, "filters", "receivedAutoTranslateScope");
+								plugin.SettingsUpdated = true;
+								refreshPanel();
+							}
+						}),
+						plugin.getReceivedAutoTranslateScope() == "loaded_messages" && createStableSelect({
+							value: String(plugin.getReceivedAutoTranslateLoadedLimit()),
+							options: [10, 20, 50, 100].map(limit => ({value: String(limit), label: compactText(`最多补翻 ${limit} 条`, `Backfill up to ${limit}`, `Не более ${limit}`)})),
+							onChange: value => {
+								if (!plugin.settings.filters) plugin.settings.filters = {};
+								plugin.settings.filters.receivedAutoTranslateLoadedLimit = value;
+								BDFDB.DataUtils.save(value, plugin, "filters", "receivedAutoTranslateLoadedLimit");
+								plugin.SettingsUpdated = true;
+							}
+						}),
+						infoText(compactText("开启频道翻译后，一次性补翻最近已加载的历史消息；数量是上限，实际按符合条件的消息数决定。", "After enabling a channel, recent loaded history is backfilled once; the amount is a maximum over eligible messages.", "После включения канала загруженная история переводится один раз; количество — максимум по подходящим сообщениям."))
+					].filter(Boolean)
+				});
 				return BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.FormItem, {
 					title: plugin.getCustomText("auto_translate_decision_title"),
 					className: BDFDB.disCN.marginbottom8,
 					children: [
+						createLoadedScopeSettings(),
 						infoText(plugin.getCustomText("auto_translate_decision_hint")),
 						createSegmentedSelector({
 							className: "translator-decision-mode-grid",

@@ -4271,11 +4271,35 @@ BDFDB is loading. Please reopen settings in a few seconds.`, panel;
               })
             ]
           }), "createReceivedSourceLanguageFilter"), createAutoTranslateDecisionSettings = /* @__PURE__ */ __name(() => {
-            let aiCapable = plugin.isAiAutoTranslateDecisionAvailable(), currentMode = plugin.getAutoTranslateDecisionMode();
+            let aiCapable = plugin.isAiAutoTranslateDecisionAvailable(), currentMode = plugin.getAutoTranslateDecisionMode(), createLoadedScopeSettings = /* @__PURE__ */ __name(() => BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.FormItem, {
+              title: compactText("补翻范围与数量", "Backfill scope and amount", "Объём перевода истории"),
+              className: BDFDB.disCN.marginbottom8,
+              children: [
+                createStableSelect({
+                  value: plugin.getReceivedAutoTranslateScope(),
+                  options: [
+                    { value: "new_only", label: compactText("仅翻译新消息", "New messages only", "Только новые сообщения") },
+                    { value: "loaded_messages", label: compactText("含已加载历史消息", "Include loaded history", "Включая загруженную историю") }
+                  ],
+                  onChange: /* @__PURE__ */ __name((value) => {
+                    plugin.settings.filters || (plugin.settings.filters = {}), plugin.settings.filters.receivedAutoTranslateScope = value, BDFDB.DataUtils.save(value, plugin, "filters", "receivedAutoTranslateScope"), plugin.SettingsUpdated = !0, refreshPanel();
+                  }, "onChange")
+                }),
+                plugin.getReceivedAutoTranslateScope() == "loaded_messages" && createStableSelect({
+                  value: String(plugin.getReceivedAutoTranslateLoadedLimit()),
+                  options: [10, 20, 50, 100].map((limit) => ({ value: String(limit), label: compactText(`最多补翻 ${limit} 条`, `Backfill up to ${limit}`, `Не более ${limit}`) })),
+                  onChange: /* @__PURE__ */ __name((value) => {
+                    plugin.settings.filters || (plugin.settings.filters = {}), plugin.settings.filters.receivedAutoTranslateLoadedLimit = value, BDFDB.DataUtils.save(value, plugin, "filters", "receivedAutoTranslateLoadedLimit"), plugin.SettingsUpdated = !0;
+                  }, "onChange")
+                }),
+                infoText(compactText("开启频道翻译后，一次性补翻最近已加载的历史消息；数量是上限，实际按符合条件的消息数决定。", "After enabling a channel, recent loaded history is backfilled once; the amount is a maximum over eligible messages.", "После включения канала загруженная история переводится один раз; количество — максимум по подходящим сообщениям."))
+              ].filter(Boolean)
+            }), "createLoadedScopeSettings");
             return BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.FormItem, {
               title: plugin.getCustomText("auto_translate_decision_title"),
               className: BDFDB.disCN.marginbottom8,
               children: [
+                createLoadedScopeSettings(),
                 infoText(plugin.getCustomText("auto_translate_decision_hint")),
                 createSegmentedSelector({
                   className: "translator-decision-mode-grid",
@@ -11150,8 +11174,10 @@ __________________ __________________ __________________
             let composerRect = null, nativeHintRect = null;
             try {
               let composer = document.querySelector("form");
-              if (composer && composer.getBoundingClientRect && (composerRect = composer.getBoundingClientRect() || null), composerRect && composerRect.width && composer.querySelectorAll) {
-                let nativeHint = Array.from(composer.querySelectorAll("div, span")).map((node) => {
+              composer && composer.getBoundingClientRect && (composerRect = composer.getBoundingClientRect() || null);
+              let hintScope = composer && composer.parentElement || composer;
+              if (hintScope && hintScope.querySelectorAll) {
+                let nativeHint = Array.from(hintScope.querySelectorAll("div, span")).map((node) => {
                   if (!node || !node.getBoundingClientRect) return null;
                   let text = (node.textContent || "").trim();
                   if (!text || !/慢速模式|slow\s*mode|slowmode|已开启/i.test(text)) return null;
