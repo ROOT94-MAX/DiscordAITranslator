@@ -178,7 +178,6 @@ module.exports = (_ => {
 						useSpoilerInSentOriginal:	{value: false, 	popout: false},
 						useSpoilerInReceivedOriginal:	{value: false, 	popout: false},
 						highlightTranslatedMessages:	{value: true, 	popout: false},
-						showTranslationLabel:		{value: true, 	popout: false},
 						translatedTextColor:		{value: "#7cc7ff", popout: false},
 						protectQuotedText:		{value: true, 	popout: false,	description: "Automatically protect and highlight wrapped content"},
 						useSpoilerInOriginal:		{value: false, 	popout: false,	description: "Use Spoilers instead of Quotes for the original Message Text"}
@@ -384,11 +383,9 @@ module.exports = (_ => {
 					useSpoilerInOriginal: "Show original text as spoiler blocks"
 				});
 				Object.assign(labels, isChinese ? {
-					highlightTranslatedMessages: "给译文消息添加更显眼的左侧色条与背景",
-					showTranslationLabel: "在译文消息上方显示“译文”标签"
+					highlightTranslatedMessages: "给译文消息添加更显眼的左侧色条与背景"
 				} : {
-					highlightTranslatedMessages: "Highlight translated messages with a left accent and background",
-					showTranslationLabel: "Show a visible 'Translated' label above translated messages"
+					highlightTranslatedMessages: "Highlight translated messages with a left accent and background"
 				});
 				Object.assign(labels, isChinese ? {
 					protectQuotedText: "自动保护并高亮包裹符内的内容"
@@ -413,7 +410,6 @@ module.exports = (_ => {
 					showOriginalMessage: "Показывать оригинал рядом с переведёнными входящими сообщениями",
 					showOriginalDirectly: "Показывать оригинал входящих сообщений напрямую",
 					highlightTranslatedMessages: "Подсвечивать переведённые сообщения",
-					showTranslationLabel: "Показывать метку перевода",
 					translatedTextColor: "Цвет переведённого текста",
 					protectQuotedText: "Автоматически защищать и подсвечивать текст в обрамляющих символах",
 					useSpoilerInOriginal: "Показывать оригинал как спойлер"

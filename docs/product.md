@@ -69,6 +69,7 @@ The channel popout does not contain:
 - A completed status remains briefly and then collapses. Status updates never repaint the message list.
 - Missing, duplicate, malformed, empty, wrong-language, and placeholder-damaged batch results enter repair instead of disappearing.
 - Each pending message uses a fixed-size CSS loading indicator without timer-driven React rerenders.
+- Translated messages always carry a small inline watermark styled like Discord's edited marker; it identifies the translation and shows source/target details on hover. It is not a user setting.
 - Disabling automatic translation restores automatic and manual message displays, reply previews, embeds, and titles through one channel-scoped display transaction without a second broad repaint.
 
 ## Message Lifecycle

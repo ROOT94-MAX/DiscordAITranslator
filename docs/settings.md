@@ -38,11 +38,13 @@ The channel popout does not contain an automatic translation switch, backup prov
 | Languages | Global sent and received defaults and source-language filters |
 | Language detection | `local_first`, `google_free`, or `local_only` strategy |
 | Translation rules | AI decision mode, local pre-check, same-language and similarity policy |
-| Display | Original text presentation, translated label and color, reply-preview behavior |
+| Display | Original text presentation, translated color, reply-preview behavior |
 | Protection | Protected terms, wrapper pairs, prefixes, sent and received scopes |
 | Historical translation | New-only or loaded-message scope, loaded count/time range, scroll policy |
 
 Provider credentials remain accessible even when a provider is selected only by a channel override. Active primary and backup fields are not duplicated in the additional-provider section.
+
+The translated watermark is always shown on translated messages and is not a setting.
 
 ## Permanent Controls
 

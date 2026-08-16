@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId 61cbf81a068feabf
+ * @buildId aabf95d8c33ea019
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -10268,7 +10268,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "61cbf81a068feabf";
+            return "aabf95d8c33ea019";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -10284,7 +10284,6 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
                 useSpoilerInSentOriginal: { value: !1, popout: !1 },
                 useSpoilerInReceivedOriginal: { value: !1, popout: !1 },
                 highlightTranslatedMessages: { value: !0, popout: !1 },
-                showTranslationLabel: { value: !0, popout: !1 },
                 translatedTextColor: { value: "#7cc7ff", popout: !1 },
                 protectQuotedText: { value: !0, popout: !1, description: "Automatically protect and highlight wrapped content" },
                 useSpoilerInOriginal: { value: !1, popout: !1, description: "Use Spoilers instead of Quotes for the original Message Text" }
@@ -10431,11 +10430,9 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
               showOriginalDirectly: "Show received original text directly",
               useSpoilerInOriginal: "Show original text as spoiler blocks"
             }), Object.assign(labels, isChinese ? {
-              highlightTranslatedMessages: "给译文消息添加更显眼的左侧色条与背景",
-              showTranslationLabel: "在译文消息上方显示“译文”标签"
+              highlightTranslatedMessages: "给译文消息添加更显眼的左侧色条与背景"
             } : {
-              highlightTranslatedMessages: "Highlight translated messages with a left accent and background",
-              showTranslationLabel: "Show a visible 'Translated' label above translated messages"
+              highlightTranslatedMessages: "Highlight translated messages with a left accent and background"
             }), Object.assign(labels, isChinese ? {
               protectQuotedText: "自动保护并高亮包裹符内的内容"
             } : {
@@ -10456,7 +10453,6 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
               showOriginalMessage: "Показывать оригинал рядом с переведёнными входящими сообщениями",
               showOriginalDirectly: "Показывать оригинал входящих сообщений напрямую",
               highlightTranslatedMessages: "Подсвечивать переведённые сообщения",
-              showTranslationLabel: "Показывать метку перевода",
               translatedTextColor: "Цвет переведённого текста",
               protectQuotedText: "Автоматически защищать и подсвечивать текст в обрамляющих символах",
               useSpoilerInOriginal: "Показывать оригинал как спойлер"
