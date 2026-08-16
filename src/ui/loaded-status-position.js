@@ -7,35 +7,45 @@
 // anchor/hint geometry so future drift is calibrated from evidence, not guesses.
 function findNativeTextAreaStatusElement({document: documentRef, anchorRect = null, anchorElement = null}) {
 	if (!documentRef) return null;
-	let candidates = [];
-	// Survey evidence (2026-08-16): the cooldown hint lives in the typing strip, a
-	// SIBLING of the composer, so the scan starts one level above the composer's own
-	// parent - still one wrapper, never the whole document.
-	try {
-		const scope = anchorElement && anchorElement.parentElement || anchorElement || documentRef;
-		const hintScope = scope && scope.parentElement || scope;
-		candidates = Array.from(hintScope.querySelectorAll("div, span"));
+	// Survey evidence (2026-08-16): two fixed-depth scope guesses both found nothing
+	// while a document-wide survey saw the hint every time - its container depth
+	// varies with the client build. The scan WALKS UP from the composer one wrapper
+	// at a time and stops before any ancestor reaches deep into the message list
+	// (150px above the input), so each scanned subtree stays composer-sized.
+	const matchIn = scope => {
+		let candidates = [];
+		try {candidates = Array.from(scope.querySelectorAll("div, span"));}
+		catch (err) {return [];}
+		return candidates.map(element => {
+			if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
+			const text = (element.textContent || "").trim();
+			if (!text || !(/慢速模式|slow\s*mode|slowmode|已开启/i.test(text))) return null;
+			const rect = element.getBoundingClientRect();
+			if (!rect.width || !rect.height) return null;
+			if (anchorRect) {
+				// Old clients render the slow-mode hint in a strip ABOVE the input; this
+				// client (PTB 1.0.1214, probe evidence 2026-08-16) renders it BELOW. Both
+				// bands pass - anything else (the icon row, the channel list) is rejected.
+				const nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42;
+				const aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8;
+				const belowInput = rect.top >= anchorRect.bottom - 10 && rect.top <= anchorRect.bottom + 42 && rect.bottom <= anchorRect.bottom + 58;
+				const nearInputRight = rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45;
+				if (!nearInputRight || !(nearInputTop && aboveInput || belowInput)) return null;
+			}
+			return {element, rect, score: rect.right + rect.bottom};
+		}).filter(Boolean).sort((a, b) => b.score - a.score);
+	};
+	let scope = anchorElement && anchorElement.parentElement || null;
+	for (let level = 0; scope && level < 8; level++) {
+		let scopeRect = null;
+		try {scopeRect = scope.getBoundingClientRect && scope.getBoundingClientRect() || null;}
+		catch (err) {scopeRect = null;}
+		if (anchorRect && scopeRect && scopeRect.top < anchorRect.top - 150) break;
+		const matches = matchIn(scope);
+		if (matches.length) return matches[0] && matches[0].element || null;
+		scope = scope.parentElement;
 	}
-	catch (err) {return null;}
-	const matches = candidates.map(element => {
-		if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
-		const text = (element.textContent || "").trim();
-		if (!text || !(/慢速模式|slow\s*mode|slowmode|已开启/i.test(text))) return null;
-		const rect = element.getBoundingClientRect();
-		if (!rect.width || !rect.height) return null;
-		if (anchorRect) {
-			// Old clients render the slow-mode hint in a strip ABOVE the input; this
-			// client (PTB 1.0.1214, probe evidence 2026-08-16) renders it BELOW. Both
-			// bands pass - anything else (the icon row, the channel list) is rejected.
-			const nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42;
-			const aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8;
-			const belowInput = rect.top >= anchorRect.bottom - 10 && rect.top <= anchorRect.bottom + 42 && rect.bottom <= anchorRect.bottom + 58;
-			const nearInputRight = rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45;
-			if (!nearInputRight || !(nearInputTop && aboveInput || belowInput)) return null;
-		}
-		return {element, rect, score: rect.right + rect.bottom};
-	}).filter(Boolean).sort((a, b) => b.score - a.score);
-	return matches[0] && matches[0].element || null;
+	return null;
 }
 
 function positionLoadedStatusElement({BDFDB, document: documentRef, window: windowRef, element}) {

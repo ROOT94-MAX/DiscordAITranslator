@@ -14,12 +14,17 @@ function createPositionHarness({anchorRect, hintNodes} = {}) {
 		anchorRect: {left: 820, top: 1127, right: 1493, bottom: 1185, width: 673, height: 58}
 	};
 	const anchor = anchorRect === undefined ? defaults.anchorRect : anchorRect;
-	// Survey evidence (2026-08-16): the cooldown hint lives in the typing strip, a
-	// SIBLING of the composer - only the anchor's grandparent contains both.
-	const hintScope = {
-		querySelectorAll: selector => selector == "div, span" ? (hintNodes || []) : []
-	};
-	const composerWrapper = {parentElement: hintScope};
+	// Survey evidence (2026-08-16): after two scope guesses still found nothing while
+	// a document-wide survey sees the hint every time - its container depth varies.
+	// The scan WALKS UP from the composer; only the deepest level of this fixture
+	// carries the hint nodes, so a fixed-depth scan cannot find them.
+	const makeLevel = rect => ({getBoundingClientRect: () => rect, querySelectorAll: () => [], parentElement: null});
+	const hintScope = makeLevel({left: 820, top: 1100, right: 1501, bottom: 1193});
+	hintScope.querySelectorAll = selector => selector == "div, span" ? (hintNodes || []) : [];
+	const levelTwo = makeLevel({left: 820, top: 1100, right: 1501, bottom: 1193});
+	const composerWrapper = makeLevel({left: 820, top: 1120, right: 1493, bottom: 1193});
+	composerWrapper.parentElement = levelTwo;
+	levelTwo.parentElement = hintScope;
 	const anchorNode = anchor && {
 		getBoundingClientRect: () => ({...anchor}),
 		parentElement: composerWrapper
