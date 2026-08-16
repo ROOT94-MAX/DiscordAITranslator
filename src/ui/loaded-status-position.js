@@ -8,9 +8,14 @@
 function findNativeTextAreaStatusElement({document: documentRef, anchorRect = null, anchorElement = null}) {
 	if (!documentRef) return null;
 	let candidates = [];
-	// Scoped to the input container: a document-wide scan read textContent off every
-	// div and span in the app, once per status update, once per message.
-	try {candidates = Array.from((anchorElement && anchorElement.parentElement || anchorElement || documentRef).querySelectorAll("div, span"));}
+	// Survey evidence (2026-08-16): the cooldown hint lives in the typing strip, a
+	// SIBLING of the composer, so the scan starts one level above the composer's own
+	// parent - still one wrapper, never the whole document.
+	try {
+		const scope = anchorElement && anchorElement.parentElement || anchorElement || documentRef;
+		const hintScope = scope && scope.parentElement || scope;
+		candidates = Array.from(hintScope.querySelectorAll("div, span"));
+	}
 	catch (err) {return null;}
 	const matches = candidates.map(element => {
 		if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
@@ -77,8 +82,9 @@ function positionLoadedStatusElement({BDFDB, document: documentRef, window: wind
 		if (nativeStatus && nativeStatus.getBoundingClientRect) {
 			const nativeRect = nativeStatus.getBoundingClientRect();
 			nativeHintRect = nativeRect;
-			// 检测到 Discord 原生“慢速模式已开启”时，放在它的上方并右对齐，不再横向挪到频道列表。
-			left = Math.max(rect.left + 8, Math.min(nativeRect.right - statusWidth, rect.right - statusWidth - 8));
+			// 检测到 Discord 原生“慢速模式已开启”时，放在它的上方并右对齐。对齐以提示自身的右缘
+			// 为准（实测提示可宽于输入框容器，旧代码按输入框右缘截断导致差几个像素）。
+			left = Math.max(rect.left + 8, Math.min(nativeRect.right - statusWidth, windowRef.innerWidth - statusWidth - viewportPadding));
 			top = nativeRect.top - statusHeight - 8;
 		}
 		else {

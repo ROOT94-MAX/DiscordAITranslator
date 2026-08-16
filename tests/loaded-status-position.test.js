@@ -11,15 +11,18 @@ function createPositionHarness({anchorRect, hintNodes} = {}) {
 	const realDocument = global.document;
 	const realWindow = global.window;
 	const defaults = {
-		anchorRect: {left: 820, top: 1127, right: 1501, bottom: 1193, width: 681, height: 66}
+		anchorRect: {left: 820, top: 1127, right: 1493, bottom: 1185, width: 673, height: 58}
 	};
 	const anchor = anchorRect === undefined ? defaults.anchorRect : anchorRect;
+	// Survey evidence (2026-08-16): the cooldown hint lives in the typing strip, a
+	// SIBLING of the composer - only the anchor's grandparent contains both.
 	const hintScope = {
 		querySelectorAll: selector => selector == "div, span" ? (hintNodes || []) : []
 	};
+	const composerWrapper = {parentElement: hintScope};
 	const anchorNode = anchor && {
 		getBoundingClientRect: () => ({...anchor}),
-		parentElement: hintScope
+		parentElement: composerWrapper
 	};
 	const plugin = createPluginInstance({callSetLanguages: false});
 	// Set after instance creation: createPluginInstance replaces global.window itself.
@@ -57,6 +60,19 @@ test("with a passing slow-mode hint the capsule floats above it, right edges ali
 	finally {harness.restore();}
 });
 
+test("real-client geometry: the typing-strip cooldown hint aligns the capsule exactly", () => {
+	// Recorded survey (2026-08-16, PTB 1.0.1214): anchor right 1493, cooldownWrapper
+	// right 1501 top 1103. The capsule's right edge must land on 1501 - the hint's own
+	// right edge - not clamped back to the narrower composer edge.
+	const harness = createPositionHarness({hintNodes: [hintNode({left: 1361, top: 1103, right: 1501, bottom: 1126, width: 140, height: 23})]});
+	try {
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+		assert.equal(harness.element.style.left, `${1501 - 180}px`, "the capsule's right edge lands on the hint's right edge (1501)");
+		assert.equal(harness.element.style.top, `${1103 - 20 - 8}px`, "the capsule floats 8px above the cooldown strip");
+	}
+	finally {harness.restore();}
+});
+
 test("a hint in the strip below the input (this client's layout) is accepted and aligned", () => {
 	// Probe evidence (2026-08-16, PTB 1.0.1214): 51/51 positioning runs detected no
 	// hint because the restored guards only accept the old client's above-input strip,
@@ -78,7 +94,7 @@ test("a slow-mode-like node away from the composer's top-right is rejected by th
 	const harness = createPositionHarness({hintNodes: [hintNode({left: 1430, top: 1000, right: 1490, bottom: 1016, width: 60, height: 16})]});
 	try {
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
-		assert.equal(harness.element.style.left, `${1501 - 12 - 180}px`, "falls back to the composer's right edge");
+		assert.equal(harness.element.style.left, `${1493 - 12 - 180}px`, "falls back to the composer's right edge");
 		assert.equal(harness.element.style.top, `${1127 - 20 - 8}px`, "sits directly above the input, never on the icons");
 	}
 	finally {harness.restore();}
@@ -88,7 +104,7 @@ test("without any hint the capsule sits directly above the input, right-aligned"
 	const harness = createPositionHarness();
 	try {
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
-		assert.equal(harness.element.style.left, `${1501 - 12 - 180}px`);
+		assert.equal(harness.element.style.left, `${1493 - 12 - 180}px`);
 		assert.equal(harness.element.style.top, `${1127 - 20 - 8}px`);
 	}
 	finally {harness.restore();}

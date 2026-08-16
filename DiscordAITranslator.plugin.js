@@ -4805,7 +4805,8 @@ var require_loaded_status_position = __commonJS({
       if (!documentRef) return null;
       let candidates = [];
       try {
-        candidates = Array.from((anchorElement && anchorElement.parentElement || anchorElement || documentRef).querySelectorAll("div, span"));
+        let scope = anchorElement && anchorElement.parentElement || anchorElement || documentRef, hintScope = scope && scope.parentElement || scope;
+        candidates = Array.from(hintScope.querySelectorAll("div, span"));
       } catch {
         return null;
       }
@@ -4855,7 +4856,7 @@ var require_loaded_status_position = __commonJS({
         let nativeStatus = findNativeTextAreaStatusElement({ document: documentRef, anchorRect: rect, anchorElement: anchor });
         if (left = rect.right - statusWidth - viewportPadding, top = rect.top - statusHeight - 8, nativeStatus && nativeStatus.getBoundingClientRect) {
           let nativeRect = nativeStatus.getBoundingClientRect();
-          nativeHintRect = nativeRect, left = Math.max(rect.left + 8, Math.min(nativeRect.right - statusWidth, rect.right - statusWidth - 8)), top = nativeRect.top - statusHeight - 8;
+          nativeHintRect = nativeRect, left = Math.max(rect.left + 8, Math.min(nativeRect.right - statusWidth, windowRef.innerWidth - statusWidth - viewportPadding)), top = nativeRect.top - statusHeight - 8;
         } else
           left = Math.max(rect.left + 8, Math.min(left, rect.right - statusWidth - 8));
         top = Math.max(viewportPadding, Math.min(top, windowRef.innerHeight - statusHeight - viewportPadding));
