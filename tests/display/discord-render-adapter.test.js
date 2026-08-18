@@ -102,8 +102,9 @@ function createHarness({
 		},
 		getUserScrollIntentSequence: () => userIntentSequence,
 		isRuntimeActive: () => runtimeActive,
-		captureScrollState: () => {
+		captureScrollState: context => {
 			calls.capture++;
+			calls.captureContext = context;
 			return {scrollTop: scroller.scrollTop};
 		},
 		restoreScrollState: state => {
@@ -363,4 +364,13 @@ test("conflicting duplicate views remain ambiguous and unconfirmed", async () =>
 	assert.deepEqual(outcome.confirmedIds, []);
 	assert.deepEqual(outcome.missingIds, ["m1"]);
 	assert.equal(outcome.fallbackUsed, false);
+});
+
+test("the scroll capture receives the transaction's message ids", async () => {
+	// The viewport store scopes the manual scroll anchor to the transaction that
+	// contains the anchored message; without the ids every capture is contextless
+	// and the anchor either hijacks automatic transactions or never applies.
+	const {adapter, calls} = createHarness();
+	await adapter.refreshMessages(request);
+	assert.deepEqual(calls.captureContext, {messageIds: ["m1", "m2"]});
 });

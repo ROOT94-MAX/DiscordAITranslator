@@ -849,3 +849,20 @@ test("the store surface is frozen so nothing can reach past the API", () => {
 	const harness = createHarness();
 	assert.equal(Object.isFrozen(harness.store), true);
 });
+
+test("the manual anchor only rides transactions that contain the anchored message", () => {
+	// Regression (2026-08-19, reported on PTB): after 5a wired the manual anchor into
+	// every display transaction, automatic history backfill during the 4.5s lock window
+	// restored to the anchored message on each flush and bounced the user's scrolling.
+	// The anchor is manual-translation UX; it may only ride the anchored message's own
+	// transaction, never an unrelated automatic one.
+	const harness = createHarness();
+	harness.store.lockManualScroll(MESSAGE_ID);
+	const own = harness.store.captureDisplayTransactionScrollState({messageIds: [MESSAGE_ID, OTHER_MESSAGE_ID]});
+	assert.ok(own && own.manualAnchor, "the manual message's own transaction rides the anchor");
+	const unrelated = harness.store.captureDisplayTransactionScrollState({messageIds: [OTHER_MESSAGE_ID]});
+	assert.ok(unrelated && !unrelated.manualAnchor, "an automatic transaction for other messages is never hijacked by the anchor");
+	assert.equal(typeof unrelated.scrollTop, "number", "the unrelated transaction falls back to the offset capture");
+	const contextless = harness.store.captureDisplayTransactionScrollState();
+	assert.ok(contextless && !contextless.manualAnchor, "a contextless capture defaults to the offset state");
+});

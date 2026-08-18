@@ -107,7 +107,7 @@ test("display-transaction scroll restore honors the manual translation anchor", 
 	// the transaction path must keep that anchor or manual translation jumps the view.
 	// The choice lives in the viewport store; the runtime wiring must call it.
 	const wiring = methodSlice("runtime", "ensureReceivedDisplayRuntime", "resetReceivedDisplayRuntime");
-	assert.match(wiring, /captureDisplayTransactionScrollState\(\)/);
+	assert.match(wiring, /captureDisplayTransactionScrollState\(context\)/);
 	assert.match(wiring, /restoreDisplayTransactionScrollState\(/);
 	const viewportSource = fs.readFileSync(path.resolve(__dirname, "..", "src", "viewport", "message-viewport-store.js"), "utf8");
 	const captureImplementation = viewportSource.slice(viewportSource.indexOf("captureDisplayTransactionScrollState()"), viewportSource.indexOf("restoreDisplayTransactionScrollState"));

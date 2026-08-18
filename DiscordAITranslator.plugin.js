@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId 7bfa0058f51eae53
+ * @buildId 3b384b0005a2b1e3
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -884,7 +884,7 @@ var require_discord_render_adapter = __commonJS({
           let uniqueMessageIds = getUniqueMessageIds(messageIds), viewsByMessageId = getViewsByMessageId(views), presentIds = uniqueMessageIds.filter((messageId) => !!findMessageElement(messageId)), deferredIds = uniqueMessageIds.filter((messageId) => !presentIds.includes(messageId)), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), hostNeedsPaint = getUniqueMessageIds(ownerMessageIds).some((messageId) => !!findMessageElement(messageId));
           if (!(unconfirmedIds.length > 0 || hostNeedsPaint)) return { confirmedIds, missingIds: [], deferredIds, retryIds: [], fallbackUsed: !1 };
           if (!isRuntimeActive()) return { confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], fallbackUsed: !1 };
-          let intentSequence = getUserScrollIntentSequence(), scrollState = document2.querySelector(BDFDB.dotCN.messagesscroller) ? captureScrollState() : null, renderError, hasRenderError = !1;
+          let intentSequence = getUserScrollIntentSequence(), scrollState = document2.querySelector(BDFDB.dotCN.messagesscroller) ? captureScrollState({ messageIds: uniqueMessageIds }) : null, renderError, hasRenderError = !1;
           try {
             BDFDB.MessageUtils.rerenderAll(!0), await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), unconfirmedIds.length && (await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)));
           } catch (err) {
@@ -6011,10 +6011,13 @@ var require_message_viewport_store = __commonJS({
         restoreScrollerState,
         // Display transactions preserve scroll exactly as the legacy manual repaint did:
         // a locked manual anchor wins over the offset capture so the clicked message
-        // stays put when translated text changes row heights above it.
-        captureDisplayTransactionScrollState() {
+        // stays put when translated text changes row heights above it. The anchor only
+        // rides the anchored message's OWN transaction - an automatic flush during the
+        // lock window must never be pulled back to the manually translated message
+        // (2026-08-19 PTB regression: history scrolling bounced on every backfill flush).
+        captureDisplayTransactionScrollState({ messageIds = [] } = {}) {
           let manualAnchor = getActiveManualScrollAnchor();
-          return manualAnchor ? { manualAnchor } : captureScrollerState();
+          return manualAnchor && (Array.isArray(messageIds) ? messageIds : []).some((messageId) => String(messageId) === String(manualAnchor.messageId)) ? { manualAnchor } : captureScrollerState();
         },
         restoreDisplayTransactionScrollState(scrollerState) {
           return scrollerState && scrollerState.manualAnchor ? restoreAnchorState(scrollerState.manualAnchor) : restoreScrollerState(scrollerState);
@@ -10737,7 +10740,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "7bfa0058f51eae53";
+            return "3b384b0005a2b1e3";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -12793,9 +12796,9 @@ __________________ __________________ __________________
               getUserScrollIntentSequence: /* @__PURE__ */ __name(() => this.ensureMessageViewportStore().getUserScrollIntentSequence(), "getUserScrollIntentSequence"),
               // Scroll preservation is best-effort: a capture or restore failure must never
               // break a display transaction. The viewport store owns the anchor-over-offset choice.
-              captureScrollState: /* @__PURE__ */ __name(() => {
+              captureScrollState: /* @__PURE__ */ __name((context) => {
                 try {
-                  return this.ensureMessageViewportStore().captureDisplayTransactionScrollState();
+                  return this.ensureMessageViewportStore().captureDisplayTransactionScrollState(context);
                 } catch {
                   return null;
                 }

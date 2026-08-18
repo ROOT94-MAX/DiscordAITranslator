@@ -164,7 +164,7 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 			if (!isRuntimeActive()) return {confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], fallbackUsed: false};
 			const intentSequence = getUserScrollIntentSequence();
 			const scroller = document.querySelector(BDFDB.dotCN.messagesscroller);
-			const scrollState = scroller ? captureScrollState() : null;
+			const scrollState = scroller ? captureScrollState({messageIds: uniqueMessageIds}) : null;
 			let renderError;
 			let hasRenderError = false;
 			try {

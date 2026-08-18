@@ -2847,8 +2847,8 @@ module.exports = (_ => {
 					getUserScrollIntentSequence: () => this.ensureMessageViewportStore().getUserScrollIntentSequence(),
 					// Scroll preservation is best-effort: a capture or restore failure must never
 					// break a display transaction. The viewport store owns the anchor-over-offset choice.
-					captureScrollState: () => {
-						try {return this.ensureMessageViewportStore().captureDisplayTransactionScrollState();}
+					captureScrollState: context => {
+						try {return this.ensureMessageViewportStore().captureDisplayTransactionScrollState(context);}
 						catch (error) {return null;}
 					},
 					restoreScrollState: scrollerState => {

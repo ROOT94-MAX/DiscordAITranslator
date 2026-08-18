@@ -435,10 +435,13 @@ function createMessageViewportStore({
 		restoreScrollerState,
 		// Display transactions preserve scroll exactly as the legacy manual repaint did:
 		// a locked manual anchor wins over the offset capture so the clicked message
-		// stays put when translated text changes row heights above it.
-		captureDisplayTransactionScrollState() {
+		// stays put when translated text changes row heights above it. The anchor only
+		// rides the anchored message's OWN transaction - an automatic flush during the
+		// lock window must never be pulled back to the manually translated message
+		// (2026-08-19 PTB regression: history scrolling bounced on every backfill flush).
+		captureDisplayTransactionScrollState({messageIds = []} = {}) {
 			const manualAnchor = getActiveManualScrollAnchor();
-			if (manualAnchor) return {manualAnchor};
+			if (manualAnchor && (Array.isArray(messageIds) ? messageIds : []).some(messageId => String(messageId) === String(manualAnchor.messageId))) return {manualAnchor};
 			return captureScrollerState();
 		},
 		restoreDisplayTransactionScrollState(scrollerState) {
