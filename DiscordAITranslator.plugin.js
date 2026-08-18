@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId e0153ee49a0270a5
+ * @buildId f25ae51498042b98
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -4796,6 +4796,72 @@ var require_translate_components = __commonJS({
       translateIconUntranslate,
       translateIconGeneral
     };
+  }
+});
+
+// src/ui/composer-wiring.js
+var require_composer_wiring = __commonJS({
+  "src/ui/composer-wiring.js"(exports2, module2) {
+    function createComposerWiring({ BDFDB, getPlugin, messageTypes, TranslateButtonComponent }) {
+      function processChannelTextAreaContainer(e) {
+        let plugin = getPlugin();
+        e.instance.props.type != BDFDB.DiscordConstants.ChannelTextAreaTypes.NORMAL && e.instance.props.type != BDFDB.DiscordConstants.ChannelTextAreaTypes.SIDEBAR || BDFDB.PatchUtils.patch(plugin, e.instance.props, "onSubmit", { instead: /* @__PURE__ */ __name((e2) => {
+          if (e2.methodArguments[0].value) {
+            let text = e2.methodArguments[0].value, prefixMap = {}, prefixData = plugin.settings.prefixes && plugin.settings.prefixes.translationPrefixData || [];
+            for (let entry of prefixData)
+              prefixMap[entry.prefix] = entry.language;
+            let foundPrefix = null, targetLanguage = null;
+            for (let prefix in prefixMap)
+              if (text.trim().startsWith(prefix)) {
+                foundPrefix = prefix, targetLanguage = prefixMap[prefix];
+                break;
+              }
+            if (foundPrefix) {
+              e2.stopOriginalMethodCall();
+              let cleanText = text.trim().substring(foundPrefix.length).trim();
+              return plugin.shouldAutoTranslateSentMessage(cleanText, e.instance.props.channel.id, (shouldTranslate) => {
+                if (!shouldTranslate) return e2.originalMethod(Object.assign({}, e2.methodArguments[0], { value: cleanText }));
+                plugin.translateText(cleanText, messageTypes.SENT, (translation, input, output) => {
+                  output = { id: targetLanguage, name: (plugin.ensureSettingsStore().getLanguage(targetLanguage) || {}).name || targetLanguage }, translation = plugin.buildSentTranslationMessageValue(cleanText, translation, input, output), Promise.resolve(e2.originalMethod(Object.assign({}, e2.methodArguments[0], { value: translation }))).then((_) => {
+                    plugin.trackPendingSentOriginal(e.instance.props.channel.id, cleanText, translation);
+                  });
+                }, targetLanguage, { channelId: e.instance.props.channel.id });
+              }, targetLanguage), Promise.resolve({
+                shouldClear: !0,
+                shouldRefocus: !0
+              });
+            } else if (plugin.isTranslationEnabled(e.instance.props.channel.id)) {
+              e2.stopOriginalMethodCall();
+              let originalValue = e2.methodArguments[0].value, channelId = e.instance.props.channel.id, sentRequest = plugin.createSentAutomaticTranslationRequest(channelId, originalValue), submit = /* @__PURE__ */ __name((nextValue) => e2.originalMethod(Object.assign({}, e2.methodArguments[0], { value: nextValue })), "submit");
+              return plugin.shouldAutoTranslateSentMessage(originalValue, e.instance.props.channel.id, (shouldTranslate) => {
+                if (!shouldTranslate || !plugin.isSentAutomaticTranslationRequestCurrent(sentRequest)) return plugin.completeSentAutomaticTranslationRequest(sentRequest, originalValue, submit);
+                plugin.translateText(originalValue, messageTypes.SENT, (translation, input, output) => {
+                  translation = plugin.buildSentTranslationMessageValue(originalValue, translation, input, output), plugin.completeSentAutomaticTranslationRequest(sentRequest, translation, submit);
+                }, null, { channelId });
+              }), Promise.resolve({
+                shouldClear: !0,
+                shouldRefocus: !0
+              });
+            }
+          }
+          return e2.callOriginalMethodAfterwards();
+        }, "instead") }, { noCache: !0 });
+      }
+      __name(processChannelTextAreaContainer, "processChannelTextAreaContainer");
+      function processChannelTextAreaButtons(e) {
+        let plugin = getPlugin();
+        if (e.instance.props.disabled || ![BDFDB.DiscordConstants.ChannelTextAreaTypes.NORMAL, BDFDB.DiscordConstants.ChannelTextAreaTypes.SIDEBAR, "normal", "sidebar"].includes(typeof e.instance.props.type == "string" ? e.instance.props.type : e.instance.props.type && e.instance.props.type.analyticsName) || !e.returnvalue || !e.returnvalue.props) return;
+        let children = [].concat(e.returnvalue.props.children || []).filter((child) => !child || child.key == `${plugin.name}-translate-textarea-button` ? !1 : !(child.props && typeof child.props.className == "string" ? child.props.className : "").includes("_translatortranslatebutton"));
+        children.unshift(BDFDB.ReactUtils.createElement(TranslateButtonComponent, {
+          key: `${plugin.name}-translate-textarea-button`,
+          guildId: e.instance.props.channel.guild_id ? e.instance.props.channel.guild_id : "@me",
+          channelId: e.instance.props.channel.id
+        })), e.returnvalue.props.children = children;
+      }
+      return __name(processChannelTextAreaButtons, "processChannelTextAreaButtons"), Object.freeze({ processChannelTextAreaContainer, processChannelTextAreaButtons });
+    }
+    __name(createComposerWiring, "createComposerWiring");
+    module2.exports = { createComposerWiring };
   }
 });
 
@@ -10146,7 +10212,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -10431,7 +10497,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "e0153ee49a0270a5";
+            return "f25ae51498042b98";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -12283,59 +12349,16 @@ __________________ __________________ __________________
               }
             }));
           }
+          ensureComposerWiring() {
+            return this.composerWiringInstance || (this.composerWiringInstance = createComposerWiring({ BDFDB, getPlugin: /* @__PURE__ */ __name(() => this, "getPlugin"), messageTypes, TranslateButtonComponent })), this.composerWiringInstance;
+          }
           processChannelTextAreaContainer(e) {
-            e.instance.props.type != BDFDB.DiscordConstants.ChannelTextAreaTypes.NORMAL && e.instance.props.type != BDFDB.DiscordConstants.ChannelTextAreaTypes.SIDEBAR || BDFDB.PatchUtils.patch(this, e.instance.props, "onSubmit", { instead: /* @__PURE__ */ __name((e2) => {
-              if (e2.methodArguments[0].value) {
-                let text = e2.methodArguments[0].value, prefixMap = {}, prefixData = this.settings.prefixes && this.settings.prefixes.translationPrefixData || [];
-                for (let entry of prefixData)
-                  prefixMap[entry.prefix] = entry.language;
-                let foundPrefix = null, targetLanguage = null;
-                for (let prefix in prefixMap)
-                  if (text.trim().startsWith(prefix)) {
-                    foundPrefix = prefix, targetLanguage = prefixMap[prefix];
-                    break;
-                  }
-                if (foundPrefix) {
-                  e2.stopOriginalMethodCall();
-                  let cleanText = text.trim().substring(foundPrefix.length).trim();
-                  return this.shouldAutoTranslateSentMessage(cleanText, e.instance.props.channel.id, (shouldTranslate) => {
-                    if (!shouldTranslate) return e2.originalMethod(Object.assign({}, e2.methodArguments[0], { value: cleanText }));
-                    this.translateText(cleanText, messageTypes.SENT, (translation, input, output) => {
-                      output = { id: targetLanguage, name: (this.ensureSettingsStore().getLanguage(targetLanguage) || {}).name || targetLanguage }, translation = this.buildSentTranslationMessageValue(cleanText, translation, input, output), Promise.resolve(e2.originalMethod(Object.assign({}, e2.methodArguments[0], { value: translation }))).then((_2) => {
-                        this.trackPendingSentOriginal(e.instance.props.channel.id, cleanText, translation);
-                      });
-                    }, targetLanguage, { channelId: e.instance.props.channel.id });
-                  }, targetLanguage), Promise.resolve({
-                    shouldClear: !0,
-                    shouldRefocus: !0
-                  });
-                } else if (this.isTranslationEnabled(e.instance.props.channel.id)) {
-                  e2.stopOriginalMethodCall();
-                  let originalValue = e2.methodArguments[0].value, channelId = e.instance.props.channel.id, sentRequest = this.createSentAutomaticTranslationRequest(channelId, originalValue), submit = /* @__PURE__ */ __name((nextValue) => e2.originalMethod(Object.assign({}, e2.methodArguments[0], { value: nextValue })), "submit");
-                  return this.shouldAutoTranslateSentMessage(originalValue, e.instance.props.channel.id, (shouldTranslate) => {
-                    if (!shouldTranslate || !this.isSentAutomaticTranslationRequestCurrent(sentRequest)) return this.completeSentAutomaticTranslationRequest(sentRequest, originalValue, submit);
-                    this.translateText(originalValue, messageTypes.SENT, (translation, input, output) => {
-                      translation = this.buildSentTranslationMessageValue(originalValue, translation, input, output), this.completeSentAutomaticTranslationRequest(sentRequest, translation, submit);
-                    }, null, { channelId });
-                  }), Promise.resolve({
-                    shouldClear: !0,
-                    shouldRefocus: !0
-                  });
-                }
-              }
-              return e2.callOriginalMethodAfterwards();
-            }, "instead") }, { noCache: !0 });
+            this.ensureComposerWiring().processChannelTextAreaContainer(e);
           }
           processChannelTextAreaEditor(e) {
           }
           processChannelTextAreaButtons(e) {
-            if (e.instance.props.disabled || ![BDFDB.DiscordConstants.ChannelTextAreaTypes.NORMAL, BDFDB.DiscordConstants.ChannelTextAreaTypes.SIDEBAR, "normal", "sidebar"].includes(typeof e.instance.props.type == "string" ? e.instance.props.type : e.instance.props.type && e.instance.props.type.analyticsName) || !e.returnvalue || !e.returnvalue.props) return;
-            let children = [].concat(e.returnvalue.props.children || []).filter((child) => !child || child.key == `${this.name}-translate-textarea-button` ? !1 : !(child.props && typeof child.props.className == "string" ? child.props.className : "").includes("_translatortranslatebutton"));
-            children.unshift(BDFDB.ReactUtils.createElement(TranslateButtonComponent, {
-              key: `${this.name}-translate-textarea-button`,
-              guildId: e.instance.props.channel.guild_id ? e.instance.props.channel.guild_id : "@me",
-              channelId: e.instance.props.channel.id
-            })), e.returnvalue.props.children = children;
+            this.ensureComposerWiring().processChannelTextAreaButtons(e);
           }
           get modelCatalogState() {
             return this.ensureProviderClient().getModelCatalogState();

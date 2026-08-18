@@ -65,6 +65,7 @@ module.exports = (_ => {
 		const {createTranslatorStyles} = require("../ui/styles");
 		const {renderSettingsPanel} = require("../ui/settings-panel");
 		const {createTranslateComponents, translateIcon, translateIconUntranslate} = require("../ui/translate-components");
+		const {createComposerWiring} = require("../ui/composer-wiring");
 		const loadedStatusPosition = require("../ui/loaded-status-position");
 		const {createLoadedStatusCapsuleController} = require("../ui/loaded-status-capsule");
 		const {createChannelTitleStore} = require("../channel-title/channel-title-store");
@@ -2620,89 +2621,19 @@ module.exports = (_ => {
 					}
 				}));
 			}
+			ensureComposerWiring () {
+				if (!this.composerWiringInstance) this.composerWiringInstance = createComposerWiring({BDFDB, getPlugin: () => this, messageTypes, TranslateButtonComponent});
+				return this.composerWiringInstance;
+			}
 			processChannelTextAreaContainer (e) {
-				if (e.instance.props.type != BDFDB.DiscordConstants.ChannelTextAreaTypes.NORMAL && e.instance.props.type != BDFDB.DiscordConstants.ChannelTextAreaTypes.SIDEBAR) return;
-				BDFDB.PatchUtils.patch(this, e.instance.props, "onSubmit", {instead: e2 => {
-					if (e2.methodArguments[0].value) {
-						const text = e2.methodArguments[0].value;
-						// Check for translation prefixes
-						const prefixMap = {};
-						const prefixData = this.settings.prefixes && this.settings.prefixes.translationPrefixData || [];
-						for (const entry of prefixData) {
-							prefixMap[entry.prefix] = entry.language;
-						}
-						let foundPrefix = null;
-						let targetLanguage = null;
-						// Check for prefixes more efficiently
-						for (const prefix in prefixMap) {
-							if (text.trim().startsWith(prefix)) {
-								foundPrefix = prefix;
-								targetLanguage = prefixMap[prefix];
-								break;
-							}
-						}
-						if (foundPrefix) {
-							e2.stopOriginalMethodCall();
-							// Remove the prefix from the message
-							const cleanText = text.trim().substring(foundPrefix.length).trim();
-							this.shouldAutoTranslateSentMessage(cleanText, e.instance.props.channel.id, shouldTranslate => {
-								if (!shouldTranslate) return e2.originalMethod(Object.assign({}, e2.methodArguments[0], {value: cleanText}));
-								// Translate with the specific target language
-								this.translateText(cleanText, messageTypes.SENT, (translation, input, output) => {
-									// Override the output language with the one from the prefix
-									output = {id: targetLanguage, name: (this.ensureSettingsStore().getLanguage(targetLanguage) || {}).name || targetLanguage};
-									translation = this.buildSentTranslationMessageValue(cleanText, translation, input, output);
-									Promise.resolve(e2.originalMethod(Object.assign({}, e2.methodArguments[0], {value: translation}))).then(_ => {
-										this.trackPendingSentOriginal(e.instance.props.channel.id, cleanText, translation);
-									});
-								}, targetLanguage, {channelId: e.instance.props.channel.id});
-							}, targetLanguage);
-							return Promise.resolve({
-								shouldClear: true,
-								shouldRefocus: true
-							});
-						}
-						else if (this.isTranslationEnabled(e.instance.props.channel.id)) {
-							e2.stopOriginalMethodCall();
-							const originalValue = e2.methodArguments[0].value;
-							const channelId = e.instance.props.channel.id;
-							const sentRequest = this.createSentAutomaticTranslationRequest(channelId, originalValue);
-							const submit = nextValue => e2.originalMethod(Object.assign({}, e2.methodArguments[0], {value: nextValue}));
-							this.shouldAutoTranslateSentMessage(originalValue, e.instance.props.channel.id, shouldTranslate => {
-								if (!shouldTranslate || !this.isSentAutomaticTranslationRequestCurrent(sentRequest)) return this.completeSentAutomaticTranslationRequest(sentRequest, originalValue, submit);
-								this.translateText(originalValue, messageTypes.SENT, (translation, input, output) => {
-									translation = this.buildSentTranslationMessageValue(originalValue, translation, input, output);
-									this.completeSentAutomaticTranslationRequest(sentRequest, translation, submit);
-								}, null, {channelId});
-							});
-							return Promise.resolve({
-								shouldClear: true,
-								shouldRefocus: true
-							});
-						}
-					}
-					return e2.callOriginalMethodAfterwards();
-				}}, {noCache: true});
+				this.ensureComposerWiring().processChannelTextAreaContainer(e);
 			}
 			processChannelTextAreaEditor (e) {
 				// Do not disable the text area while background/manual message translations are running.
 				// Disabling here interrupts draft typing and can drop unsent text during message list refreshes.
 			}
 			processChannelTextAreaButtons (e) {
-				if (e.instance.props.disabled || ![BDFDB.DiscordConstants.ChannelTextAreaTypes.NORMAL, BDFDB.DiscordConstants.ChannelTextAreaTypes.SIDEBAR, "normal", "sidebar"].includes(typeof e.instance.props.type == "string" ? e.instance.props.type : e.instance.props.type && e.instance.props.type.analyticsName)) return;
-				if (!e.returnvalue || !e.returnvalue.props) return;
-				let children = [].concat(e.returnvalue.props.children || []).filter(child => {
-					if (!child) return false;
-					if (child.key == `${this.name}-translate-textarea-button`) return false;
-					const className = child.props && typeof child.props.className == "string" ? child.props.className : "";
-					return !className.includes("_translatortranslatebutton");
-				});
-				children.unshift(BDFDB.ReactUtils.createElement(TranslateButtonComponent, {
-					key: `${this.name}-translate-textarea-button`,
-					guildId: e.instance.props.channel.guild_id ? e.instance.props.channel.guild_id : "@me",
-					channelId: e.instance.props.channel.id
-				}));
-				e.returnvalue.props.children = children;
+				this.ensureComposerWiring().processChannelTextAreaButtons(e);
 			}
 
 			get modelCatalogState () {
