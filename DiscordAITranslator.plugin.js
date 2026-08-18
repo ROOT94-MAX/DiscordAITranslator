@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId aabf95d8c33ea019
+ * @buildId 45a7ae225cdc0978
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -1314,10 +1314,6 @@ var require_repaint_scheduler = __commonJS({
         queued && queued.attempt <= maximumAttempt && channel.delete(String(messageId)), channel.size || queues.delete(key);
       }
       __name(removeQueuedRequest, "removeQueuedRequest");
-      function nextDelay() {
-        return 120;
-      }
-      __name(nextDelay, "nextDelay");
       function arm(delay) {
         timer || (timer = scheduleTimer(() => {
           timer = null, flush();
@@ -1371,9 +1367,9 @@ var require_repaint_scheduler = __commonJS({
               onRenderOutcome(report);
             } catch {
             }
-            queues.size && arm(nextDelay());
+            queues.size && arm(120);
           }).catch(() => {
-            releaseActiveRequests(channelId, messageIds), queues.size && arm(nextDelay());
+            releaseActiveRequests(channelId, messageIds), queues.size && arm(120);
           });
         }
       }
@@ -1384,7 +1380,7 @@ var require_repaint_scheduler = __commonJS({
         queues.has(key) || queues.set(key, /* @__PURE__ */ new Map());
         let requestsByMessageId = queues.get(key), messageKey = String(messageId), queued = requestsByMessageId.get(messageKey) || { attempt: 0, trackingKeys: /* @__PURE__ */ new Set() }, active = getActiveRequest(key, messageKey);
         if (queued.attempt = Math.max(queued.attempt, active && active.attempt || 0, Math.max(1, attempt || 1)), active) for (let activeTrackingKey of active.trackingKeys) queued.trackingKeys.add(activeTrackingKey);
-        trackingKey != null && String(trackingKey) && queued.trackingKeys.add(String(trackingKey)), requestsByMessageId.set(messageKey, queued), active || arm(delay ?? nextDelay());
+        trackingKey != null && String(trackingKey) && queued.trackingKeys.add(String(trackingKey)), requestsByMessageId.set(messageKey, queued), active || arm(delay ?? 120);
       }
       __name(schedule, "schedule");
       let fullRepaintTimer = null, settingsRetryTimer = null, textAreaRetryTimer = null, deferredFullRepaintPending = !1;
@@ -1426,8 +1422,7 @@ var require_repaint_scheduler = __commonJS({
         flush,
         clear() {
           timer && cancelTimer(timer), timer = null, queues.clear(), activeRequests.clear();
-        },
-        getNextDelay: nextDelay
+        }
       });
     }
     __name(createDisplayRepaintScheduler, "createDisplayRepaintScheduler");
@@ -10268,7 +10263,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "aabf95d8c33ea019";
+            return "45a7ae225cdc0978";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);

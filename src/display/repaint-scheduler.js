@@ -2,9 +2,13 @@
 // store immediately; only the repaint is scheduled here, so deferring never loses a
 // translation - it only delays the paint.
 //
-// Targeted automatic display always uses the live cadence. It updates exact message
-// owners and never remounts the chat, so typing and scrolling do not delay results.
-// The retained full-list compatibility path still guards disruptive legacy repaints.
+// Both paths below end in the same whole-list rebuild; there is no owner-update
+// repaint (measured no-op, see discord-render-adapter). What this module owns is
+// cadence: the transaction path (schedule/flush) coalesces per-message requests,
+// keeps rows single-flight, and bounds retries so the render adapter rebuilds at
+// most once per transaction. The retained full-list path (scheduleFullRepaint)
+// serves the display owners not yet migrated - manual translation, reply previews,
+// embeds, titles - and defers around open settings and a focused text area.
 const LIVE_REPAINT_DELAY_MS = 120;
 const CALM_REPAINT_DELAY_MS = 1500;
 const BUSY_RETRY_DELAY_MS = 450;
@@ -53,10 +57,6 @@ function createDisplayRepaintScheduler({
 		const queued = channel.get(String(messageId));
 		if (queued && queued.attempt <= maximumAttempt) channel.delete(String(messageId));
 		if (!channel.size) queues.delete(key);
-	}
-
-	function nextDelay() {
-		return LIVE_REPAINT_DELAY_MS;
 	}
 
 	function arm(delay) {
@@ -118,10 +118,10 @@ function createDisplayRepaintScheduler({
 				if (Object.keys(trackingKeysByMessageId).length) report.trackingKeysByMessageId = trackingKeysByMessageId;
 				try {onRenderOutcome(report);}
 				catch (error) {}
-				if (queues.size) arm(nextDelay());
+				if (queues.size) arm(LIVE_REPAINT_DELAY_MS);
 			}).catch(() => {
 				releaseActiveRequests(channelId, messageIds);
-				if (queues.size) arm(nextDelay());
+				if (queues.size) arm(LIVE_REPAINT_DELAY_MS);
 			});
 		}
 	}
@@ -140,7 +140,7 @@ function createDisplayRepaintScheduler({
 		if (active) for (const activeTrackingKey of active.trackingKeys) queued.trackingKeys.add(activeTrackingKey);
 		if (trackingKey != null && String(trackingKey)) queued.trackingKeys.add(String(trackingKey));
 		requestsByMessageId.set(messageKey, queued);
-		if (!active) arm(delay == null ? nextDelay() : delay);
+		if (!active) arm(delay == null ? LIVE_REPAINT_DELAY_MS : delay);
 	}
 
 	// The legacy full-list repaint, kept for the paths that still own their display
@@ -211,8 +211,7 @@ function createDisplayRepaintScheduler({
 			timer = null;
 			queues.clear();
 			activeRequests.clear();
-		},
-		getNextDelay: nextDelay
+		}
 	});
 }
 
