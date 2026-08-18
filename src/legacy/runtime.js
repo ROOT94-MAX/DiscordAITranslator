@@ -71,6 +71,7 @@ module.exports = (_ => {
 		const {createContextMenuWiring} = require("../ui/context-menu-wiring");
 		const {createDiscordMarkupRenderer} = require("../display/discord-markup-renderer");
 		const {createPluginDefaults, MODULE_PATCHES} = require("../settings/plugin-defaults");
+		const {createReplyPreviewQueue} = require("../received/reply-preview-queue");
 		const loadedStatusPosition = require("../ui/loaded-status-position");
 		const {createLoadedStatusCapsuleController} = require("../ui/loaded-status-capsule");
 		const {createChannelTitleStore} = require("../channel-title/channel-title-store");
@@ -1020,47 +1021,14 @@ module.exports = (_ => {
 				return BDFDB.ReactUtils.createElement(node.type, Object.assign({}, props, {key: node.key, ref: node.ref}));
 			}
 
-			queueReplyPreviewTranslation (message, channelId, contextOptions = {}) {
-				if (!message || !message.id || !channelId || this.ensureReceivedDisplayRuntime().isPreviewPending(message.id)) return;
-				const baseMessage = contextOptions.baseMessage || null;
-				if (baseMessage && !this.shouldAutoTranslateReplyPreview(baseMessage, message, channelId)) return;
-				if (this.ensureReceivedDisplayRuntime().isSuppressed(message.id)) return;
-				if (!this.isTranslationEnabled(channelId) || this.isOwnMessage(message)) return;
-				const originalContent = (message.content || "").trim();
-				if (!originalContent) return;
-				const signature = this.createReplyPreviewSignature(message, channelId, originalContent);
-				const existingTranslation = this.ensureReceivedDisplayRuntime().getPreviewTranslation(message.id);
-				if (existingTranslation && existingTranslation.signature == signature) return;
-				const cachedTranslation = this.getCachedReceivedTranslation(message, channelId);
-				if (cachedTranslation) {
-					const previewTranslation = this.createReplyPreviewTranslationData(message, channelId, cachedTranslation);
-					if (previewTranslation) {const previewCommit = this.ensureReceivedDisplayRuntime().commitPreviewResult({messageId: message.id, channelId, signature, translation: previewTranslation}); if (previewCommit && previewCommit.catch) previewCommit.catch(_ => {});}
-					return;
-				}
-				const request = this.ensureReceivedDisplayRuntime().markPreviewPending({messageId: message.id, channelId, signature});
-				this.translateText(originalContent, messageTypes.RECEIVED, (translation, input, output) => {
-					if (!pluginRuntimeActive || !this.ensureReceivedDisplayRuntime().releasePreviewPending(message.id, request)) return;
-					if (this.createReplyPreviewSignature(message, channelId, (message.content || "").trim()) != signature) return;
-					if (baseMessage && !this.shouldAutoTranslateReplyPreview(baseMessage, message, channelId)) return;
-					if (!this.isTranslationEnabled(channelId)) return;
-					if (translation) {
-						const previewCommit = this.ensureReceivedDisplayRuntime().commitPreviewResult({messageId: message.id, channelId, signature, translation: {
-							signature,
-							channelId,
-							auto: true,
-							translatedContent: (translation || "").trim(),
-							originalContent,
-							input,
-							output
-						}}); if (previewCommit && previewCommit.catch) previewCommit.catch(_ => {});
-					}
-				}, null, {
-					showToast: false,
-					showFailureToast: false,
-					trackBusy: false,
-					channelId
-				});
+			ensureReplyPreviewQueue () {
+				if (!this.replyPreviewQueueInstance) this.replyPreviewQueueInstance = createReplyPreviewQueue({getPlugin: () => this, messageTypes, isRuntimeActive: () => pluginRuntimeActive});
+				return this.replyPreviewQueueInstance;
 			}
+			queueReplyPreviewTranslation (message, channelId, contextOptions = {}) {
+				this.ensureReplyPreviewQueue().queueReplyPreviewTranslation(message, channelId, contextOptions);
+			}
+
 			resetAutoTranslationTracking (channelId = null) {this.ensureHistoricalSourceRuntime().advanceGeneration(channelId); return this.ensureLiveTranslationQueue().resetTracking(channelId);}
 			getAutoTranslationChannelState (channelId) {return this.ensureLiveTranslationQueue().getChannelState(channelId);}
 			prepareAutoTranslationChannelSession (channelId) {this.ensureHistoricalSourceRuntime().handleChannelSessionChange(this.ensureLiveTranslationQueue().getLastChannelId(), channelId); return this.ensureLiveTranslationQueue().prepareChannelSession(channelId);}

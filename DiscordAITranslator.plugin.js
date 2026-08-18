@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId ef3b70585d1c9547
+ * @buildId d3a945a0c3756cf9
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -5709,6 +5709,58 @@ var require_plugin_defaults = __commonJS({
   }
 });
 
+// src/received/reply-preview-queue.js
+var require_reply_preview_queue = __commonJS({
+  "src/received/reply-preview-queue.js"(exports2, module2) {
+    function createReplyPreviewQueue({ getPlugin, messageTypes, isRuntimeActive }) {
+      function queueReplyPreviewTranslation(message, channelId, contextOptions = {}) {
+        let plugin = getPlugin();
+        if (!message || !message.id || !channelId || plugin.ensureReceivedDisplayRuntime().isPreviewPending(message.id)) return;
+        let baseMessage = contextOptions.baseMessage || null;
+        if (baseMessage && !plugin.shouldAutoTranslateReplyPreview(baseMessage, message, channelId) || plugin.ensureReceivedDisplayRuntime().isSuppressed(message.id) || !plugin.isTranslationEnabled(channelId) || plugin.isOwnMessage(message)) return;
+        let originalContent = (message.content || "").trim();
+        if (!originalContent) return;
+        let signature = plugin.createReplyPreviewSignature(message, channelId, originalContent), existingTranslation = plugin.ensureReceivedDisplayRuntime().getPreviewTranslation(message.id);
+        if (existingTranslation && existingTranslation.signature == signature) return;
+        let cachedTranslation = plugin.getCachedReceivedTranslation(message, channelId);
+        if (cachedTranslation) {
+          let previewTranslation = plugin.createReplyPreviewTranslationData(message, channelId, cachedTranslation);
+          if (previewTranslation) {
+            let previewCommit = plugin.ensureReceivedDisplayRuntime().commitPreviewResult({ messageId: message.id, channelId, signature, translation: previewTranslation });
+            previewCommit && previewCommit.catch && previewCommit.catch((_) => {
+            });
+          }
+          return;
+        }
+        let request = plugin.ensureReceivedDisplayRuntime().markPreviewPending({ messageId: message.id, channelId, signature });
+        plugin.translateText(originalContent, messageTypes.RECEIVED, (translation, input, output) => {
+          if (!(!isRuntimeActive() || !plugin.ensureReceivedDisplayRuntime().releasePreviewPending(message.id, request)) && plugin.createReplyPreviewSignature(message, channelId, (message.content || "").trim()) == signature && !(baseMessage && !plugin.shouldAutoTranslateReplyPreview(baseMessage, message, channelId)) && plugin.isTranslationEnabled(channelId) && translation) {
+            let previewCommit = plugin.ensureReceivedDisplayRuntime().commitPreviewResult({ messageId: message.id, channelId, signature, translation: {
+              signature,
+              channelId,
+              auto: !0,
+              translatedContent: (translation || "").trim(),
+              originalContent,
+              input,
+              output
+            } });
+            previewCommit && previewCommit.catch && previewCommit.catch((_) => {
+            });
+          }
+        }, null, {
+          showToast: !1,
+          showFailureToast: !1,
+          trackBusy: !1,
+          channelId
+        });
+      }
+      return __name(queueReplyPreviewTranslation, "queueReplyPreviewTranslation"), Object.freeze({ queueReplyPreviewTranslation });
+    }
+    __name(createReplyPreviewQueue, "createReplyPreviewQueue");
+    module2.exports = { createReplyPreviewQueue };
+  }
+});
+
 // src/ui/loaded-status-position.js
 var require_loaded_status_position = __commonJS({
   "src/ui/loaded-status-position.js"(exports2, module2) {
@@ -11068,7 +11120,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -11117,7 +11169,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "ef3b70585d1c9547";
+            return "d3a945a0c3756cf9";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -11724,45 +11776,11 @@ __________________ __________________ __________________
             }), typeof props.children == "string" && (props.children = props.children.replace(/\n+/g, `
 `))), extraClasses.length && (props.className = BDFDB.DOMUtils.formatClassName(className, ...extraClasses)), props.children != null && (props.children = this.tagReplyPreviewRenderNode(props.children)), BDFDB.ReactUtils.createElement(node.type, Object.assign({}, props, { key: node.key, ref: node.ref }));
           }
+          ensureReplyPreviewQueue() {
+            return this.replyPreviewQueueInstance || (this.replyPreviewQueueInstance = createReplyPreviewQueue({ getPlugin: /* @__PURE__ */ __name(() => this, "getPlugin"), messageTypes, isRuntimeActive: /* @__PURE__ */ __name(() => pluginRuntimeActive, "isRuntimeActive") })), this.replyPreviewQueueInstance;
+          }
           queueReplyPreviewTranslation(message, channelId, contextOptions = {}) {
-            if (!message || !message.id || !channelId || this.ensureReceivedDisplayRuntime().isPreviewPending(message.id)) return;
-            let baseMessage = contextOptions.baseMessage || null;
-            if (baseMessage && !this.shouldAutoTranslateReplyPreview(baseMessage, message, channelId) || this.ensureReceivedDisplayRuntime().isSuppressed(message.id) || !this.isTranslationEnabled(channelId) || this.isOwnMessage(message)) return;
-            let originalContent = (message.content || "").trim();
-            if (!originalContent) return;
-            let signature = this.createReplyPreviewSignature(message, channelId, originalContent), existingTranslation = this.ensureReceivedDisplayRuntime().getPreviewTranslation(message.id);
-            if (existingTranslation && existingTranslation.signature == signature) return;
-            let cachedTranslation = this.getCachedReceivedTranslation(message, channelId);
-            if (cachedTranslation) {
-              let previewTranslation = this.createReplyPreviewTranslationData(message, channelId, cachedTranslation);
-              if (previewTranslation) {
-                let previewCommit = this.ensureReceivedDisplayRuntime().commitPreviewResult({ messageId: message.id, channelId, signature, translation: previewTranslation });
-                previewCommit && previewCommit.catch && previewCommit.catch((_2) => {
-                });
-              }
-              return;
-            }
-            let request = this.ensureReceivedDisplayRuntime().markPreviewPending({ messageId: message.id, channelId, signature });
-            this.translateText(originalContent, messageTypes.RECEIVED, (translation, input, output) => {
-              if (!(!pluginRuntimeActive || !this.ensureReceivedDisplayRuntime().releasePreviewPending(message.id, request)) && this.createReplyPreviewSignature(message, channelId, (message.content || "").trim()) == signature && !(baseMessage && !this.shouldAutoTranslateReplyPreview(baseMessage, message, channelId)) && this.isTranslationEnabled(channelId) && translation) {
-                let previewCommit = this.ensureReceivedDisplayRuntime().commitPreviewResult({ messageId: message.id, channelId, signature, translation: {
-                  signature,
-                  channelId,
-                  auto: !0,
-                  translatedContent: (translation || "").trim(),
-                  originalContent,
-                  input,
-                  output
-                } });
-                previewCommit && previewCommit.catch && previewCommit.catch((_2) => {
-                });
-              }
-            }, null, {
-              showToast: !1,
-              showFailureToast: !1,
-              trackBusy: !1,
-              channelId
-            });
+            this.ensureReplyPreviewQueue().queueReplyPreviewTranslation(message, channelId, contextOptions);
           }
           resetAutoTranslationTracking(channelId = null) {
             return this.ensureHistoricalSourceRuntime().advanceGeneration(channelId), this.ensureLiveTranslationQueue().resetTracking(channelId);
