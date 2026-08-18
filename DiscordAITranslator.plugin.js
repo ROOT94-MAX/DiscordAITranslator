@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId babc144125c4abb3
+ * @buildId 6ad2ef61b67848ac
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -5545,6 +5545,80 @@ var require_context_menu_wiring = __commonJS({
   }
 });
 
+// src/display/discord-markup-renderer.js
+var require_discord_markup_renderer = __commonJS({
+  "src/display/discord-markup-renderer.js"(exports2, module2) {
+    function createDiscordMarkupRenderer({ BDFDB, getMentionDisplayName }) {
+      function getCustomEmojiAssetUrl(emojiId, animated = !1) {
+        return emojiId ? `https://cdn.discordapp.com/emojis/${emojiId}.${animated ? "gif" : "webp"}?size=40&quality=lossless` : "";
+      }
+      __name(getCustomEmojiAssetUrl, "getCustomEmojiAssetUrl");
+      function createDiscordMarkupDisplayNode(token, key) {
+        if (!token) return token;
+        let match = /^<(a?):([A-Za-z0-9_~]+):(\d+)>$/.exec(token);
+        if (match) {
+          let animated = match[1] == "a", emojiName = match[2], emojiId = match[3];
+          return BDFDB.ReactUtils.createElement("img", {
+            key,
+            className: "translator-discord-emoji",
+            src: getCustomEmojiAssetUrl(emojiId, animated),
+            alt: `:${emojiName}:`,
+            title: `:${emojiName}:`,
+            draggable: !1
+          });
+        }
+        if (match = /^<@!?(\d+)>$/.exec(token), match) {
+          let displayName = getMentionDisplayName(match[1]) || "user";
+          return BDFDB.ReactUtils.createElement("span", {
+            key,
+            className: "translator-discord-mention",
+            children: `@${displayName}`
+          });
+        }
+        if (match = /^<@&(\d+)>$/.exec(token), match) {
+          let roleName = "role";
+          try {
+            let guildId = BDFDB.LibraryStores.SelectedGuildStore && BDFDB.LibraryStores.SelectedGuildStore.getGuildId && BDFDB.LibraryStores.SelectedGuildStore.getGuildId(), role = guildId && BDFDB.LibraryStores.GuildStore && BDFDB.LibraryStores.GuildStore.getRole && BDFDB.LibraryStores.GuildStore.getRole(guildId, match[1]);
+            role && role.name && (roleName = role.name);
+          } catch {
+          }
+          return BDFDB.ReactUtils.createElement("span", {
+            key,
+            className: "translator-discord-mention translator-discord-role-mention",
+            children: `@${roleName}`
+          });
+        }
+        if (match = /^<#(\d+)>$/.exec(token), match) {
+          let channelName = "channel";
+          try {
+            let channel = BDFDB.LibraryStores.ChannelStore && BDFDB.LibraryStores.ChannelStore.getChannel && BDFDB.LibraryStores.ChannelStore.getChannel(match[1]);
+            channel && channel.name && (channelName = channel.name);
+          } catch {
+          }
+          return BDFDB.ReactUtils.createElement("span", {
+            key,
+            className: "translator-discord-mention translator-discord-channel-mention",
+            children: `#${channelName}`
+          });
+        }
+        return token;
+      }
+      __name(createDiscordMarkupDisplayNode, "createDiscordMarkupDisplayNode");
+      function renderDiscordMarkupText(text, keyPrefix = "discord-markup") {
+        if (text == null) return "";
+        text = String(text);
+        let nodes = [], tokenRegex = /(<a?:[A-Za-z0-9_~]+:\d+>|<@!?\d+>|<@&\d+>|<#\d+>)/g, lastIndex = 0, match, index = 0;
+        for (; match = tokenRegex.exec(text); )
+          match.index > lastIndex && nodes.push(text.slice(lastIndex, match.index)), nodes.push(createDiscordMarkupDisplayNode(match[0], `${keyPrefix}-${index++}`)), lastIndex = match.index + match[0].length;
+        return lastIndex < text.length && nodes.push(text.slice(lastIndex)), nodes;
+      }
+      return __name(renderDiscordMarkupText, "renderDiscordMarkupText"), Object.freeze({ getCustomEmojiAssetUrl, createDiscordMarkupDisplayNode, renderDiscordMarkupText });
+    }
+    __name(createDiscordMarkupRenderer, "createDiscordMarkupRenderer");
+    module2.exports = { createDiscordMarkupRenderer };
+  }
+});
+
 // src/ui/loaded-status-position.js
 var require_loaded_status_position = __commonJS({
   "src/ui/loaded-status-position.js"(exports2, module2) {
@@ -10904,7 +10978,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -10953,7 +11027,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "babc144125c4abb3";
+            return "6ad2ef61b67848ac";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13349,66 +13423,17 @@ __________________ __________________ __________________
 `).join(`
 > `)}` : "";
           }
+          ensureDiscordMarkupRenderer() {
+            return this.discordMarkupRendererInstance || (this.discordMarkupRendererInstance = createDiscordMarkupRenderer({ BDFDB, getMentionDisplayName: /* @__PURE__ */ __name((userId) => this.getMentionDisplayName(userId), "getMentionDisplayName") })), this.discordMarkupRendererInstance;
+          }
           getCustomEmojiAssetUrl(emojiId, animated = !1) {
-            return emojiId ? `https://cdn.discordapp.com/emojis/${emojiId}.${animated ? "gif" : "webp"}?size=40&quality=lossless` : "";
+            return this.ensureDiscordMarkupRenderer().getCustomEmojiAssetUrl(emojiId, animated);
           }
           createDiscordMarkupDisplayNode(token, key) {
-            if (!token) return token;
-            let match = /^<(a?):([A-Za-z0-9_~]+):(\d+)>$/.exec(token);
-            if (match) {
-              let animated = match[1] == "a", emojiName = match[2], emojiId = match[3];
-              return BDFDB.ReactUtils.createElement("img", {
-                key,
-                className: "translator-discord-emoji",
-                src: this.getCustomEmojiAssetUrl(emojiId, animated),
-                alt: `:${emojiName}:`,
-                title: `:${emojiName}:`,
-                draggable: !1
-              });
-            }
-            if (match = /^<@!?(\d+)>$/.exec(token), match) {
-              let displayName = this.getMentionDisplayName(match[1]) || "user";
-              return BDFDB.ReactUtils.createElement("span", {
-                key,
-                className: "translator-discord-mention",
-                children: `@${displayName}`
-              });
-            }
-            if (match = /^<@&(\d+)>$/.exec(token), match) {
-              let roleName = "role";
-              try {
-                let guildId = BDFDB.LibraryStores.SelectedGuildStore && BDFDB.LibraryStores.SelectedGuildStore.getGuildId && BDFDB.LibraryStores.SelectedGuildStore.getGuildId(), role = guildId && BDFDB.LibraryStores.GuildStore && BDFDB.LibraryStores.GuildStore.getRole && BDFDB.LibraryStores.GuildStore.getRole(guildId, match[1]);
-                role && role.name && (roleName = role.name);
-              } catch {
-              }
-              return BDFDB.ReactUtils.createElement("span", {
-                key,
-                className: "translator-discord-mention translator-discord-role-mention",
-                children: `@${roleName}`
-              });
-            }
-            if (match = /^<#(\d+)>$/.exec(token), match) {
-              let channelName = "channel";
-              try {
-                let channel = BDFDB.LibraryStores.ChannelStore && BDFDB.LibraryStores.ChannelStore.getChannel && BDFDB.LibraryStores.ChannelStore.getChannel(match[1]);
-                channel && channel.name && (channelName = channel.name);
-              } catch {
-              }
-              return BDFDB.ReactUtils.createElement("span", {
-                key,
-                className: "translator-discord-mention translator-discord-channel-mention",
-                children: `#${channelName}`
-              });
-            }
-            return token;
+            return this.ensureDiscordMarkupRenderer().createDiscordMarkupDisplayNode(token, key);
           }
           renderDiscordMarkupText(text, keyPrefix = "discord-markup") {
-            if (text == null) return "";
-            text = String(text);
-            let nodes = [], tokenRegex = /(<a?:[A-Za-z0-9_~]+:\d+>|<@!?\d+>|<@&\d+>|<#\d+>)/g, lastIndex = 0, match, index = 0;
-            for (; match = tokenRegex.exec(text); )
-              match.index > lastIndex && nodes.push(text.slice(lastIndex, match.index)), nodes.push(this.createDiscordMarkupDisplayNode(match[0], `${keyPrefix}-${index++}`)), lastIndex = match.index + match[0].length;
-            return lastIndex < text.length && nodes.push(text.slice(lastIndex)), nodes;
+            return this.ensureDiscordMarkupRenderer().renderDiscordMarkupText(text, keyPrefix);
           }
           createOriginalMessageBlock(originalText) {
             return originalText ? BDFDB.ReactUtils.createElement("div", {
