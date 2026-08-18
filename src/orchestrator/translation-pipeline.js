@@ -44,10 +44,6 @@ function createTranslationPipeline({BDFDB, getPlugin, messageTypes, languageType
 			}
 			else {
 				if (options.auto && !plugin.isTranslationEnabled(channelId)) return finish(false);
-				const rerenderOptions = {
-					batched: options.auto || options.silent,
-					allowWhileTyping: !!options.auto
-				};
 				const originalContentData = options.originalContentData || plugin.extractOriginalContentData(message, {ignoreReferencedPreview: isManualTranslation});
 				if (!plugin.hasTranslatableMessageContent(originalContentData)) return finish(false);
 				if (plugin.shouldSkipReceivedTranslationBeforeRequest(originalContentData, channelId)) {
@@ -89,8 +85,11 @@ function createTranslationPipeline({BDFDB, getPlugin, messageTypes, languageType
 						}, _ => finish(false));
 						return;
 					}
+					// The store commit inside applyStoredTranslationToMessage is the manual
+					// display transaction; the per-message flush paints and acknowledges it
+					// through the same chain the automatic path uses (5a).
 					plugin.applyStoredTranslationToMessage(message, storedCachedTranslation, originalContentData);
-					plugin.scheduleTranslationRerender(rerenderOptions);
+					plugin.scheduleReceivedDisplayFlush(channelId, message.id);
 					return finish(true);
 				}
 				const allTextsToTranslate = plugin.buildTranslationRequestText(originalContentData);
@@ -148,7 +147,7 @@ function createTranslationPipeline({BDFDB, getPlugin, messageTypes, languageType
 									return;
 								}
 								plugin.applyStoredTranslationToMessage(message, storedTranslation, originalContentData);
-								plugin.scheduleTranslationRerender(rerenderOptions);
+								plugin.scheduleReceivedDisplayFlush(channelId, message.id);
 								plugin.persistTranslationCacheEntry(message.id, signature, storedTranslation);
 							}
 							else if (meta && meta.skipped && options.auto) {

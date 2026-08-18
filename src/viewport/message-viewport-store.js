@@ -433,6 +433,18 @@ function createMessageViewportStore({
 		clearManualScrollLock,
 		captureScrollerState,
 		restoreScrollerState,
+		// Display transactions preserve scroll exactly as the legacy manual repaint did:
+		// a locked manual anchor wins over the offset capture so the clicked message
+		// stays put when translated text changes row heights above it.
+		captureDisplayTransactionScrollState() {
+			const manualAnchor = getActiveManualScrollAnchor();
+			if (manualAnchor) return {manualAnchor};
+			return captureScrollerState();
+		},
+		restoreDisplayTransactionScrollState(scrollerState) {
+			if (scrollerState && scrollerState.manualAnchor) return restoreAnchorState(scrollerState.manualAnchor);
+			return restoreScrollerState(scrollerState);
+		},
 		isViewingMessageHistory,
 		attachScrollWatcher,
 		detachScrollWatcher,

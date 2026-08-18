@@ -86,3 +86,30 @@ test("manual embed translation uses the shared parser and preserves partial fiel
 	assert.equal(translation.embeds["embed-1"].footerText, "Original footer");
 	assert.deepEqual(translation.embeds["embed-1"].fields, [{name: "Original name", value: "Original value"}]);
 });
+
+test("a manual translation paints through the per-message transaction, not the whole list", async () => {
+	// Display-unification 5a: the manual commit already lands in the display store;
+	// the paint must ride the same acknowledged per-message flush the automatic path
+	// uses instead of rebuilding the whole list.
+	const plugin = createPluginInstance();
+	const channel = {id: "channel-manual-transaction"};
+	const message = {
+		id: "message-manual-transaction",
+		channel_id: channel.id,
+		content: "hola amigo",
+		embeds: [],
+		author: {id: "other-user"}
+	};
+	const flushes = [];
+	plugin.scheduleTranslationRerender = () => {throw new Error("a manual result must not repaint the whole list");};
+	plugin.scheduleReceivedDisplayFlush = (channelId, messageId) => {flushes.push({channelId, messageId});};
+	plugin.translateText = (_text, _place, callback) => {callback("hello friend", {id: "es"}, {id: "en"}, {});};
+
+	const result = await plugin.translateMessage(message, channel, {manual: true, trackBusy: false});
+
+	assert.equal(result, true);
+	assert.deepEqual(flushes, [{channelId: channel.id, messageId: message.id}]);
+	const state = plugin.ensureReceivedDisplayRuntime().getDisplayState(message.id);
+	assert.equal(state && state.status, "translated", "the manual result is committed to the display store");
+	assert.equal(state && state.origin, "manual");
+});

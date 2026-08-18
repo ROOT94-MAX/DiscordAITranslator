@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId e3b864b5225b407d
+ * @buildId 7bfa0058f51eae53
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -4926,10 +4926,7 @@ var require_translation_pipeline = __commonJS({
             }, (_) => finish(!1));
           } else {
             if (options.auto && !plugin.isTranslationEnabled(channelId)) return finish(!1);
-            let rerenderOptions = {
-              batched: options.auto || options.silent,
-              allowWhileTyping: !!options.auto
-            }, originalContentData = options.originalContentData || plugin.extractOriginalContentData(message, { ignoreReferencedPreview: isManualTranslation });
+            let originalContentData = options.originalContentData || plugin.extractOriginalContentData(message, { ignoreReferencedPreview: isManualTranslation });
             if (!plugin.hasTranslatableMessageContent(originalContentData)) return finish(!1);
             if (plugin.shouldSkipReceivedTranslationBeforeRequest(originalContentData, channelId)) {
               let skipReason = plugin.getReceivedAutoTranslateSkipReason(originalContentData, channelId) || "same_language", skipSignature = plugin.createReceivedTranslationSignature(message, channelId, originalContentData);
@@ -4965,7 +4962,7 @@ var require_translation_pipeline = __commonJS({
                 }, (_) => finish(!1));
                 return;
               }
-              return plugin.applyStoredTranslationToMessage(message, storedCachedTranslation, originalContentData), plugin.scheduleTranslationRerender(rerenderOptions), finish(!0);
+              return plugin.applyStoredTranslationToMessage(message, storedCachedTranslation, originalContentData), plugin.scheduleReceivedDisplayFlush(channelId, message.id), finish(!0);
             }
             let allTextsToTranslate = plugin.buildTranslationRequestText(originalContentData);
             message.embeds.forEach((embed) => embed.message_id = message.id), isManualTranslation && (manualRequest = plugin.ensureSentTranslationStore().beginManualRequest(manualRequestKey));
@@ -5010,7 +5007,7 @@ var require_translation_pipeline = __commonJS({
                       }, (_) => finish(!1));
                       return;
                     }
-                    plugin.applyStoredTranslationToMessage(message, storedTranslation, originalContentData), plugin.scheduleTranslationRerender(rerenderOptions), plugin.persistTranslationCacheEntry(message.id, signature, storedTranslation);
+                    plugin.applyStoredTranslationToMessage(message, storedTranslation, originalContentData), plugin.scheduleReceivedDisplayFlush(channelId, message.id), plugin.persistTranslationCacheEntry(message.id, signature, storedTranslation);
                   } else if (meta && meta.skipped && options.auto) {
                     plugin.persistReceivedSkipDecision(message.id, signature, "ai_skip_signal", allTextsToTranslate), plugin.commitReceivedDisplayResult(plugin.createReceivedDisplayCommitResult(message, channelId, {
                       sourceSignature: signature,
@@ -6012,6 +6009,16 @@ var require_message_viewport_store = __commonJS({
         clearManualScrollLock,
         captureScrollerState,
         restoreScrollerState,
+        // Display transactions preserve scroll exactly as the legacy manual repaint did:
+        // a locked manual anchor wins over the offset capture so the clicked message
+        // stays put when translated text changes row heights above it.
+        captureDisplayTransactionScrollState() {
+          let manualAnchor = getActiveManualScrollAnchor();
+          return manualAnchor ? { manualAnchor } : captureScrollerState();
+        },
+        restoreDisplayTransactionScrollState(scrollerState) {
+          return scrollerState && scrollerState.manualAnchor ? restoreAnchorState(scrollerState.manualAnchor) : restoreScrollerState(scrollerState);
+        },
         isViewingMessageHistory,
         attachScrollWatcher,
         detachScrollWatcher,
@@ -10730,7 +10737,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "e3b864b5225b407d";
+            return "7bfa0058f51eae53";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -12785,17 +12792,17 @@ __________________ __________________ __________________
               isRuntimeActive: /* @__PURE__ */ __name(() => pluginRuntimeActive, "isRuntimeActive"),
               getUserScrollIntentSequence: /* @__PURE__ */ __name(() => this.ensureMessageViewportStore().getUserScrollIntentSequence(), "getUserScrollIntentSequence"),
               // Scroll preservation is best-effort: a capture or restore failure must never
-              // break an acknowledged display transaction.
+              // break a display transaction. The viewport store owns the anchor-over-offset choice.
               captureScrollState: /* @__PURE__ */ __name(() => {
                 try {
-                  return this.captureMessageScrollerState();
+                  return this.ensureMessageViewportStore().captureDisplayTransactionScrollState();
                 } catch {
                   return null;
                 }
               }, "captureScrollState"),
               restoreScrollState: /* @__PURE__ */ __name((scrollerState) => {
                 try {
-                  this.restoreMessageScrollerState(scrollerState);
+                  this.ensureMessageViewportStore().restoreDisplayTransactionScrollState(scrollerState);
                 } catch {
                 }
               }, "restoreScrollState")
