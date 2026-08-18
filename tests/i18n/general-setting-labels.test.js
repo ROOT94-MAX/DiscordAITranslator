@@ -15,6 +15,14 @@ test("general setting labels resolve per ui language", () => {
 	assert.equal(russian.showOriginalMessage, "Показывать оригинал рядом с переведёнными входящими сообщениями");
 });
 
+test("the russian spoiler labels are real cyrillic, not the shipped mojibake", () => {
+	// The shipped strings were UTF-8 cyrillic bytes misread as GBK (verified by
+	// reversing that transform, which yields exactly these sentences).
+	const russian = getGeneralSettingLabels({isChinese: false, isRussian: true});
+	assert.equal(russian.useSpoilerInSentOriginal, "Прятать исходный текст в исходящих сообщениях как спойлер");
+	assert.equal(russian.useSpoilerInReceivedOriginal, "Показывать оригинал входящих сообщений как спойлер");
+});
+
 test("an unknown key stays undefined so the runtime fallback chain can take over", () => {
 	const labels = getGeneralSettingLabels({isChinese: false, isRussian: false});
 	assert.equal(labels.notARealSettingKey, undefined);

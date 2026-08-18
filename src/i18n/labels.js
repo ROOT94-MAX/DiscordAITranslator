@@ -1059,8 +1059,9 @@ function getGeneralSettingLabels({isChinese = false, isRussian = false} = {}) {
 		translatedTextColor: "Цвет переведённого текста",
 		protectQuotedText: "Автоматически защищать и подсвечивать текст в обрамляющих символах",
 		useSpoilerInOriginal: "Показывать оригинал как спойлер",
-		useSpoilerInSentOriginal: "袩褉褟褌邪褌褜 懈褋褏芯写薪褘泄 褌械泻褋褌 胁 懈褋褏芯写褟褖懈褏 褋芯芯斜褖械薪懈褟褏 泻邪泻 褋锌芯泄谢械褉",
-		useSpoilerInReceivedOriginal: "袩芯泻邪蟹褘胁邪褌褜 芯褉懈谐懈薪邪谢 胁褏芯写褟褖懈褏 褋芯芯斜褖械薪懈泄 泻邪泻 褋锌芯泄谢械褉"
+		// Recovered from the shipped mojibake (UTF-8 cyrillic misread as GBK, reversed).
+		useSpoilerInSentOriginal: "Прятать исходный текст в исходящих сообщениях как спойлер",
+		useSpoilerInReceivedOriginal: "Показывать оригинал входящих сообщений как спойлер"
 	});
 	return labels;
 }

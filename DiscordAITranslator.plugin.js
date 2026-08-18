@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId a81e65035777b036
+ * @buildId 27d5a3e0044b95c0
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -10281,8 +10281,9 @@ var require_labels = __commonJS({
         translatedTextColor: "Цвет переведённого текста",
         protectQuotedText: "Автоматически защищать и подсвечивать текст в обрамляющих символах",
         useSpoilerInOriginal: "Показывать оригинал как спойлер",
-        useSpoilerInSentOriginal: "袩褉褟褌邪褌褜 懈褋褏芯写薪褘泄 褌械泻褋褌 胁 懈褋褏芯写褟褖懈褏 褋芯芯斜褖械薪懈褟褏 泻邪泻 褋锌芯泄谢械褉",
-        useSpoilerInReceivedOriginal: "袩芯泻邪蟹褘胁邪褌褜 芯褉懈谐懈薪邪谢 胁褏芯写褟褖懈褏 褋芯芯斜褖械薪懈泄 泻邪泻 褋锌芯泄谢械褉"
+        // Recovered from the shipped mojibake (UTF-8 cyrillic misread as GBK, reversed).
+        useSpoilerInSentOriginal: "Прятать исходный текст в исходящих сообщениях как спойлер",
+        useSpoilerInReceivedOriginal: "Показывать оригинал входящих сообщений как спойлер"
       }), labels;
     }
     __name(getGeneralSettingLabels, "getGeneralSettingLabels");
@@ -10865,7 +10866,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "a81e65035777b036";
+            return "27d5a3e0044b95c0";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
