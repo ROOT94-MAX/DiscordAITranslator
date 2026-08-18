@@ -110,6 +110,6 @@ test("display-transaction scroll restore honors the manual translation anchor", 
 	assert.match(wiring, /captureDisplayTransactionScrollState\(context\)/);
 	assert.match(wiring, /restoreDisplayTransactionScrollState\(/);
 	const viewportSource = fs.readFileSync(path.resolve(__dirname, "..", "src", "viewport", "message-viewport-store.js"), "utf8");
-	const captureImplementation = viewportSource.slice(viewportSource.indexOf("captureDisplayTransactionScrollState()"), viewportSource.indexOf("restoreDisplayTransactionScrollState"));
+	const captureImplementation = viewportSource.slice(viewportSource.indexOf("captureDisplayTransactionScrollState"), viewportSource.indexOf("restoreDisplayTransactionScrollState"));
 	assert.match(captureImplementation, /getActiveManualScrollAnchor\(\)/, "the manual anchor must win over the offset capture");
 });
