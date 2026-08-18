@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId 741c5cd9f6a9ca27
+ * @buildId a81e65035777b036
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -10250,7 +10250,43 @@ var require_labels = __commonJS({
       }
     }
     __name(getLabelsForUiLanguage, "getLabelsForUiLanguage");
-    module2.exports = { getLabelsForUiLanguage };
+    function getGeneralSettingLabels({ isChinese = !1, isRussian = !1 } = {}) {
+      let labels = isChinese ? {
+        sendOriginalMessage: "发送译文时同时附带原文",
+        showOriginalMessage: "查看收到的译文时同时显示原文",
+        useSpoilerInOriginal: "原文使用剧透样式显示",
+        showOriginalDirectly: "直接显示收到消息的原文",
+        highlightTranslatedMessages: "给译文消息添加更显眼的左侧色条与背景",
+        protectQuotedText: "自动保护并高亮包裹符内的内容",
+        showOriginalInReplyPreview: "别人引用这条消息时只显示译文",
+        useSpoilerInSentOriginal: "发送附带原文时使用剧透/刮刮乐遮盖",
+        useSpoilerInReceivedOriginal: "查看收到的原文时使用剧透/刮刮乐遮盖"
+      } : {
+        sendOriginalMessage: "Also send the original text with translated outgoing messages",
+        showOriginalMessage: "Also show the original text with translated incoming messages",
+        useSpoilerInOriginal: "Show original text as spoiler blocks",
+        showOriginalDirectly: "Show received original text directly",
+        highlightTranslatedMessages: "Highlight translated messages with a left accent and background",
+        protectQuotedText: "Automatically protect and highlight wrapped content",
+        showOriginalInReplyPreview: "Show translated text only in reply previews",
+        useSpoilerInSentOriginal: "Hide attached outgoing original text behind spoiler (scratch-off) blocks",
+        useSpoilerInReceivedOriginal: "Show received original text as spoiler (scratch-off) blocks"
+      };
+      return isRussian && Object.assign(labels, {
+        interfaceLanguage: "Язык интерфейса плагина",
+        sendOriginalMessage: "Добавлять оригинал к переведённым исходящим сообщениям",
+        showOriginalMessage: "Показывать оригинал рядом с переведёнными входящими сообщениями",
+        showOriginalDirectly: "Показывать оригинал входящих сообщений напрямую",
+        highlightTranslatedMessages: "Подсвечивать переведённые сообщения",
+        translatedTextColor: "Цвет переведённого текста",
+        protectQuotedText: "Автоматически защищать и подсвечивать текст в обрамляющих символах",
+        useSpoilerInOriginal: "Показывать оригинал как спойлер",
+        useSpoilerInSentOriginal: "袩褉褟褌邪褌褜 懈褋褏芯写薪褘泄 褌械泻褋褌 胁 懈褋褏芯写褟褖懈褏 褋芯芯斜褖械薪懈褟褏 泻邪泻 褋锌芯泄谢械褉",
+        useSpoilerInReceivedOriginal: "袩芯泻邪蟹褘胁邪褌褜 芯褉懈谐懈薪邪谢 胁褏芯写褟褖懈褏 褋芯芯斜褖械薪懈泄 泻邪泻 褋锌芯泄谢械褉"
+      }), labels;
+    }
+    __name(getGeneralSettingLabels, "getGeneralSettingLabels");
+    module2.exports = { getGeneralSettingLabels, getLabelsForUiLanguage };
   }
 });
 
@@ -10800,7 +10836,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
           loadChannelEnablementState,
           getChannelEnablementStateValue,
           channelEnablementStatesEqual
-        } = require_settings_store(), { getLabelsForUiLanguage } = require_labels(), { getCustomTextValue } = require_text();
+        } = require_settings_store(), { getGeneralSettingLabels, getLabelsForUiLanguage } = require_labels(), { getCustomTextValue } = require_text();
         var _this;
         let translationProtectionSignatureVersion = TRANSLATION_PROTECTION_SIGNATURE_VERSION, { TranslateButtonComponent } = createTranslateComponents({
           BDFDB,
@@ -10829,7 +10865,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "741c5cd9f6a9ca27";
+            return "a81e65035777b036";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -10975,52 +11011,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return getCustomTextValue(key, this.isChineseUiLanguage(), this.isRussianUiLanguage());
           }
           getGeneralSettingLabel(key) {
-            let isChinese = this.isChineseUiLanguage(), isRussian = this.isRussianUiLanguage(), labels = isChinese ? {
-              sendOriginalMessage: "发送译文时同时附带原文",
-              showOriginalMessage: "查看收到的译文时同时显示原文",
-              useSpoilerInOriginal: "原文使用剧透样式显示"
-            } : {
-              sendOriginalMessage: "Also send the original text with translated outgoing messages",
-              showOriginalMessage: "Also show the original text with translated incoming messages",
-              useSpoilerInOriginal: "Show original text as spoiler blocks"
-            };
-            return Object.assign(labels, isChinese ? {
-              showOriginalDirectly: "直接显示收到消息的原文",
-              useSpoilerInOriginal: "原文使用剧透样式显示"
-            } : {
-              showOriginalDirectly: "Show received original text directly",
-              useSpoilerInOriginal: "Show original text as spoiler blocks"
-            }), Object.assign(labels, isChinese ? {
-              highlightTranslatedMessages: "给译文消息添加更显眼的左侧色条与背景"
-            } : {
-              highlightTranslatedMessages: "Highlight translated messages with a left accent and background"
-            }), Object.assign(labels, isChinese ? {
-              protectQuotedText: "自动保护并高亮包裹符内的内容"
-            } : {
-              protectQuotedText: "Automatically protect and highlight wrapped content"
-            }), Object.assign(labels, isChinese ? {
-              showOriginalInReplyPreview: "别人引用这条消息时只显示译文"
-            } : {
-              showOriginalInReplyPreview: "Show translated text only in reply previews"
-            }), Object.assign(labels, isChinese ? {
-              useSpoilerInSentOriginal: "发送附带原文时使用剧透/刮刮乐遮盖",
-              useSpoilerInReceivedOriginal: "查看收到的原文时使用剧透/刮刮乐遮盖"
-            } : {
-              useSpoilerInSentOriginal: "Hide attached outgoing original text behind spoiler (scratch-off) blocks",
-              useSpoilerInReceivedOriginal: "Show received original text as spoiler (scratch-off) blocks"
-            }), isRussian && Object.assign(labels, {
-              interfaceLanguage: "Язык интерфейса плагина",
-              sendOriginalMessage: "Добавлять оригинал к переведённым исходящим сообщениям",
-              showOriginalMessage: "Показывать оригинал рядом с переведёнными входящими сообщениями",
-              showOriginalDirectly: "Показывать оригинал входящих сообщений напрямую",
-              highlightTranslatedMessages: "Подсвечивать переведённые сообщения",
-              translatedTextColor: "Цвет переведённого текста",
-              protectQuotedText: "Автоматически защищать и подсвечивать текст в обрамляющих символах",
-              useSpoilerInOriginal: "Показывать оригинал как спойлер"
-            }), isRussian && Object.assign(labels, {
-              useSpoilerInSentOriginal: "袩褉褟褌邪褌褜 懈褋褏芯写薪褘泄 褌械泻褋褌 胁 懈褋褏芯写褟褖懈褏 褋芯芯斜褖械薪懈褟褏 泻邪泻 褋锌芯泄谢械褉",
-              useSpoilerInReceivedOriginal: "袩芯泻邪蟹褘胁邪褌褜 芯褉懈谐懈薪邪谢 胁褏芯写褟褖懈褏 褋芯芯斜褖械薪懈泄 泻邪泻 褋锌芯泄谢械褉"
-            }), labels[key] || this.labels[`general_${key}`] || this.defaults.general[key].description;
+            return getGeneralSettingLabels({ isChinese: this.isChineseUiLanguage(), isRussian: this.isRussianUiLanguage() })[key] || this.labels[`general_${key}`] || this.defaults.general[key].description;
           }
           getEngineLabel(engineKey) {
             let isChinese = this.isChineseUiLanguage(), isRussian = this.isRussianUiLanguage();
