@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId 27d5a3e0044b95c0
+ * @buildId babc144125c4abb3
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -5458,6 +5458,93 @@ var require_special_case_codecs = __commonJS({
   }
 });
 
+// src/ui/context-menu-wiring.js
+var require_context_menu_wiring = __commonJS({
+  "src/ui/context-menu-wiring.js"(exports2, module2) {
+    function createContextMenuWiring({ BDFDB, getPlugin, messageTypes, translateIcon, translateIconUntranslate }) {
+      function onMessageContextMenu(e) {
+        let plugin = getPlugin();
+        if (e.instance.props.message && e.instance.props.channel) {
+          let translated = plugin.isMessageDisplayTranslated(e.instance.props.message, e.instance.props.channel.id), [children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, { id: ["copy-text", "pin", "unpin"] });
+          index == -1 && ([children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, { id: ["edit", "add-reaction", "add-reaction-1", "quote"] })), children.splice(index > -1 ? index + 1 : 0, 0, BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
+            label: translated ? plugin.labels.context_messageuntranslateoption : plugin.labels.context_messagetranslateoption,
+            id: BDFDB.ContextMenuUtils.createItemId(plugin.name, translated ? "untranslate-message" : "translate-message"),
+            icon: /* @__PURE__ */ __name((_) => BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.MenuItems.MenuIcon, {
+              icon: translated ? translateIconUntranslate : translateIcon
+            }), "icon"),
+            action: /* @__PURE__ */ __name((_) => plugin.translateMessage(e.instance.props.message, e.instance.props.channel, { manual: !0, independentOfTextAreaSwitch: !0, trackBusy: !1 }), "action")
+          })), injectMessageLanguageActions(children, index > -1 ? index + 1 : 0, e.instance.props.message, e.instance.props.channel), injectSearchItem(e, !1, e.instance.props.channel.id);
+        }
+      }
+      __name(onMessageContextMenu, "onMessageContextMenu");
+      function onTextAreaContextMenu(e) {
+        injectSearchItem(e, !0);
+      }
+      __name(onTextAreaContextMenu, "onTextAreaContextMenu");
+      function injectMessageLanguageActions(children, index, message, channel) {
+        let plugin = getPlugin();
+        if (!children || !message || !channel) return;
+        let insertIndex = index > -1 ? index + 1 : 0;
+        children.splice(
+          insertIndex,
+          0,
+          BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
+            label: plugin.getCustomText("context_detect_message_language"),
+            id: BDFDB.ContextMenuUtils.createItemId(plugin.name, "detect-message-language"),
+            action: /* @__PURE__ */ __name((_) => plugin.handleMessageLanguageAction(message, channel, !1), "action")
+          }),
+          BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
+            label: plugin.getCustomText("context_reply_in_detected_language"),
+            id: BDFDB.ContextMenuUtils.createItemId(plugin.name, "reply-in-detected-language"),
+            action: /* @__PURE__ */ __name((_) => plugin.handleMessageLanguageAction(message, channel, !0), "action")
+          })
+        );
+      }
+      __name(injectMessageLanguageActions, "injectMessageLanguageActions");
+      function injectSearchItem(e, ownMessage, channelId = null) {
+        let plugin = getPlugin(), text = document.getSelection().toString();
+        if (text) {
+          let translating, foundTranslation, foundInput, foundOutput, copied, [children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, { id: ["devmode-copy-id", "search-google"], group: !0 });
+          children.splice(index > -1 ? index + 1 : 0, 0, BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuGroup, {
+            children: BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
+              id: BDFDB.ContextMenuUtils.createItemId(plugin.name, "search-translation"),
+              icon: /* @__PURE__ */ __name((_) => BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.MenuItems.MenuIcon, {
+                icon: translateIcon
+              }), "icon"),
+              disabled: plugin.ensureLiveTranslationQueue().isBusyTranslating(),
+              label: plugin.labels.context_translator,
+              persisting: !0,
+              action: /* @__PURE__ */ __name((event) => {
+                let item = BDFDB.DOMUtils.getParent(BDFDB.dotCN.menuitem, event.target);
+                if (item) {
+                  let createTooltip = /* @__PURE__ */ __name((_) => {
+                    BDFDB.TooltipUtils.create(item, foundTranslation ? [
+                      `${BDFDB.LanguageUtils.LibraryStrings.from} ${plugin.getLanguageDisplayName(foundInput)}:`,
+                      text,
+                      `${BDFDB.LanguageUtils.LibraryStrings.to} ${plugin.getLanguageDisplayName(foundOutput)}:`,
+                      foundTranslation
+                    ].map((n) => BDFDB.ReactUtils.createElement("div", { children: n })) : plugin.labels.toast_translating_failed, {
+                      type: "right",
+                      color: foundTranslation ? "primary" : "red",
+                      className: "googletranslate-tooltip"
+                    });
+                  }, "createTooltip");
+                  foundTranslation && foundInput && foundOutput ? document.querySelector(".googletranslate-tooltip") ? copied ? (BDFDB.ContextMenuUtils.close(e.instance), BDFDB.DiscordUtils.openLink(plugin.getGoogleTranslatePageURL(foundInput.id, foundOutput.id, text))) : (copied = !0, BDFDB.LibraryModules.WindowUtils.copy(foundTranslation), BDFDB.NotificationUtils.toast(BDFDB.LanguageUtils.LibraryStringsFormat("clipboard_success", BDFDB.LanguageUtils.LanguageStrings.TEXT), { type: "success" })) : createTooltip() : translating || (translating = !0, plugin.translateText(text, ownMessage ? messageTypes.SENT : messageTypes.RECEIVED, (translation, input, output) => {
+                    translation && (foundTranslation = translation, foundInput = input, foundOutput = output), createTooltip();
+                  }, null, { channelId: channelId || BDFDB.LibraryStores.SelectedChannelStore.getChannelId() }));
+                }
+              }, "action")
+            })
+          }));
+        }
+      }
+      return __name(injectSearchItem, "injectSearchItem"), Object.freeze({ onMessageContextMenu, onTextAreaContextMenu, injectMessageLanguageActions, injectSearchItem });
+    }
+    __name(createContextMenuWiring, "createContextMenuWiring");
+    module2.exports = { createContextMenuWiring };
+  }
+});
+
 // src/ui/loaded-status-position.js
 var require_loaded_status_position = __commonJS({
   "src/ui/loaded-status-position.js"(exports2, module2) {
@@ -10817,7 +10904,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -10866,7 +10953,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "27d5a3e0044b95c0";
+            return "babc144125c4abb3";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -11176,22 +11263,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return detectedLanguage ? applyAsReplyTarget && channel && channel.id ? (this.setReplyTargetLanguageForChannel(channel.id, detectedLanguage.id), BDFDB.NotificationUtils.toast(`${this.getCustomText("reply_language_applied")} ${this.getLanguageDisplayName(detectedLanguage)} (${detectedLanguage.id}). ${this.getCustomText("reply_language_hint")}`, { type: "success", position: "center" })) : BDFDB.NotificationUtils.toast(`${this.getCustomText("detect_message_success")}: ${this.getLanguageDisplayName(detectedLanguage)} (${detectedLanguage.id})`, { type: "success", position: "center" }) : BDFDB.NotificationUtils.toast(this.getCustomText("detect_message_failed"), { type: "danger", position: "center" });
           }
           injectMessageLanguageActions(children, index, message, channel) {
-            if (!children || !message || !channel) return;
-            let insertIndex = index > -1 ? index + 1 : 0;
-            children.splice(
-              insertIndex,
-              0,
-              BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-                label: this.getCustomText("context_detect_message_language"),
-                id: BDFDB.ContextMenuUtils.createItemId(this.name, "detect-message-language"),
-                action: /* @__PURE__ */ __name((_2) => this.handleMessageLanguageAction(message, channel, !1), "action")
-              }),
-              BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-                label: this.getCustomText("context_reply_in_detected_language"),
-                id: BDFDB.ContextMenuUtils.createItemId(this.name, "reply-in-detected-language"),
-                action: /* @__PURE__ */ __name((_2) => this.handleMessageLanguageAction(message, channel, !0), "action")
-              })
-            );
+            this.ensureContextMenuWiring().injectMessageLanguageActions(children, index, message, channel);
           }
           cloneOriginalContentData(originalContentData) {
             return {
@@ -12589,58 +12661,17 @@ __________________ __________________ __________________
           forceUpdateAll() {
             this.ensureSettingsStore().reload(), this.ensureTranslationCacheStore().loadPersisted(), this.ensureReceivedDisplayRuntime().clearAllSuppression(), this.clearAutoTranslationQueue(), this.resetAutoTranslationTracking(), this.clearLoadedAutoTranslationStatus(), this.ensureLiveTranslationQueue().setLiveAutoTranslating(!1), this.ensureReceivedDisplayRuntime().clearPreviews(null), this.ensureReceivedDisplayRepaintScheduler().cancelFullRepaintTimers(), this.setLanguages(), BDFDB.PatchUtils.forceAllUpdates(this), BDFDB.MessageUtils.rerenderAll();
           }
+          ensureContextMenuWiring() {
+            return this.contextMenuWiringInstance || (this.contextMenuWiringInstance = createContextMenuWiring({ BDFDB, getPlugin: /* @__PURE__ */ __name(() => this, "getPlugin"), messageTypes, translateIcon, translateIconUntranslate })), this.contextMenuWiringInstance;
+          }
           onMessageContextMenu(e) {
-            if (e.instance.props.message && e.instance.props.channel) {
-              let translated = this.isMessageDisplayTranslated(e.instance.props.message, e.instance.props.channel.id), hint = BDFDB.BDUtils.isPluginEnabled("MessageUtilities") ? BDFDB.BDUtils.getPlugin("MessageUtilities").getActiveShortcutString("__Translate_Message") : null, [children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, { id: ["copy-text", "pin", "unpin"] });
-              index == -1 && ([children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, { id: ["edit", "add-reaction", "add-reaction-1", "quote"] })), children.splice(index > -1 ? index + 1 : 0, 0, BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-                label: translated ? this.labels.context_messageuntranslateoption : this.labels.context_messagetranslateoption,
-                id: BDFDB.ContextMenuUtils.createItemId(this.name, translated ? "untranslate-message" : "translate-message"),
-                icon: /* @__PURE__ */ __name((_2) => BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.MenuItems.MenuIcon, {
-                  icon: translated ? translateIconUntranslate : translateIcon
-                }), "icon"),
-                action: /* @__PURE__ */ __name((_2) => this.translateMessage(e.instance.props.message, e.instance.props.channel, { manual: !0, independentOfTextAreaSwitch: !0, trackBusy: !1 }), "action")
-              })), this.injectMessageLanguageActions(children, index > -1 ? index + 1 : 0, e.instance.props.message, e.instance.props.channel), this.injectSearchItem(e, !1, e.instance.props.channel.id);
-            }
+            this.ensureContextMenuWiring().onMessageContextMenu(e);
           }
           onTextAreaContextMenu(e) {
-            this.injectSearchItem(e, !0);
+            this.ensureContextMenuWiring().onTextAreaContextMenu(e);
           }
           injectSearchItem(e, ownMessage, channelId = null) {
-            let text = document.getSelection().toString();
-            if (text) {
-              let translating, foundTranslation, foundInput, foundOutput, copied, [children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, { id: ["devmode-copy-id", "search-google"], group: !0 });
-              children.splice(index > -1 ? index + 1 : 0, 0, BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuGroup, {
-                children: BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-                  id: BDFDB.ContextMenuUtils.createItemId(this.name, "search-translation"),
-                  icon: /* @__PURE__ */ __name((_2) => BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.MenuItems.MenuIcon, {
-                    icon: translateIcon
-                  }), "icon"),
-                  disabled: this.ensureLiveTranslationQueue().isBusyTranslating(),
-                  label: this.labels.context_translator,
-                  persisting: !0,
-                  action: /* @__PURE__ */ __name((event) => {
-                    let item = BDFDB.DOMUtils.getParent(BDFDB.dotCN.menuitem, event.target);
-                    if (item) {
-                      let createTooltip = /* @__PURE__ */ __name((_2) => {
-                        BDFDB.TooltipUtils.create(item, foundTranslation ? [
-                          `${BDFDB.LanguageUtils.LibraryStrings.from} ${this.getLanguageDisplayName(foundInput)}:`,
-                          text,
-                          `${BDFDB.LanguageUtils.LibraryStrings.to} ${this.getLanguageDisplayName(foundOutput)}:`,
-                          foundTranslation
-                        ].map((n) => BDFDB.ReactUtils.createElement("div", { children: n })) : this.labels.toast_translating_failed, {
-                          type: "right",
-                          color: foundTranslation ? "primary" : "red",
-                          className: "googletranslate-tooltip"
-                        });
-                      }, "createTooltip");
-                      foundTranslation && foundInput && foundOutput ? document.querySelector(".googletranslate-tooltip") ? copied ? (BDFDB.ContextMenuUtils.close(e.instance), BDFDB.DiscordUtils.openLink(this.getGoogleTranslatePageURL(foundInput.id, foundOutput.id, text))) : (copied = !0, BDFDB.LibraryModules.WindowUtils.copy(foundTranslation), BDFDB.NotificationUtils.toast(BDFDB.LanguageUtils.LibraryStringsFormat("clipboard_success", BDFDB.LanguageUtils.LanguageStrings.TEXT), { type: "success" })) : createTooltip() : translating || (translating = !0, this.translateText(text, ownMessage ? messageTypes.SENT : messageTypes.RECEIVED, (translation, input, output) => {
-                        translation && (foundTranslation = translation, foundInput = input, foundOutput = output), createTooltip();
-                      }, null, { channelId: channelId || BDFDB.LibraryStores.SelectedChannelStore.getChannelId() }));
-                    }
-                  }, "action")
-                })
-              }));
-            }
+            this.ensureContextMenuWiring().injectSearchItem(e, ownMessage, channelId);
           }
           processMessageButtons(e) {
             if (!e.instance.props.message || !e.instance.props.channel) return;

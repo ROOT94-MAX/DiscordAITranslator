@@ -68,6 +68,7 @@ module.exports = (_ => {
 		const {createComposerWiring} = require("../ui/composer-wiring");
 		const {createTranslationPipeline} = require("../orchestrator/translation-pipeline");
 		const {createSpecialCaseCodecs} = require("../i18n/special-case-codecs");
+		const {createContextMenuWiring} = require("../ui/context-menu-wiring");
 		const loadedStatusPosition = require("../ui/loaded-status-position");
 		const {createLoadedStatusCapsuleController} = require("../ui/loaded-status-capsule");
 		const {createChannelTitleStore} = require("../channel-title/channel-title-store");
@@ -605,20 +606,7 @@ module.exports = (_ => {
 			}
 
 			injectMessageLanguageActions (children, index, message, channel) {
-				if (!children || !message || !channel) return;
-				const insertIndex = index > -1 ? index + 1 : 0;
-				children.splice(insertIndex, 0,
-					BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-						label: this.getCustomText("context_detect_message_language"),
-						id: BDFDB.ContextMenuUtils.createItemId(this.name, "detect-message-language"),
-						action: _ => this.handleMessageLanguageAction(message, channel, false)
-					}),
-					BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-						label: this.getCustomText("context_reply_in_detected_language"),
-						id: BDFDB.ContextMenuUtils.createItemId(this.name, "reply-in-detected-language"),
-						action: _ => this.handleMessageLanguageAction(message, channel, true)
-					})
-				);
+				this.ensureContextMenuWiring().injectMessageLanguageActions(children, index, message, channel);
 			}
 
 			cloneOriginalContentData (originalContentData) {
@@ -2451,86 +2439,20 @@ module.exports = (_ => {
 				BDFDB.MessageUtils.rerenderAll();
 			}
 
+			ensureContextMenuWiring () {
+				if (!this.contextMenuWiringInstance) this.contextMenuWiringInstance = createContextMenuWiring({BDFDB, getPlugin: () => this, messageTypes, translateIcon, translateIconUntranslate});
+				return this.contextMenuWiringInstance;
+			}
 			onMessageContextMenu (e) {
-				if (e.instance.props.message && e.instance.props.channel) {
-					let translated = this.isMessageDisplayTranslated(e.instance.props.message, e.instance.props.channel.id);
-					let hint = BDFDB.BDUtils.isPluginEnabled("MessageUtilities") ? BDFDB.BDUtils.getPlugin("MessageUtilities").getActiveShortcutString("__Translate_Message") : null;
-					let [children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, {id: ["copy-text", "pin", "unpin"]});
-					if (index == -1) [children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, {id: ["edit", "add-reaction", "add-reaction-1", "quote"]});
-					children.splice(index > -1 ? index + 1 : 0, 0, BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-						label: translated ? this.labels.context_messageuntranslateoption : this.labels.context_messagetranslateoption,
-						id: BDFDB.ContextMenuUtils.createItemId(this.name, translated ? "untranslate-message" : "translate-message"),
-						icon: _ => BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.MenuItems.MenuIcon, {
-							icon: translated ? translateIconUntranslate : translateIcon
-						}),
-						action: _ => this.translateMessage(e.instance.props.message, e.instance.props.channel, {manual: true, independentOfTextAreaSwitch: true, trackBusy: false})
-					}));
-					this.injectMessageLanguageActions(children, index > -1 ? index + 1 : 0, e.instance.props.message, e.instance.props.channel);
-					this.injectSearchItem(e, false, e.instance.props.channel.id);
-				}
+				this.ensureContextMenuWiring().onMessageContextMenu(e);
 			}
 			onTextAreaContextMenu (e) {
-				this.injectSearchItem(e, true);
+				this.ensureContextMenuWiring().onTextAreaContextMenu(e);
 			}
 			injectSearchItem (e, ownMessage, channelId = null) {
-				let text = document.getSelection().toString();
-				if (text) {
-					let translating, foundTranslation, foundInput, foundOutput, copied;
-					let [children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, {id: ["devmode-copy-id", "search-google"], group: true});
-					children.splice(index > -1 ? index + 1 : 0, 0, BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuGroup, {
-						children: BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-							id: BDFDB.ContextMenuUtils.createItemId(this.name, "search-translation"),
-							icon: _ => BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.MenuItems.MenuIcon, {
-								icon: translateIcon
-							}),
-							disabled: this.ensureLiveTranslationQueue().isBusyTranslating(),
-							label: this.labels.context_translator,
-							persisting: true,
-							action: event => {
-								let item = BDFDB.DOMUtils.getParent(BDFDB.dotCN.menuitem, event.target);
-								if (item) {
-									let createTooltip = _ => {
-										BDFDB.TooltipUtils.create(item, !foundTranslation ? this.labels.toast_translating_failed : [
-											`${BDFDB.LanguageUtils.LibraryStrings.from} ${this.getLanguageDisplayName(foundInput)}:`,
-											text,
-											`${BDFDB.LanguageUtils.LibraryStrings.to} ${this.getLanguageDisplayName(foundOutput)}:`,
-											foundTranslation
-										].map(n => BDFDB.ReactUtils.createElement("div", {children: n})), {
-											type: "right",
-											color: foundTranslation ? "primary" : "red",
-											className: "googletranslate-tooltip"
-										});
-									};
-									if (foundTranslation && foundInput && foundOutput) {
-										if (document.querySelector(".googletranslate-tooltip")) {
-											if (!copied) {
-												copied = true;
-												BDFDB.LibraryModules.WindowUtils.copy(foundTranslation);
-												BDFDB.NotificationUtils.toast(BDFDB.LanguageUtils.LibraryStringsFormat("clipboard_success", BDFDB.LanguageUtils.LanguageStrings.TEXT), {type: "success"});
-											}
-											else {
-												BDFDB.ContextMenuUtils.close(e.instance);
-												BDFDB.DiscordUtils.openLink(this.getGoogleTranslatePageURL(foundInput.id, foundOutput.id, text));
-											}
-										}
-										else createTooltip();
-									}
-									else if (!translating) {
-										translating = true;
-										this.translateText(text, ownMessage ? messageTypes.SENT : messageTypes.RECEIVED, (translation, input, output) => {
-											if (translation) {
-												foundTranslation = translation, foundInput = input, foundOutput = output;
-												createTooltip();
-											}
-											else createTooltip();
-										}, null, {channelId: channelId || BDFDB.LibraryStores.SelectedChannelStore.getChannelId()});
-									}
-								}
-							}
-						})
-					}));
-				}
+				this.ensureContextMenuWiring().injectSearchItem(e, ownMessage, channelId);
 			}
+
 			processMessageButtons (e) {
 				if (!e.instance.props.message || !e.instance.props.channel) return;
 				let [children, index] = BDFDB.ReactUtils.findParent(e.returnvalue, {props: [["className", BDFDB.disCN.messagebuttons]]});
