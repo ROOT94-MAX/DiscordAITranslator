@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId 3b384b0005a2b1e3
+ * @buildId 741c5cd9f6a9ca27
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -5130,6 +5130,331 @@ var require_translation_pipeline = __commonJS({
     }
     __name(createTranslationPipeline, "createTranslationPipeline");
     module2.exports = { createTranslationPipeline };
+  }
+});
+
+// src/i18n/special-case-codecs.js
+var require_special_case_codecs = __commonJS({
+  "src/i18n/special-case-codecs.js"(exports2, module2) {
+    var brailleConverter = {
+      0: "⠴",
+      1: "⠂",
+      2: "⠆",
+      3: "⠒",
+      4: "⠲",
+      5: "⠢",
+      6: "⠖",
+      7: "⠶",
+      8: "⠦",
+      9: "⠔",
+      "!": "⠮",
+      '"': "⠐",
+      "#": "⠼",
+      $: "⠫",
+      "%": "⠩",
+      "&": "⠯",
+      "'": "⠄",
+      "(": "⠷",
+      ")": "⠾",
+      "*": "⠡",
+      "+": "⠬",
+      ",": "⠠",
+      "-": "⠤",
+      ".": "⠨",
+      "/": "⠌",
+      ":": "⠱",
+      ";": "⠰",
+      "<": "⠣",
+      "=": "⠿",
+      ">": "⠜",
+      "?": "⠹",
+      "@": "⠈",
+      a: "⠁",
+      b: "⠃",
+      c: "⠉",
+      d: "⠙",
+      e: "⠑",
+      f: "⠋",
+      g: "⠛",
+      h: "⠓",
+      i: "⠊",
+      j: "⠚",
+      k: "⠅",
+      l: "⠇",
+      m: "⠍",
+      n: "⠝",
+      o: "⠕",
+      p: "⠏",
+      q: "⠟",
+      r: "⠗",
+      s: "⠎",
+      t: "⠞",
+      u: "⠥",
+      v: "⠧",
+      w: "⠺",
+      x: "⠭",
+      y: "⠽",
+      z: "⠵",
+      "[": "⠪",
+      "\\": "⠳",
+      "]": "⠻",
+      "^": "⠘",
+      "⠁": "a",
+      "⠂": "1",
+      "⠃": "b",
+      "⠄": "'",
+      "⠅": "k",
+      "⠆": "2",
+      "⠇": "l",
+      "⠈": "@",
+      "⠉": "c",
+      "⠊": "i",
+      "⠋": "f",
+      "⠌": "/",
+      "⠍": "m",
+      "⠎": "s",
+      "⠏": "p",
+      "⠐": '"',
+      "⠑": "e",
+      "⠒": "3",
+      "⠓": "h",
+      "⠔": "9",
+      "⠕": "o",
+      "⠖": "6",
+      "⠗": "r",
+      "⠘": "^",
+      "⠙": "d",
+      "⠚": "j",
+      "⠛": "g",
+      "⠜": ">",
+      "⠝": "n",
+      "⠞": "t",
+      "⠟": "q",
+      "⠠": ", ",
+      "⠡": "*",
+      "⠢": "5",
+      "⠣": "<",
+      "⠤": "-",
+      "⠥": "u",
+      "⠦": "8",
+      "⠧": "v",
+      "⠨": ".",
+      "⠩": "%",
+      "⠪": "[",
+      "⠫": "$",
+      "⠬": "+",
+      "⠭": "x",
+      "⠮": "!",
+      "⠯": "&",
+      "⠰": ";",
+      "⠱": ":",
+      "⠲": "4",
+      "⠳": "\\",
+      "⠴": "0",
+      "⠵": "z",
+      "⠶": "7",
+      "⠷": "(",
+      "⠸": "_",
+      "⠹": "?",
+      "⠺": "w",
+      "⠻": "]",
+      "⠼": "#",
+      "⠽": "y",
+      "⠾": ")",
+      "⠿": "=",
+      _: "⠸"
+    }, morseConverter = {
+      0: "−−−−−",
+      1: "·−−−−",
+      2: "··−−−",
+      3: "···−−",
+      4: "····−",
+      5: "·····",
+      6: "−····",
+      7: "−−···",
+      8: "−−−··",
+      9: "−−−−·",
+      "!": "−·−·−−",
+      '"': "·−··−·",
+      $: "···−··−",
+      "&": "·−···",
+      "'": "·−−−−·",
+      "(": "−·−−·",
+      ")": "−·−−·−",
+      "+": "·−·−·",
+      ",": "−−··−−",
+      "-": "−····−",
+      ".": "·−·−·−",
+      "/": "−··−·",
+      ":": "−−−···",
+      ";": "−·−·−·",
+      "=": "−···−",
+      "?": "··−−··",
+      "@": "·−−·−·",
+      a: "·−",
+      b: "−···",
+      c: "−·−·",
+      d: "−··",
+      e: "·",
+      f: "··−·",
+      g: "−−·",
+      h: "····",
+      i: "··",
+      j: "·−−−",
+      k: "−·−",
+      l: "·−··",
+      m: "−−",
+      n: "−·",
+      o: "−−−",
+      p: "·−−·",
+      q: "−−·−",
+      r: "·−·",
+      s: "···",
+      t: "−",
+      u: "··−",
+      v: "···−",
+      w: "·−−",
+      x: "−··−",
+      y: "−·−−",
+      z: "−−··",
+      "·": "e",
+      "··": "i",
+      "···": "s",
+      "····": "h",
+      "·····": "5",
+      "····−": "4",
+      "···−": "v",
+      "···−··−": "$",
+      "···−−": "3",
+      "··−": "u",
+      "··−·": "f",
+      "··−−··": "?",
+      "··−−·−": "_",
+      "··−−−": "2",
+      "·−": "a",
+      "·−·": "r",
+      "·−··": "l",
+      "·−···": "&",
+      "·−··−·": '"',
+      "·−·−·": "+",
+      "·−·−·−": ".",
+      "·−−": "w",
+      "·−−·": "p",
+      "·−−·−·": "@",
+      "·−−−": "j",
+      "·−−−−": "1",
+      "·−−−−·": "'",
+      "−": "t",
+      "−·": "n",
+      "−··": "d",
+      "−···": "b",
+      "−····": "6",
+      "−····−": "-",
+      "−···−": "=",
+      "−··−": "x",
+      "−··−·": "/",
+      "−·−": "k",
+      "−·−·": "c",
+      "−·−·−·": ";",
+      "−·−·−−": "!",
+      "−·−−": "y",
+      "−·−−·": "(",
+      "−·−−·−": ")",
+      "−−": "m",
+      "−−·": "g",
+      "−−··": "z",
+      "−−···": "7",
+      "−−··−−": ",",
+      "−−·−": "q",
+      "−−−": "o",
+      "−−−··": "8",
+      "−−−···": ":",
+      "−−−−·": "9",
+      "−−−−−": "0",
+      _: "··−−·−"
+    };
+    function createSpecialCaseCodecs({ onInvalidBinary = /* @__PURE__ */ __name(() => {
+    }, "onInvalidBinary") } = {}) {
+      function checkForSpecialCase(text, input) {
+        if (input.special) return input;
+        if (input.auto) {
+          if (/^[0-1]*$/.test(text.replace(/\s/g, "")))
+            return { id: "binary", name: "Binary" };
+          if (/^[⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿]*$/.test(text.replace(/\s/g, "")))
+            return { id: "braille", name: "Braille 6-dot" };
+          if (/^[/|·−._-]*$/.test(text.replace(/\s/g, "")))
+            return { id: "morse", name: "Morse" };
+          if (/^(0x[0-9a-fA-F]{2}\s*)+$/.test(text.replace(/\s/g, "")))
+            return { id: "hex", name: "Hexadecimal" };
+        }
+        return null;
+      }
+      __name(checkForSpecialCase, "checkForSpecialCase");
+      function string2binary(string) {
+        let binary = "";
+        for (let character of string) binary += parseInt(character.charCodeAt(0).toString(2)).toPrecision(8).split(".").reverse().join("").toString() + " ";
+        return binary;
+      }
+      __name(string2binary, "string2binary");
+      function string2braille(string) {
+        let braille = "";
+        for (let character of string) braille += brailleConverter[character.toLowerCase()] ? brailleConverter[character.toLowerCase()] : character;
+        return braille;
+      }
+      __name(string2braille, "string2braille");
+      function string2morse(string) {
+        string = string.replace(/ /g, "%%%%%%%%%%");
+        let morse = "";
+        for (let character of string) morse += (morseConverter[character.toLowerCase()] ? morseConverter[character.toLowerCase()] : character) + " ";
+        morse = morse.split(`
+`);
+        for (let i in morse) morse[i] = morse[i].trim();
+        return morse.join(`
+`).replace(/% % % % % % % % % % /g, "/ ");
+      }
+      __name(string2morse, "string2morse");
+      function string2hex(string) {
+        let hex = "";
+        for (let character of string)
+          hex += "0x" + character.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0") + " ";
+        return hex.trim();
+      }
+      __name(string2hex, "string2hex");
+      function binary2string(binary) {
+        let string = "";
+        if (binary = binary.replace(/\n/g, "00001010").replace(/\r/g, "00001101").replace(/\t/g, "00001001").replace(/\s/g, ""), /^[0-1]*$/.test(binary)) {
+          let eightDigits = "", counter = 0;
+          for (let digit of binary)
+            eightDigits += digit, counter++, counter > 7 && (string += String.fromCharCode(parseInt(eightDigits, 2).toString(10)), eightDigits = "", counter = 0);
+        } else onInvalidBinary("Invalid binary format. Only use 0s and 1s.");
+        return string;
+      }
+      __name(binary2string, "binary2string");
+      function braille2string(braille) {
+        let string = "";
+        for (let character of braille) string += brailleConverter[character.toLowerCase()] ? brailleConverter[character.toLowerCase()] : character;
+        return string;
+      }
+      __name(braille2string, "braille2string");
+      function morse2string(morse) {
+        let string = "";
+        for (let word of morse.replace(/[_-]/g, "−").replace(/\./g, "·").replace(/\r|\t/g, "").split(/\/|\||\n/g)) {
+          for (let characterstr of word.trim().split(" ")) string += morseConverter[characterstr] ? morseConverter[characterstr] : characterstr;
+          string += " ";
+        }
+        return string.trim();
+      }
+      __name(morse2string, "morse2string");
+      function hex2string(hex) {
+        let string = "";
+        for (let part of hex.trim().split(/\s+/))
+          (part.startsWith("0x") || part.startsWith("0X")) && (part = part.slice(2)), part.length === 2 && /^[0-9a-fA-F]{2}$/.test(part) && (string += String.fromCharCode(parseInt(part, 16)));
+        return string;
+      }
+      return __name(hex2string, "hex2string"), Object.freeze({ checkForSpecialCase, string2binary, string2braille, string2morse, string2hex, binary2string, braille2string, morse2string, hex2string });
+    }
+    __name(createSpecialCaseCodecs, "createSpecialCaseCodecs");
+    module2.exports = { createSpecialCaseCodecs };
   }
 });
 
@@ -10455,7 +10780,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -10482,243 +10807,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
           // _this is assigned in onLoad(), long after this line runs, so the components
           // resolve the plugin per call instead of capturing it now.
           getPlugin: /* @__PURE__ */ __name(() => _this, "getPlugin")
-        }), brailleConverter = {
-          0: "⠴",
-          1: "⠂",
-          2: "⠆",
-          3: "⠒",
-          4: "⠲",
-          5: "⠢",
-          6: "⠖",
-          7: "⠶",
-          8: "⠦",
-          9: "⠔",
-          "!": "⠮",
-          '"': "⠐",
-          "#": "⠼",
-          $: "⠫",
-          "%": "⠩",
-          "&": "⠯",
-          "'": "⠄",
-          "(": "⠷",
-          ")": "⠾",
-          "*": "⠡",
-          "+": "⠬",
-          ",": "⠠",
-          "-": "⠤",
-          ".": "⠨",
-          "/": "⠌",
-          ":": "⠱",
-          ";": "⠰",
-          "<": "⠣",
-          "=": "⠿",
-          ">": "⠜",
-          "?": "⠹",
-          "@": "⠈",
-          a: "⠁",
-          b: "⠃",
-          c: "⠉",
-          d: "⠙",
-          e: "⠑",
-          f: "⠋",
-          g: "⠛",
-          h: "⠓",
-          i: "⠊",
-          j: "⠚",
-          k: "⠅",
-          l: "⠇",
-          m: "⠍",
-          n: "⠝",
-          o: "⠕",
-          p: "⠏",
-          q: "⠟",
-          r: "⠗",
-          s: "⠎",
-          t: "⠞",
-          u: "⠥",
-          v: "⠧",
-          w: "⠺",
-          x: "⠭",
-          y: "⠽",
-          z: "⠵",
-          "[": "⠪",
-          "\\": "⠳",
-          "]": "⠻",
-          "^": "⠘",
-          "⠁": "a",
-          "⠂": "1",
-          "⠃": "b",
-          "⠄": "'",
-          "⠅": "k",
-          "⠆": "2",
-          "⠇": "l",
-          "⠈": "@",
-          "⠉": "c",
-          "⠊": "i",
-          "⠋": "f",
-          "⠌": "/",
-          "⠍": "m",
-          "⠎": "s",
-          "⠏": "p",
-          "⠐": '"',
-          "⠑": "e",
-          "⠒": "3",
-          "⠓": "h",
-          "⠔": "9",
-          "⠕": "o",
-          "⠖": "6",
-          "⠗": "r",
-          "⠘": "^",
-          "⠙": "d",
-          "⠚": "j",
-          "⠛": "g",
-          "⠜": ">",
-          "⠝": "n",
-          "⠞": "t",
-          "⠟": "q",
-          "⠠": ", ",
-          "⠡": "*",
-          "⠢": "5",
-          "⠣": "<",
-          "⠤": "-",
-          "⠥": "u",
-          "⠦": "8",
-          "⠧": "v",
-          "⠨": ".",
-          "⠩": "%",
-          "⠪": "[",
-          "⠫": "$",
-          "⠬": "+",
-          "⠭": "x",
-          "⠮": "!",
-          "⠯": "&",
-          "⠰": ";",
-          "⠱": ":",
-          "⠲": "4",
-          "⠳": "\\",
-          "⠴": "0",
-          "⠵": "z",
-          "⠶": "7",
-          "⠷": "(",
-          "⠸": "_",
-          "⠹": "?",
-          "⠺": "w",
-          "⠻": "]",
-          "⠼": "#",
-          "⠽": "y",
-          "⠾": ")",
-          "⠿": "=",
-          _: "⠸"
-        }, morseConverter = {
-          0: "−−−−−",
-          1: "·−−−−",
-          2: "··−−−",
-          3: "···−−",
-          4: "····−",
-          5: "·····",
-          6: "−····",
-          7: "−−···",
-          8: "−−−··",
-          9: "−−−−·",
-          "!": "−·−·−−",
-          '"': "·−··−·",
-          $: "···−··−",
-          "&": "·−···",
-          "'": "·−−−−·",
-          "(": "−·−−·",
-          ")": "−·−−·−",
-          "+": "·−·−·",
-          ",": "−−··−−",
-          "-": "−····−",
-          ".": "·−·−·−",
-          "/": "−··−·",
-          ":": "−−−···",
-          ";": "−·−·−·",
-          "=": "−···−",
-          "?": "··−−··",
-          "@": "·−−·−·",
-          a: "·−",
-          b: "−···",
-          c: "−·−·",
-          d: "−··",
-          e: "·",
-          f: "··−·",
-          g: "−−·",
-          h: "····",
-          i: "··",
-          j: "·−−−",
-          k: "−·−",
-          l: "·−··",
-          m: "−−",
-          n: "−·",
-          o: "−−−",
-          p: "·−−·",
-          q: "−−·−",
-          r: "·−·",
-          s: "···",
-          t: "−",
-          u: "··−",
-          v: "···−",
-          w: "·−−",
-          x: "−··−",
-          y: "−·−−",
-          z: "−−··",
-          "·": "e",
-          "··": "i",
-          "···": "s",
-          "····": "h",
-          "·····": "5",
-          "····−": "4",
-          "···−": "v",
-          "···−··−": "$",
-          "···−−": "3",
-          "··−": "u",
-          "··−·": "f",
-          "··−−··": "?",
-          "··−−·−": "_",
-          "··−−−": "2",
-          "·−": "a",
-          "·−·": "r",
-          "·−··": "l",
-          "·−···": "&",
-          "·−··−·": '"',
-          "·−·−·": "+",
-          "·−·−·−": ".",
-          "·−−": "w",
-          "·−−·": "p",
-          "·−−·−·": "@",
-          "·−−−": "j",
-          "·−−−−": "1",
-          "·−−−−·": "'",
-          "−": "t",
-          "−·": "n",
-          "−··": "d",
-          "−···": "b",
-          "−····": "6",
-          "−····−": "-",
-          "−···−": "=",
-          "−··−": "x",
-          "−··−·": "/",
-          "−·−": "k",
-          "−·−·": "c",
-          "−·−·−·": ";",
-          "−·−·−−": "!",
-          "−·−−": "y",
-          "−·−−·": "(",
-          "−·−−·−": ")",
-          "−−": "m",
-          "−−·": "g",
-          "−−··": "z",
-          "−−···": "7",
-          "−−··−−": ",",
-          "−−·−": "q",
-          "−−−": "o",
-          "−−−··": "8",
-          "−−−···": ":",
-          "−−−−·": "9",
-          "−−−−−": "0",
-          _: "··−−·−"
-        }, channelTitleStore = createChannelTitleStore(), loadedTranslationStatusStore = createLoadedTranslationStatusStore({ isChineseUiLanguage: /* @__PURE__ */ __name(() => _this && _this.isChineseUiLanguage(), "isChineseUiLanguage") }), historicalDisplayTracker = createHistoricalDisplayTracker({ isStatusForChannel: /* @__PURE__ */ __name((channelId) => loadedTranslationStatusStore.isForChannel(channelId), "isStatusForChannel"), getRevision: /* @__PURE__ */ __name((_channelId, messageId) => {
+        }), channelTitleStore = createChannelTitleStore(), loadedTranslationStatusStore = createLoadedTranslationStatusStore({ isChineseUiLanguage: /* @__PURE__ */ __name(() => _this && _this.isChineseUiLanguage(), "isChineseUiLanguage") }), historicalDisplayTracker = createHistoricalDisplayTracker({ isStatusForChannel: /* @__PURE__ */ __name((channelId) => loadedTranslationStatusStore.isForChannel(channelId), "isStatusForChannel"), getRevision: /* @__PURE__ */ __name((_channelId, messageId) => {
           let view = _this && _this.getReceivedDisplayRuntimeView(messageId);
           return view ? view.revision : null;
         }, "getRevision"), updateStatus: /* @__PURE__ */ __name((updates) => _this && _this.updateLoadedAutoTranslationStatus(updates), "updateStatus") });
@@ -10740,7 +10829,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "3b384b0005a2b1e3";
+            return "741c5cd9f6a9ca27";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13456,76 +13545,35 @@ __________________ __________________ __________________
           MD5(e) {
             return this.ensureProviderClient().MD5(e);
           }
+          ensureSpecialCaseCodecs() {
+            return this.specialCaseCodecsInstance || (this.specialCaseCodecsInstance = createSpecialCaseCodecs({ onInvalidBinary: /* @__PURE__ */ __name((message) => BDFDB.NotificationUtils.toast(message, { type: "danger", position: "center" }), "onInvalidBinary") })), this.specialCaseCodecsInstance;
+          }
           checkForSpecialCase(text, input) {
-            if (input.special) return input;
-            if (input.auto) {
-              if (/^[0-1]*$/.test(text.replace(/\s/g, "")))
-                return { id: "binary", name: "Binary" };
-              if (/^[⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿]*$/.test(text.replace(/\s/g, "")))
-                return { id: "braille", name: "Braille 6-dot" };
-              if (/^[/|·−._-]*$/.test(text.replace(/\s/g, "")))
-                return { id: "morse", name: "Morse" };
-              if (/^(0x[0-9a-fA-F]{2}\s*)+$/.test(text.replace(/\s/g, "")))
-                return { id: "hex", name: "Hexadecimal" };
-            }
-            return null;
+            return this.ensureSpecialCaseCodecs().checkForSpecialCase(text, input);
           }
           string2binary(string) {
-            let binary = "";
-            for (let character of string) binary += parseInt(character.charCodeAt(0).toString(2)).toPrecision(8).split(".").reverse().join("").toString() + " ";
-            return binary;
+            return this.ensureSpecialCaseCodecs().string2binary(string);
           }
           string2braille(string) {
-            let braille = "";
-            for (let character of string) braille += brailleConverter[character.toLowerCase()] ? brailleConverter[character.toLowerCase()] : character;
-            return braille;
+            return this.ensureSpecialCaseCodecs().string2braille(string);
           }
           string2morse(string) {
-            string = string.replace(/ /g, "%%%%%%%%%%");
-            let morse = "";
-            for (let character of string) morse += (morseConverter[character.toLowerCase()] ? morseConverter[character.toLowerCase()] : character) + " ";
-            morse = morse.split(`
-`);
-            for (let i in morse) morse[i] = morse[i].trim();
-            return morse.join(`
-`).replace(/% % % % % % % % % % /g, "/ ");
+            return this.ensureSpecialCaseCodecs().string2morse(string);
           }
           string2hex(string) {
-            let hex = "";
-            for (let character of string)
-              hex += "0x" + character.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0") + " ";
-            return hex.trim();
+            return this.ensureSpecialCaseCodecs().string2hex(string);
           }
           binary2string(binary) {
-            let string = "";
-            if (binary = binary.replace(/\n/g, "00001010").replace(/\r/g, "00001101").replace(/\t/g, "00001001").replace(/\s/g, ""), /^[0-1]*$/.test(binary)) {
-              let eightDigits = "", counter = 0;
-              for (let digit of binary)
-                eightDigits += digit, counter++, counter > 7 && (string += String.fromCharCode(parseInt(eightDigits, 2).toString(10)), eightDigits = "", counter = 0);
-            } else BDFDB.NotificationUtils.toast("Invalid binary format. Only use 0s and 1s.", {
-              type: "danger",
-              position: "center"
-            });
-            return string;
+            return this.ensureSpecialCaseCodecs().binary2string(binary);
           }
           braille2string(braille) {
-            let string = "";
-            for (let character of braille) string += brailleConverter[character.toLowerCase()] ? brailleConverter[character.toLowerCase()] : character;
-            return string;
+            return this.ensureSpecialCaseCodecs().braille2string(braille);
           }
           morse2string(morse) {
-            let string = "";
-            for (let word of morse.replace(/[_-]/g, "−").replace(/\./g, "·").replace(/\r|\t/g, "").split(/\/|\||\n/g)) {
-              for (let characterstr of word.trim().split(" ")) string += morseConverter[characterstr] ? morseConverter[characterstr] : characterstr;
-              string += " ";
-            }
-            return string.trim();
+            return this.ensureSpecialCaseCodecs().morse2string(morse);
           }
           hex2string(hex) {
-            let string = "";
-            for (let part of hex.trim().split(/\s+/))
-              (part.startsWith("0x") || part.startsWith("0X")) && (part = part.slice(2)), part.length === 2 && /^[0-9a-fA-F]{2}$/.test(part) && (string += String.fromCharCode(parseInt(part, 16)));
-            return string;
+            return this.ensureSpecialCaseCodecs().hex2string(hex);
           }
           escapeRegExp(string) {
             return protectionLogic.escapeRegExp(this, string);
