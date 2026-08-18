@@ -70,6 +70,7 @@ module.exports = (_ => {
 		const {createSpecialCaseCodecs} = require("../i18n/special-case-codecs");
 		const {createContextMenuWiring} = require("../ui/context-menu-wiring");
 		const {createDiscordMarkupRenderer} = require("../display/discord-markup-renderer");
+		const {createPluginDefaults, MODULE_PATCHES} = require("../settings/plugin-defaults");
 		const loadedStatusPosition = require("../ui/loaded-status-position");
 		const {createLoadedStatusCapsuleController} = require("../ui/loaded-status-capsule");
 		const {createChannelTitleStore} = require("../channel-title/channel-title-store");
@@ -168,88 +169,12 @@ module.exports = (_ => {
 
 			onLoad () {
 				_this = this;
-				this.defaults = {
-					general: {
-						interfaceLanguage:		{value: "system", 	popout: false},
-						sendOriginalMessage:		{value: false, 	popout: false},
-						showOriginalMessage:		{value: false, 	popout: false},
-						showOriginalDirectly:		{value: true, 	popout: false},
-						showOriginalInReplyPreview:	{value: false, 	popout: false},
-						useSpoilerInSentOriginal:	{value: false, 	popout: false},
-						useSpoilerInReceivedOriginal:	{value: false, 	popout: false},
-						highlightTranslatedMessages:	{value: true, 	popout: false},
-						translatedTextColor:		{value: "#7cc7ff", popout: false},
-						protectQuotedText:		{value: true, 	popout: false,	description: "Automatically protect and highlight wrapped content"},
-						useSpoilerInOriginal:		{value: false, 	popout: false,	description: "Use Spoilers instead of Quotes for the original Message Text"}
-					},
-					choices: {},
-					filters: {
-						autoTranslateSourceLanguages:	{value: []},
-						receivedAutoTranslateScope:	{value: "new_only"},
-						receivedAutoTranslateLoadedRangeMode: {value: "count"},
-						receivedAutoTranslateLoadedTimeWindow: {value: "1h"},
-						receivedAutoTranslateLoadedLimit: {value: "50"},
-						continueLoadedAutoTranslateOnScroll: {value: true},
-						pauseLoadedAutoTranslateWhileScrolling: {value: true},
-						receivedAutoTranslateSourceLanguages: {value: []},
-						autoTranslateDecisionMode: {value: "basic"},
-						aiAutoTranslatePrompt: {value: ""},
-						languageDetectionStrategy: {value: "local_first"},
-						skipMixedReceivedMessages:	{value: false},
-						skipSameLanguageReceivedMessages: {value: true},
-					useLocalLanguagePrecheck:	{value: true},
-						treatLanguageVariantsAsSame: {value: true},
-						dropSimilarTranslations:	{value: true},
-						minimumAutoTranslateLength:	{value: 2},
-						translationSimilarityThreshold: {value: 0.9}
-					},
-					exceptions: {
-						wordStart:			{value: ["!"],	max: 3},
-						protectedTerms:		{value: [],		max: 80},
-						protectedTermsForSent:	{value: true},
-						protectedTermsForReceived:	{value: true},
-						wrapperPairs:		{value: ['"|"', '“|”', '`|`'], max: 20},
-						wrapperPairsForSent:	{value: true},
-						wrapperPairsForReceived:	{value: true}
-					},
-					prefixes: {
-						translationPrefixData: 		{value: [
-							{prefix: "$fr", language: "fr"},
-							{prefix: "$de", language: "de"},
-							{prefix: "$es", language: "es"},
-							{prefix: "$jp", language: "ja"}
-						]}
-					},
-					engines: {
-						translator:			{value: "googleapi"},
-						backup:				{value: "----"}
-					}
-				};
-				for (let m in messageTypes) this.defaults.choices[messageTypes[m]] = {value: Object.keys(languageTypes).reduce((newObj, l) => (newObj[languageTypes[l]] = defaultLanguages[l], newObj), {})};
-				this.modulePatches = {
-					before: [
-						"ChannelTextAreaContainer",
-						"ChannelTextAreaEditor",
-						"Embed",
-						"MessageReply",
-						"Messages"
-					],
-					after: [
-						"ChannelTextAreaButtons",
-						"ChannelThreadItem",
-						"Embed",
-						"HeaderBarChannelName",
-						"HeaderBarTitle",
-						"MessageReply",
-						"MessageButtons",
-						"MessageContent",
-						"ThreadCard",
-						"ThreadSidebar"
-					]
-				};
-
+				this.defaults = createPluginDefaults({messageTypes, languageTypes, defaultLanguages});
+				// BDFDB owns these lists after registration, so it gets mutable copies.
+				this.modulePatches = {before: [...MODULE_PATCHES.before], after: [...MODULE_PATCHES.after]};
 				this.css = createTranslatorStyles(BDFDB);
 			}
+
 			handleEditedMessageSubmit (methodArguments, originalMethod) {
 				const args = Array.from(methodArguments || []);
 				const channelId = args[0];

@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.38
- * @buildId 6ad2ef61b67848ac
+ * @buildId ef3b70585d1c9547
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -5619,6 +5619,96 @@ var require_discord_markup_renderer = __commonJS({
   }
 });
 
+// src/settings/plugin-defaults.js
+var require_plugin_defaults = __commonJS({
+  "src/settings/plugin-defaults.js"(exports2, module2) {
+    function createPluginDefaults({ messageTypes, languageTypes, defaultLanguages }) {
+      let defaults = {
+        general: {
+          interfaceLanguage: { value: "system", popout: !1 },
+          sendOriginalMessage: { value: !1, popout: !1 },
+          showOriginalMessage: { value: !1, popout: !1 },
+          showOriginalDirectly: { value: !0, popout: !1 },
+          showOriginalInReplyPreview: { value: !1, popout: !1 },
+          useSpoilerInSentOriginal: { value: !1, popout: !1 },
+          useSpoilerInReceivedOriginal: { value: !1, popout: !1 },
+          highlightTranslatedMessages: { value: !0, popout: !1 },
+          translatedTextColor: { value: "#7cc7ff", popout: !1 },
+          protectQuotedText: { value: !0, popout: !1, description: "Automatically protect and highlight wrapped content" },
+          useSpoilerInOriginal: { value: !1, popout: !1, description: "Use Spoilers instead of Quotes for the original Message Text" }
+        },
+        choices: {},
+        filters: {
+          autoTranslateSourceLanguages: { value: [] },
+          receivedAutoTranslateScope: { value: "new_only" },
+          receivedAutoTranslateLoadedRangeMode: { value: "count" },
+          receivedAutoTranslateLoadedTimeWindow: { value: "1h" },
+          receivedAutoTranslateLoadedLimit: { value: "50" },
+          continueLoadedAutoTranslateOnScroll: { value: !0 },
+          pauseLoadedAutoTranslateWhileScrolling: { value: !0 },
+          receivedAutoTranslateSourceLanguages: { value: [] },
+          autoTranslateDecisionMode: { value: "basic" },
+          aiAutoTranslatePrompt: { value: "" },
+          languageDetectionStrategy: { value: "local_first" },
+          skipMixedReceivedMessages: { value: !1 },
+          skipSameLanguageReceivedMessages: { value: !0 },
+          useLocalLanguagePrecheck: { value: !0 },
+          treatLanguageVariantsAsSame: { value: !0 },
+          dropSimilarTranslations: { value: !0 },
+          minimumAutoTranslateLength: { value: 2 },
+          translationSimilarityThreshold: { value: 0.9 }
+        },
+        exceptions: {
+          wordStart: { value: ["!"], max: 3 },
+          protectedTerms: { value: [], max: 80 },
+          protectedTermsForSent: { value: !0 },
+          protectedTermsForReceived: { value: !0 },
+          wrapperPairs: { value: ['"|"', "“|”", "`|`"], max: 20 },
+          wrapperPairsForSent: { value: !0 },
+          wrapperPairsForReceived: { value: !0 }
+        },
+        prefixes: {
+          translationPrefixData: { value: [
+            { prefix: "$fr", language: "fr" },
+            { prefix: "$de", language: "de" },
+            { prefix: "$es", language: "es" },
+            { prefix: "$jp", language: "ja" }
+          ] }
+        },
+        engines: {
+          translator: { value: "googleapi" },
+          backup: { value: "----" }
+        }
+      };
+      for (let m in messageTypes) defaults.choices[messageTypes[m]] = { value: Object.keys(languageTypes).reduce((newObj, l) => (newObj[languageTypes[l]] = defaultLanguages[l], newObj), {}) };
+      return defaults;
+    }
+    __name(createPluginDefaults, "createPluginDefaults");
+    var MODULE_PATCHES = Object.freeze({
+      before: Object.freeze([
+        "ChannelTextAreaContainer",
+        "ChannelTextAreaEditor",
+        "Embed",
+        "MessageReply",
+        "Messages"
+      ]),
+      after: Object.freeze([
+        "ChannelTextAreaButtons",
+        "ChannelThreadItem",
+        "Embed",
+        "HeaderBarChannelName",
+        "HeaderBarTitle",
+        "MessageReply",
+        "MessageButtons",
+        "MessageContent",
+        "ThreadCard",
+        "ThreadSidebar"
+      ])
+    });
+    module2.exports = { createPluginDefaults, MODULE_PATCHES };
+  }
+});
+
 // src/ui/loaded-status-position.js
 var require_loaded_status_position = __commonJS({
   "src/ui/loaded-status-position.js"(exports2, module2) {
@@ -10978,7 +11068,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -11027,91 +11117,13 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "6ad2ef61b67848ac";
+            return "ef3b70585d1c9547";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
           }
           onLoad() {
-            _this = this, this.defaults = {
-              general: {
-                interfaceLanguage: { value: "system", popout: !1 },
-                sendOriginalMessage: { value: !1, popout: !1 },
-                showOriginalMessage: { value: !1, popout: !1 },
-                showOriginalDirectly: { value: !0, popout: !1 },
-                showOriginalInReplyPreview: { value: !1, popout: !1 },
-                useSpoilerInSentOriginal: { value: !1, popout: !1 },
-                useSpoilerInReceivedOriginal: { value: !1, popout: !1 },
-                highlightTranslatedMessages: { value: !0, popout: !1 },
-                translatedTextColor: { value: "#7cc7ff", popout: !1 },
-                protectQuotedText: { value: !0, popout: !1, description: "Automatically protect and highlight wrapped content" },
-                useSpoilerInOriginal: { value: !1, popout: !1, description: "Use Spoilers instead of Quotes for the original Message Text" }
-              },
-              choices: {},
-              filters: {
-                autoTranslateSourceLanguages: { value: [] },
-                receivedAutoTranslateScope: { value: "new_only" },
-                receivedAutoTranslateLoadedRangeMode: { value: "count" },
-                receivedAutoTranslateLoadedTimeWindow: { value: "1h" },
-                receivedAutoTranslateLoadedLimit: { value: "50" },
-                continueLoadedAutoTranslateOnScroll: { value: !0 },
-                pauseLoadedAutoTranslateWhileScrolling: { value: !0 },
-                receivedAutoTranslateSourceLanguages: { value: [] },
-                autoTranslateDecisionMode: { value: "basic" },
-                aiAutoTranslatePrompt: { value: "" },
-                languageDetectionStrategy: { value: "local_first" },
-                skipMixedReceivedMessages: { value: !1 },
-                skipSameLanguageReceivedMessages: { value: !0 },
-                useLocalLanguagePrecheck: { value: !0 },
-                treatLanguageVariantsAsSame: { value: !0 },
-                dropSimilarTranslations: { value: !0 },
-                minimumAutoTranslateLength: { value: 2 },
-                translationSimilarityThreshold: { value: 0.9 }
-              },
-              exceptions: {
-                wordStart: { value: ["!"], max: 3 },
-                protectedTerms: { value: [], max: 80 },
-                protectedTermsForSent: { value: !0 },
-                protectedTermsForReceived: { value: !0 },
-                wrapperPairs: { value: ['"|"', "“|”", "`|`"], max: 20 },
-                wrapperPairsForSent: { value: !0 },
-                wrapperPairsForReceived: { value: !0 }
-              },
-              prefixes: {
-                translationPrefixData: { value: [
-                  { prefix: "$fr", language: "fr" },
-                  { prefix: "$de", language: "de" },
-                  { prefix: "$es", language: "es" },
-                  { prefix: "$jp", language: "ja" }
-                ] }
-              },
-              engines: {
-                translator: { value: "googleapi" },
-                backup: { value: "----" }
-              }
-            };
-            for (let m in messageTypes) this.defaults.choices[messageTypes[m]] = { value: Object.keys(languageTypes).reduce((newObj, l) => (newObj[languageTypes[l]] = defaultLanguages[l], newObj), {}) };
-            this.modulePatches = {
-              before: [
-                "ChannelTextAreaContainer",
-                "ChannelTextAreaEditor",
-                "Embed",
-                "MessageReply",
-                "Messages"
-              ],
-              after: [
-                "ChannelTextAreaButtons",
-                "ChannelThreadItem",
-                "Embed",
-                "HeaderBarChannelName",
-                "HeaderBarTitle",
-                "MessageReply",
-                "MessageButtons",
-                "MessageContent",
-                "ThreadCard",
-                "ThreadSidebar"
-              ]
-            }, this.css = createTranslatorStyles(BDFDB);
+            _this = this, this.defaults = createPluginDefaults({ messageTypes, languageTypes, defaultLanguages }), this.modulePatches = { before: [...MODULE_PATCHES.before], after: [...MODULE_PATCHES.after] }, this.css = createTranslatorStyles(BDFDB);
           }
           handleEditedMessageSubmit(methodArguments, originalMethod) {
             let args = Array.from(methodArguments || []), channelId = args[0], messageId = args[1], payload = args[2], originalText = typeof payload == "string" ? payload : payload && typeof payload.content == "string" ? payload.content : "", submit = /* @__PURE__ */ __name((nextText) => {
