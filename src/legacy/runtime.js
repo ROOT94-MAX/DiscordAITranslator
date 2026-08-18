@@ -66,9 +66,10 @@ module.exports = (_ => {
 		const {renderSettingsPanel} = require("../ui/settings-panel");
 		const {createTranslateComponents, translateIcon, translateIconUntranslate} = require("../ui/translate-components");
 		const loadedStatusPosition = require("../ui/loaded-status-position");
+		const {createLoadedStatusCapsuleController} = require("../ui/loaded-status-capsule");
 		const {createChannelTitleStore} = require("../channel-title/channel-title-store");
 		const {createMessageViewportStore} = require("../viewport/message-viewport-store");
-		const {LOADED_STATUS_COMPLETION_HIDE_MS, LOADED_STATUS_REFRESH_MS, createLoadedTranslationStatusStore} = require("../status/loaded-translation-status-store");
+		const {createLoadedTranslationStatusStore} = require("../status/loaded-translation-status-store");
 		const {createTranslationCacheStore} = require("../cache/translation-cache-store");
 		const {createProviderClient, translationEngines, enginePortals} = require("../providers/provider-client");
 		const {createSentTranslationStore} = require("../sent/sent-translation-store");
@@ -1391,18 +1392,7 @@ module.exports = (_ => {
 			}
 
 			getLoadedAutoTranslationSkipReasonText (reason) {
-				switch (reason) {
-					case "symbol_only": return this.isChineseUiLanguage() ? "\u7eaf\u7b26\u53f7/\u65e0\u81ea\u7136\u8bed\u8a00" : "symbol-only/no natural language";
-					case "link_only": return this.isChineseUiLanguage() ? "\u4ec5\u94fe\u63a5/\u53d7\u4fdd\u62a4\u5185\u5bb9" : "link-only/protected content";
-					case "same_language": return this.isChineseUiLanguage() ? "\u540c\u76ee\u6807\u8bed\u8a00" : "same target language";
-					case "too_similar": return this.isChineseUiLanguage() ? "\u4e0e\u539f\u6587\u8fc7\u4e8e\u76f8\u4f3c" : "too similar to source";
-					case "wrong_target_language": return this.isChineseUiLanguage() ? "\u8fd4\u56de\u8bed\u8a00\u4e0d\u5bf9" : "wrong target language";
-					case "ai_skip_signal": return this.isChineseUiLanguage() ? "AI\u5224\u5b9a\u65e0\u9700\u7ffb\u8bd1" : "AI skipped translation";
-					case "source_filter": return this.isChineseUiLanguage() ? "\u4e0d\u5728\u6e90\u8bed\u8a00\u7b5b\u9009\u5185" : "outside source-language filter";
-					case "local_guard": return this.isChineseUiLanguage() ? "\u672c\u5730\u4fdd\u62a4\u5140\u5e95\u4e22\u5f03" : "dropped by local safeguard";
-					case "out_of_range": return this.isChineseUiLanguage() ? "\u8d85\u51fa\u5f53\u524d\u5df2\u52a0\u8f7d\u8303\u56f4" : "outside loaded range";
-					default: return reason || (this.isChineseUiLanguage() ? "\u5df2\u8df3\u8fc7" : "skipped");
-				}
+				return this.ensureLoadedStatusCapsuleController().getSkipReasonText(reason);
 			}
 
 			getLoadedAutoTranslationPreviewText (text) {
@@ -1410,12 +1400,7 @@ module.exports = (_ => {
 			}
 
 			getLoadedAutoTranslationStatusTitleText (status) {
-				if (!status) return "";
-				const baseText = this.getLoadedAutoTranslationStatusDetailText(status);
-				const detailParts = [];
-				if (status && status.lastSkipReason) detailParts.push(this.getLoadedAutoTranslationSkipReasonText(status.lastSkipReason));
-				if (status && status.lastSkipPreview) detailParts.push(status.lastSkipPreview);
-				return detailParts.length ? `${baseText} | ${this.isChineseUiLanguage() ? "\u6700\u8fd1\u8df3\u8fc7" : "Last skipped"}: ${detailParts.join(" | ")}` : baseText;
+				return this.ensureLoadedStatusCapsuleController().getTitleText(status);
 			}
 
 			getAutoTranslatedResultRejectReason (translation, channelId) {
@@ -1431,13 +1416,7 @@ module.exports = (_ => {
 			}
 
 			updateInlineLoadedAutoTranslationStatusElements () {
-				if (typeof document == "undefined") return;
-				let elements = [];
-				try {elements = Array.from(document.querySelectorAll(".translator-loaded-status-inline"));}
-				catch (err) {elements = [];}
-				for (const element of elements) {
-					if (element && element.remove) element.remove();
-				}
+				this.ensureLoadedStatusCapsuleController().updateInlineElements();
 			}
 
 			isTranslateMasterSwitchVisuallyEnabled (channelId) {
@@ -1462,43 +1441,11 @@ module.exports = (_ => {
 			}
 
 			ensureLoadedAutoTranslationStatusPositionWatcher () {
-				if (typeof window == "undefined" || this._loadedAutoTranslationStatusPositionWatcherAttached) return;
-				this._loadedAutoTranslationStatusPositionWatcherAttached = true;
-				this._loadedAutoTranslationStatusPositionHandler = _ => {
-					const element = typeof document != "undefined" && document.getElementById("DiscordAITranslator-loaded-status");
-					if (!element) return;
-					if (this._loadedAutoTranslationStatusPositionTimer) clearTimeout(this._loadedAutoTranslationStatusPositionTimer);
-					this._loadedAutoTranslationStatusPositionTimer = setTimeout(_ => {
-						this._loadedAutoTranslationStatusPositionTimer = null;
-						this.positionLoadedAutoTranslationStatusElement(element);
-					}, 80);
-				};
-				window.addEventListener("resize", this._loadedAutoTranslationStatusPositionHandler, {passive: true});
-				window.addEventListener("scroll", this._loadedAutoTranslationStatusPositionHandler, true);
-				try {
-					if (typeof ResizeObserver != "undefined" && document && document.body) {
-						this._loadedAutoTranslationStatusResizeObserver = new ResizeObserver(this._loadedAutoTranslationStatusPositionHandler);
-						this._loadedAutoTranslationStatusResizeObserver.observe(document.body);
-					}
-				}
-				catch (err) {}
+				this.ensureLoadedStatusCapsuleController().ensurePositionWatcher();
 			}
 
 			detachLoadedAutoTranslationStatusPositionWatcher () {
-				if (typeof window == "undefined" || !this._loadedAutoTranslationStatusPositionWatcherAttached) return;
-				this._loadedAutoTranslationStatusPositionWatcherAttached = false;
-				if (this._loadedAutoTranslationStatusPositionHandler) {
-					window.removeEventListener("resize", this._loadedAutoTranslationStatusPositionHandler, {passive: true});
-					window.removeEventListener("scroll", this._loadedAutoTranslationStatusPositionHandler, true);
-				}
-				if (this._loadedAutoTranslationStatusResizeObserver) {
-					try {this._loadedAutoTranslationStatusResizeObserver.disconnect();}
-					catch (err) {}
-				}
-				this._loadedAutoTranslationStatusResizeObserver = null;
-				if (this._loadedAutoTranslationStatusPositionTimer) clearTimeout(this._loadedAutoTranslationStatusPositionTimer);
-				this._loadedAutoTranslationStatusPositionTimer = null;
-				this._loadedAutoTranslationStatusPositionHandler = null;
+				this.ensureLoadedStatusCapsuleController().detachPositionWatcher();
 			}
 
 			isTranslatorSettingsSurfaceOpen () {
@@ -1512,77 +1459,43 @@ module.exports = (_ => {
 			}
 
 			removeLoadedAutoTranslationStatusElement () {
-				const element = typeof document != "undefined" && document.getElementById("DiscordAITranslator-loaded-status");
-				if (element) element.remove();
-				this.detachLoadedAutoTranslationStatusPositionWatcher();
+				this.ensureLoadedStatusCapsuleController().removeElement();
 			}
 
 			shouldShowLoadedAutoTranslationStatus (status) {
-				if (!status || (!status.active && !status.done)) return false;
-				const selectedChannelId = BDFDB.LibraryStores.SelectedChannelStore.getChannelId();
-				const statusChannelId = status.channelId && status.channelId != "__global" ? status.channelId : selectedChannelId;
-				if (!statusChannelId || !selectedChannelId || statusChannelId != selectedChannelId) return false;
-				if (this.getReceivedAutoTranslateScope() != "loaded_messages") return false;
-				return this.isTranslationEnabled(statusChannelId);
+				return this.ensureLoadedStatusCapsuleController().shouldShow(status);
+			}
+
+			// The capsule controller owns the floating status DOM (element, watcher,
+			// timers). The hooks route its collaborator calls back through the plugin
+			// methods below, which is where tests have always placed their stubs.
+			ensureLoadedStatusCapsuleController () {
+				if (!this.loadedStatusCapsuleControllerInstance) this.loadedStatusCapsuleControllerInstance = createLoadedStatusCapsuleController({
+					store: loadedTranslationStatusStore,
+					getSelectedChannelId: () => BDFDB.LibraryStores.SelectedChannelStore.getChannelId(),
+					isTranslationEnabled: channelId => this.isTranslationEnabled(channelId),
+					getReceivedAutoTranslateScope: () => this.getReceivedAutoTranslateScope(),
+					isChineseUiLanguage: () => this.isChineseUiLanguage(),
+					positionElement: element => this.positionLoadedAutoTranslationStatusElement(element),
+					clearHistoricalTracker: () => historicalDisplayTracker.clear(),
+					hooks: {
+						attachScrollWatcher: () => this.attachAutoTranslationScrollWatcher(),
+						ensurePositionWatcher: () => this.ensureLoadedAutoTranslationStatusPositionWatcher(),
+						removeElement: () => this.removeLoadedAutoTranslationStatusElement(),
+						updateInlineElements: () => this.updateInlineLoadedAutoTranslationStatusElements(),
+						positionElement: element => this.positionLoadedAutoTranslationStatusElement(element),
+						onRetry: channelId => this.retryFailedHistoricalTranslations(channelId)
+					}
+				});
+				return this.loadedStatusCapsuleControllerInstance;
 			}
 
 			updateLoadedAutoTranslationStatus (updates = {}) {
-				const currentStatus = loadedTranslationStatusStore.update(updates);
-				if (!this.shouldShowLoadedAutoTranslationStatus(currentStatus)) {
-					this.removeLoadedAutoTranslationStatusElement();
-					return;
-				}
-				loadedTranslationStatusStore.cancelTimers();
-				if (typeof document == "undefined" || !document.body) return;
-				this.attachAutoTranslationScrollWatcher();
-				this.ensureLoadedAutoTranslationStatusPositionWatcher();
-				let element = document.getElementById("DiscordAITranslator-loaded-status");
-				if (!element) {
-					element = document.createElement("div");
-					element.id = "DiscordAITranslator-loaded-status";
-					document.body.appendChild(element);
-				}
-				const retryableCount = Math.max(0, currentStatus.retryable || 0);
-				const showRetry = !currentStatus.active && retryableCount > 0;
-				const visualPhase = showRetry ? "failed" : currentStatus.phase || (currentStatus.collecting ? "collecting" : currentStatus.done ? "done" : "requesting");
-				// Always normalize the status DOM. This removes legacy progress-line children left by earlier builds.
-				element.className = `translator-loaded-status-floating translator-loaded-status-${visualPhase}${showRetry ? " translator-loaded-status-retryable" : ""}`;
-				if (!element.querySelector(".translator-loaded-status-icon") || !element.querySelector(".translator-loaded-status-text") || element.querySelector(".translator-loaded-status-progress")) {
-					element.innerHTML = '<span class="translator-loaded-status-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M12.9 15.1 10.8 13l.1-.1a14.7 14.7 0 0 0 3.1-5.4h2.4V5.4h-5.2V3.3H9.1v2.1H3.9v2.1H12a12.5 12.5 0 0 1-2.6 4.1 12.4 12.4 0 0 1-1.9-2.7H5.4a14.8 14.8 0 0 0 2.5 4.1l-4.2 4.1 1.5 1.5 4.2-4.2 2.6 2.7.9-2Zm5.9-3.4h-2.1L12 22.2h2.2l1.2-3.1h4.8l1.2 3.1h2.2l-4.8-10.5Zm-2.6 5.3 1.6-4.2 1.6 4.2h-3.2Z"/></svg></span><span class="translator-loaded-status-text"></span>';
-				}
-				const textElement = element.querySelector(".translator-loaded-status-text");
-				if (textElement) textElement.textContent = this.getLoadedAutoTranslationStatusText(currentStatus);
-				let retryButton = element.querySelector(".translator-loaded-status-retry");
-				if (showRetry) {
-					if (!retryButton) {
-						retryButton = document.createElement("button");
-						retryButton.type = "button";
-						retryButton.className = "translator-loaded-status-retry";
-						element.appendChild(retryButton);
-					}
-					retryButton.textContent = this.isChineseUiLanguage() ? "重试" : "Retry";
-					retryButton.title = this.isChineseUiLanguage() ? `重试 ${retryableCount} 条失败消息` : `Retry ${retryableCount} failed messages`;
-					retryButton.onclick = event => {
-						if (event && event.stopPropagation) event.stopPropagation();
-						const retryResult = this.retryFailedHistoricalTranslations(currentStatus.channelId);
-						if (retryResult && typeof retryResult.catch == "function") retryResult.catch(_ => {});
-					};
-				}
-				else if (retryButton) retryButton.remove();
-				element.title = this.getLoadedAutoTranslationStatusTitleText(currentStatus);
-				this.updateInlineLoadedAutoTranslationStatusElements();
-				loadedTranslationStatusStore.schedulePosition(_ => this.positionLoadedAutoTranslationStatusElement(element));
-				loadedTranslationStatusStore.scheduleRefresh(LOADED_STATUS_REFRESH_MS, () => this.updateLoadedAutoTranslationStatus({}));
-				if (!currentStatus.active && currentStatus.done && !Math.max(0, currentStatus.displayPending || 0) && !retryableCount && !Math.max(0, currentStatus.failed || currentStatus.aiDropped || 0)) loadedTranslationStatusStore.scheduleHide(LOADED_STATUS_COMPLETION_HIDE_MS, () => this.removeLoadedAutoTranslationStatusElement());
+				this.ensureLoadedStatusCapsuleController().update(updates);
 			}
 
 			clearLoadedAutoTranslationStatus () {
-				historicalDisplayTracker.clear();
-				loadedTranslationStatusStore.clear();
-				const element = typeof document != "undefined" && document.getElementById("DiscordAITranslator-loaded-status");
-				if (element) element.remove();
-				this.detachLoadedAutoTranslationStatusPositionWatcher();
-				this.updateInlineLoadedAutoTranslationStatusElements();
+				this.ensureLoadedStatusCapsuleController().clear();
 			}
 
 			scheduleTranslationRerender (options = {}) {
