@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 08e2b0182796eded
+ * @buildId 530b6d5ac4b47c18
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -815,7 +815,7 @@ var require_translation_display_controller = __commonJS({
 var require_discord_render_adapter = __commonJS({
   "src/display/discord-render-adapter.js"(exports2, module2) {
     function createDiscordRenderAdapter({ BDFDB, document: document2, requestAnimationFrame: requestAnimationFrame2, getUserScrollIntentSequence, captureScrollState, restoreScrollState, restoreScrollStateNow = /* @__PURE__ */ __name(() => {
-    }, "restoreScrollStateNow"), isRuntimeActive = /* @__PURE__ */ __name(() => !0, "isRuntimeActive"), atomicChatRebuild = null, liveRowRepaint = null }) {
+    }, "restoreScrollStateNow"), isRuntimeActive = /* @__PURE__ */ __name(() => !0, "isRuntimeActive"), liveRowRepaint = null }) {
       let rebuildStats = { live: 0, rebuild: 0 }, rebuildsBySource = {}, recentRebuilds = [], RECENT_REBUILD_LIMIT = 40;
       function bookRebuild(sources, size) {
         rebuildStats.rebuild++;
@@ -1089,9 +1089,9 @@ var require_flux_row_repaint = __commonJS({
   }
 });
 
-// src/display/atomic-chat-rebuild.js
-var require_atomic_chat_rebuild = __commonJS({
-  "src/display/atomic-chat-rebuild.js"(exports2, module2) {
+// src/display/react-flush-sync.js
+var require_react_flush_sync = __commonJS({
+  "src/display/react-flush-sync.js"(exports2, module2) {
     function resolveFlushSync(reactUtils) {
       let proxied = reactUtils && reactUtils.flushSync;
       if (typeof proxied == "function") return proxied;
@@ -1105,52 +1105,14 @@ var require_atomic_chat_rebuild = __commonJS({
       return null;
     }
     __name(resolveFlushSync, "resolveFlushSync");
-    function createAtomicChatRebuild({ BDFDB, document: documentRef }) {
-      function markChannelRead() {
-        try {
-          let selectedChannelStore = BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore, channelId = selectedChannelStore && typeof selectedChannelStore.getChannelId == "function" ? selectedChannelStore.getChannelId() : null;
-          if (!channelId) return;
-          BDFDB.DMUtils && typeof BDFDB.DMUtils.isDMChannel == "function" && BDFDB.DMUtils.isDMChannel(channelId) ? BDFDB.DMUtils.markAsRead(channelId) : BDFDB.ChannelUtils && typeof BDFDB.ChannelUtils.markAsRead == "function" && BDFDB.ChannelUtils.markAsRead(channelId);
-        } catch {
-        }
-      }
-      __name(markChannelRead, "markChannelRead");
-      function rebuildOnce() {
-        try {
-          if (!BDFDB || !documentRef || typeof documentRef.querySelector != "function") return !1;
-          let reactUtils = BDFDB.ReactUtils, flushSync = resolveFlushSync(reactUtils), forceUpdate = reactUtils && reactUtils.forceUpdate;
-          if (typeof flushSync != "function" || typeof forceUpdate != "function" || typeof reactUtils.findOwner != "function") return !1;
-          let chatContent = BDFDB.dotCN && BDFDB.dotCN.chatcontent ? documentRef.querySelector(BDFDB.dotCN.chatcontent) : null;
-          if (!chatContent) return !1;
-          let owner = reactUtils.findOwner(chatContent, { name: "LayerProvider", unlimited: !0, up: !0 }), prototype = owner && BDFDB.ObjectUtils && typeof BDFDB.ObjectUtils.get == "function" ? BDFDB.ObjectUtils.get(owner, `${reactUtils.instanceKey}.type.prototype`) : null;
-          if (!owner || !prototype || typeof prototype.render != "function") return !1;
-          markChannelRead();
-          let originalRender = prototype.render, blanked = !1;
-          prototype.render = function(...args) {
-            let result = originalRender.apply(this, args);
-            return !blanked && this === owner && result && result.props && (blanked = !0, result.props.children = typeof result.props.children == "function" ? ((_) => null) : []), result;
-          };
-          try {
-            flushSync(() => forceUpdate(owner));
-          } finally {
-            prototype.render = originalRender;
-          }
-          return blanked ? (flushSync(() => forceUpdate(owner)), !0) : !1;
-        } catch {
-          return !1;
-        }
-      }
-      return __name(rebuildOnce, "rebuildOnce"), { rebuildOnce };
-    }
-    __name(createAtomicChatRebuild, "createAtomicChatRebuild");
-    module2.exports = { createAtomicChatRebuild, resolveFlushSync };
+    module2.exports = { resolveFlushSync };
   }
 });
 
 // src/display/display-runtime.js
 var require_display_runtime = __commonJS({
   "src/display/display-runtime.js"(exports2, module2) {
-    var { createMessageStateStore } = require_message_state_store(), { createTranslationDisplayController } = require_translation_display_controller(), { createDiscordRenderAdapter } = require_discord_render_adapter(), { createLiveRowRepaint } = require_live_row_repaint(), { createFluxRowRepaint } = require_flux_row_repaint(), { resolveFlushSync } = require_atomic_chat_rebuild();
+    var { createMessageStateStore } = require_message_state_store(), { createTranslationDisplayController } = require_translation_display_controller(), { createDiscordRenderAdapter } = require_discord_render_adapter(), { createLiveRowRepaint } = require_live_row_repaint(), { createFluxRowRepaint } = require_flux_row_repaint(), { resolveFlushSync } = require_react_flush_sync();
     function createDisplayRuntime(dependencies) {
       let store = createMessageStateStore({ journal: null, onTranslationDisplayed: dependencies.onTranslationDisplayed }), liveRowRepaint = createLiveRowRepaint({
         reactUtils: dependencies.BDFDB && dependencies.BDFDB.ReactUtils,
@@ -11737,7 +11699,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "08e2b0182796eded";
+            return "530b6d5ac4b47c18";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13561,10 +13523,9 @@ __________________ __________________ __________________
           }
           ensureReceivedDisplayRuntime() {
             return this.receivedDisplayRuntimeInstance || (this.receivedDisplayRuntimeInstance = createDisplayRuntime({
-              // The atomic rebuild needs the React handles too - wiring only dotCN and
-              // MessageUtils left ReactUtils.flushSync undefined and every transaction
-              // silently fell back to the two-flush rerenderAll (2026-08-19, 0A/56F).
-              BDFDB: { dotCN: BDFDB.dotCN || {}, MessageUtils: BDFDB.MessageUtils, ReactUtils: BDFDB.ReactUtils, ObjectUtils: BDFDB.ObjectUtils, LibraryStores: BDFDB.LibraryStores, DMUtils: BDFDB.DMUtils, ChannelUtils: BDFDB.ChannelUtils },
+              // Display fallback needs the list selectors and rerender helper; live
+              // class rows optionally use ReactUtils.flushSync for one commit.
+              BDFDB: { dotCN: BDFDB.dotCN || {}, MessageUtils: BDFDB.MessageUtils, ReactUtils: BDFDB.ReactUtils },
               document: {
                 querySelector: /* @__PURE__ */ __name((selector) => typeof document > "u" || !document || !selector ? null : document.querySelector(selector), "querySelector")
               },

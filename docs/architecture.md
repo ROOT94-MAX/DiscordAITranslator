@@ -8,8 +8,8 @@ This document describes the current runtime boundaries and migration rules. User
 
 - Release line: v0.3.39.
 - Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
-- Current build ID: `08e2b0182796eded`.
-- Legacy composition-root ratchet: 3,479 lines and two module-level shared declarators.
+- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased master build ID: `530b6d5ac4b47c18`.
+- Legacy composition-root ratchet: 3,478 lines and two module-level shared declarators.
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
 - Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
 
@@ -95,7 +95,7 @@ A display transaction contains a channel ID, translated message IDs, host reply-
 
 For mounted ordinary rows, `flux-row-repaint.js` dispatches the experiment-verified no-op `MESSAGE_UPDATE` merge through Discord's store dispatcher. Confirmation runs after the asynchronous store render. Rows already carrying the expected revision require no repaint.
 
-`discord-render-adapter.js` performs one whole-chat rebuild only when row-level confirmation or a host surface still requires it. Function-component registry handles remain opportunistic because the current client exposes synthetic `{props}` objects without a class updater. The retired synchronous blank/remount path is retained only as tested historical code and is not the active rebuild primitive.
+`discord-render-adapter.js` performs one whole-chat rebuild only when row-level confirmation or a host surface still requires it. Function-component registry handles remain opportunistic because the current client exposes synthetic `{props}` objects without a class updater. The retired synchronous blank/remount implementation and adapter seam have been removed; its field verdict remains in the debugging handoff.
 
 ## Viewport Ownership
 
@@ -159,7 +159,7 @@ npm run verify
 
 ## Known Debt
 
-- `src/legacy/runtime.js` remains a 3,479-line composition root.
+- `src/legacy/runtime.js` remains a 3,478-line composition root.
 - Whole-chat fallback diagnostics (`R`) can still correspond to occasional composer flicker.
 - History-source completeness, provider abort support, lifecycle task registry cleanup, and the message-delete dispatcher route remain open in `recovery-plan.md`.
 - Discord internal store and snapshot shapes require re-observation after client updates.

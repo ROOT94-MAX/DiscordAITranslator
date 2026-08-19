@@ -103,11 +103,11 @@ test("architecture and field handoff provide complete Chinese companion entry po
 	assert.match(index, /field-debugging-guide\.zh-CN\.md/);
 });
 
-test("the recovery plan stays active-only and superseded UI planning stays outside Git", () => {
+test("the recovery plan separates completed baseline from active work and keeps superseded UI planning outside Git", () => {
 	assert.equal(fs.existsSync(path.join(root, "docs", "ui-redesign-plan.md")), false);
 	const recovery = read("docs/recovery-plan.md");
 	const headings = [
-		"## Current Baseline",
+		"## Verified Completed Baseline (Not TODO)",
 		"## Priority 0: Field Observation",
 		"## Priority 1: Message Deletion Dispatcher",
 		"## Priority 2: Historical Source Completeness",
@@ -118,6 +118,14 @@ test("the recovery plan stays active-only and superseded UI planning stays outsi
 		"## Delivery Gate"
 	];
 	for (const heading of headings) assert.match(recovery, new RegExp(`^${escapeRegex(heading)}$`, "m"));
+	for (const status of [
+		"OBSERVATION GATE",
+		"Status: OPEN.",
+		"PARTIALLY COMPLETE",
+		"OPEN WITH PARTIAL FOUNDATIONS",
+		"PARKED",
+		"PROCESS RULES"
+	]) assert.match(recovery, new RegExp(escapeRegex(status)));
 	assert.ok(recovery.split("\n").length <= 140, "recovery-plan keeps only the executable active backlog");
 	assert.ok(recovery.length <= 15000, "incident history belongs in field-debugging-guide, not recovery-plan");
 	assert.doesNotMatch(recovery, /Σ47|Atomic rebuild RETIRED|codex\/display-unification|Shipped by v0\.3\.38/);

@@ -12,7 +12,8 @@
 //
 // Rows without a usable instance (function-component clients expose no updater;
 // virtualised rows never render) are simply not attempted: the adapter's DOM confirm
-// routes them to the atomic rebuild, so the worst case is exactly the old behavior.
+// routes them to the whole-chat fallback, so the worst case is the established
+// behavior.
 const MAX_TRACKED_ROWS = 2000;
 
 function createLiveRowRepaint({reactUtils = null, resolveFlushSync = () => null} = {}) {

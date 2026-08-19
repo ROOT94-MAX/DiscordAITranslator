@@ -1,10 +1,12 @@
 # Recovery Plan
 
-This is the canonical **active-only** backlog. User-visible behavior belongs to `product.md`, setting ownership to `settings.md`, provider contracts to `providers.md`, and current code boundaries to `architecture.md`.
+This is the canonical recovery status ledger: one verified completed baseline followed by the **active-only** backlog. User-visible behavior belongs to `product.md`, setting ownership to `settings.md`, provider contracts to `providers.md`, and current code boundaries to `architecture.md`.
 
-Completed incident history, rejected approaches, and field evidence live in `field-debugging-guide.md`. Do not copy those timelines back into this file. An item appears here only while it still has an executable next step.
+Completed incident history, rejected approaches, and field evidence live in `field-debugging-guide.md`. Do not copy those timelines back into this file. A backlog item appears here only while it still has an executable next step.
 
-## Current Baseline
+## Verified Completed Baseline (Not TODO)
+
+Everything in this section is already shipped or verified. It is retained only so future work starts from the correct current state.
 
 - v0.3.39 is published from `master` as one deterministic `DiscordAITranslator.plugin.js` artifact.
 - Mounted ordinary messages attempt Flux row repaint first; one whole-chat repaint remains the confirmed fallback.
@@ -25,6 +27,7 @@ Working rules:
 
 ## Priority 0: Field Observation
 
+**Status: OBSERVATION GATE — no confirmed active regression.** These are reopen conditions, not implementation tasks.
 Do not change code for mild or ambiguous reports until one of these contracts reproduces with a build ID and trigger lane:
 
 | Contract | Reopen when | Evidence to capture |
@@ -38,6 +41,7 @@ Scrollbar-thumb movement caused only by added row height is expected; reopen whe
 
 ## Priority 1: Message Deletion Dispatcher
 
+**Status: OPEN.** Static audit still shows `onStart` reading `BDFDB.LibraryModules.Dispatcher || DispatcherUtils`, while the current client exposes the working dispatcher through a Store. Existing tests call the handler or a synthetic patched object; they do not prove the live subscription exists.
 The existing MESSAGE_DELETE/MESSAGE_DELETE_BULK cleanup patch was originally pointed at a BDFDB dispatcher surface absent from BDFDB 4.5.4. The Store dispatcher discovered for Flux row repaint is the candidate replacement.
 
 Next slice:
@@ -49,6 +53,7 @@ Next slice:
 
 ## Priority 2: Historical Source Completeness
 
+**Status: OPEN.** `historical-message-source.js` currently performs at most one `prefetchMessages` call for the initially missing quantity. Ineligible, duplicate, or off-channel records returned by that call can still leave the eligible target underfilled.
 The historical source must keep paging until it reaches the configured number of **eligible unique** messages, receives an explicit exhaustion signal, or reaches a documented page/request ceiling.
 
 Required behavior:
@@ -62,19 +67,21 @@ Add source-level pagination tests before changing the Discord history adapter.
 
 ## Priority 3: Lifecycle And Cancellation
 
+**Status: PARTIALLY COMPLETE.** Historical prefetch already has an `AbortController`, and `MessageStateStore.pruneChannel` already releases its final channel generation when no retained state needs it. The remaining work is narrower:
 Consolidate asynchronous ownership without changing user-visible translation policy:
 
 - one runtime-owned registry for workers, provider abort controllers, timers, animation frames, preview waves, and delayed viewport checks;
-- physical provider cancellation where the transport supports it;
+- physical cancellation for translation-provider requests where the transport supports it; historical prefetch cancellation is already implemented;
 - cache flush on clean stop instead of abandoning the final debounce window;
-- deep immutable restore sources for message and embed data;
-- release channel generations and session maps once no active request, suppression, archive, or unconfirmed restore needs them;
+- audit and deep-clone any remaining ordinary-message/embed restore sources that still share nested render objects;
+- release remaining visited-channel maps outside `MessageStateStore`; its record index and generation pruning are already covered;
 - stop/start tests proving an older worker cannot clear or overwrite a newer runtime epoch.
 
 Split this priority into small lifecycle slices; do not land one global cancellation rewrite.
 
 ## Priority 4: Render Truth
 
+**Status: OPEN WITH PARTIAL FOUNDATIONS.** Request identities, display revisions, and channel generations exist, but the following concrete gaps remain in current code/tests:
 Strengthen confirmation and command identity after field evidence justifies the change:
 
 - Body text, decoration, embeds, reply previews, and titles need surface-specific confirmation; one child revision marker is not proof that every visible surface is current.
@@ -87,16 +94,17 @@ The unresolved product decision is whether reply previews should carry the same 
 
 ## Priority 5: Architecture
 
+**Status: OPEN.** The retired atomic rebuild cleanup is complete on the current branch, but the composition root and oversized ownership boundaries remain.
 Continue bottom-up ownership extraction; do not replace the composition root in one rewrite.
 
 - `src/legacy/runtime.js` remains the lifecycle/patch composition root and may only shrink.
 - Move wiring into a composition module when one responsibility can leave with contract tests and no new shared state.
 - Split oversized provider, settings, label, style, and display modules by ownership rather than arbitrary line count.
-- Separately clean the retired atomic rebuild implementation: `resolveFlushSync` is active, while `createAtomicChatRebuild` and its behavior tests are historical code. Move the resolver to a focused module only after a failing source contract pins the active consumer.
 - Keep the single readable generated plugin as the distribution contract.
 
 ## Parked UI Redesign
 
+**Status: PARKED — not part of the active implementation order.**
 The former detailed UI redesign plan is archived outside Git at:
 
 ```text
@@ -115,6 +123,7 @@ Restart this work only after a fresh recon against the current `settings-panel.j
 
 ## Delivery Gate
 
+**Status: PROCESS RULES — not a product task.**
 Every recovery slice must provide:
 
 1. a failing regression test or a bounded evidence capture proving the current gap;

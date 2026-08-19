@@ -6,9 +6,8 @@
 // froze the client when deployed. The mechanism users actually saw working is the one
 // the 2026-06 plugin shipped: BDFDB.MessageUtils.rerenderAll(true) unmounts and
 // rebuilds the chat layer, which crosses every memo boundary. The live per-row path
-// (live-row-repaint.js) runs first and needs no rebuild at all; the atomic
-// single-task variant of the rebuild was tried and RETIRED by field verdict - see
-// the note inside the factory.
+// (live-row-repaint.js) runs first and needs no rebuild at all. The retired atomic
+// single-task experiment has been removed; its field verdict remains in the handoff.
 //
 // What made the old plugin freeze was frequency, not the primitive. This adapter keeps
 // the rebuild affordable with three rules:
@@ -19,16 +18,7 @@
 //   paint from the store when they mount.
 // Scroll safety (bottom lock, anchor restore, user-gesture guard) lives in the
 // injected captureScrollState/restoreScrollState from the viewport store.
-function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, getUserScrollIntentSequence, captureScrollState, restoreScrollState, restoreScrollStateNow = () => {}, isRuntimeActive = () => true, atomicChatRebuild = null, liveRowRepaint = null}) {
-	// atomicChatRebuild is accepted but deliberately unused: the synchronous
-	// double-flush rebuild was RETIRED by field verdict (2026-08-19 evening,
-	// "0L/56A/0F"). It ran once per transaction with no cross-call merging, so
-	// message streams became per-message heavyweight rebuilds - the composer icon
-	// blinked on every message and scrolling stuttered. BDFDB's rerenderAll defers
-	// through a self-clearing timeout and lets React batch the two force updates,
-	// which the field reports as strictly smoother. Do not re-enable without a
-	// mechanism that merges rebuilds across transactions.
-	void atomicChatRebuild;
+function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, getUserScrollIntentSequence, captureScrollState, restoreScrollState, restoreScrollStateNow = () => {}, isRuntimeActive = () => true, liveRowRepaint = null}) {
 	// Which path painted, surfaced in the settings panel so a user screenshot
 	// answers what no non-technical report can: live = per-row self-repaint
 	// (no rebuild), rebuild = BDFDB whole-layer rebuild. rebuildsBySource books each

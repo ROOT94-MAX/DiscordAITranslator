@@ -3,7 +3,7 @@ const {createTranslationDisplayController} = require("./translation-display-cont
 const {createDiscordRenderAdapter} = require("./discord-render-adapter");
 const {createLiveRowRepaint} = require("./live-row-repaint");
 const {createFluxRowRepaint} = require("./flux-row-repaint");
-const {resolveFlushSync} = require("./atomic-chat-rebuild");
+const {resolveFlushSync} = require("./react-flush-sync");
 
 function createDisplayRuntime(dependencies) {
 	// The compile-time constant strips the journal implementation from release bundles;

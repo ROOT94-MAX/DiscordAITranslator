@@ -2618,10 +2618,9 @@ module.exports = (_ => {
 
 			ensureReceivedDisplayRuntime () {
 				if (!this.receivedDisplayRuntimeInstance) this.receivedDisplayRuntimeInstance = createDisplayRuntime({
-					// The atomic rebuild needs the React handles too - wiring only dotCN and
-					// MessageUtils left ReactUtils.flushSync undefined and every transaction
-					// silently fell back to the two-flush rerenderAll (2026-08-19, 0A/56F).
-					BDFDB: {dotCN: BDFDB.dotCN || {}, MessageUtils: BDFDB.MessageUtils, ReactUtils: BDFDB.ReactUtils, ObjectUtils: BDFDB.ObjectUtils, LibraryStores: BDFDB.LibraryStores, DMUtils: BDFDB.DMUtils, ChannelUtils: BDFDB.ChannelUtils},
+					// Display fallback needs the list selectors and rerender helper; live
+					// class rows optionally use ReactUtils.flushSync for one commit.
+					BDFDB: {dotCN: BDFDB.dotCN || {}, MessageUtils: BDFDB.MessageUtils, ReactUtils: BDFDB.ReactUtils},
 					document: {
 						querySelector: selector => typeof document == "undefined" || !document || !selector ? null : document.querySelector(selector)
 					},

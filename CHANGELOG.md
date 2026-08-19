@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Refactor: 删除已经退出运行路径的同步原子聊天区重建实现、无效 adapter 参数、多余 BDFDB 句柄接线和对应历史行为测试；活动的 `resolveFlushSync` 迁移到单一职责模块 `react-flush-sync.js`，单行重绘行为保持不变，旧运行时约束从 3,479 行降至 3,478 行
+- Test: 新增 `resolveFlushSync` 注入优先、Webpack 回退、缺失/异常降级以及退役原子路径完全移除的契约测试
+
 ## v0.3.39
 
 - Changed: 已挂载消息优先通过 Discord Store 的 `MESSAGE_UPDATE` 合并路径逐行重绘；只有行级确认失败、回复预览宿主或频道生命周期刷新才回退到整聊天区重建，显著减少输入框图标闪烁

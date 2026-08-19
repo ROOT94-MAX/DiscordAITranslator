@@ -8,8 +8,8 @@
 
 - 发布版本：v0.3.39。
 - 分发产物：由 `src/` 确定性生成的一份可读 `DiscordAITranslator.plugin.js`。
-- 当前构建 ID：`08e2b0182796eded`。
-- 旧运行时组合根约束：3,479 行、两个模块级共享声明。
+- 已发布 v0.3.39 构建 ID：`08e2b0182796eded`；当前未发布 master 构建 ID：`530b6d5ac4b47c18`。
+- 旧运行时组合根约束：3,478 行、两个模块级共享声明。
 - 发布验证：`npm run verify` 统一执行确定性构建、语法、发布契约和完整 Node 测试。
 - 显示策略：已挂载消息先尝试频道级 Flux `MESSAGE_UPDATE` 合并；整聊天区重建只作为确认后的回退，而不是每个结果的默认路径。
 
@@ -95,7 +95,7 @@ src/plugin/index.js
 
 对于普通已挂载消息，`flux-row-repaint.js` 通过 Discord Store dispatcher 发送已经实验确认的无内容变化 `MESSAGE_UPDATE` 合并，随后等待异步 Store 渲染并检查 DOM 修订。已经携带目标修订的消息不需要刷新。
 
-只有单行确认或特殊宿主仍未满足事务时，`discord-render-adapter.js` 才执行一次整聊天区重建。当前客户端函数组件只暴露没有类更新器的 `{props}` 合成对象，因此实例注册表只是机会性路径。同步清空/重挂载方案已经退出活动路径，只保留测试和历史证据。
+只有单行确认或特殊宿主仍未满足事务时，`discord-render-adapter.js` 才执行一次整聊天区重建。当前客户端函数组件只暴露没有类更新器的 `{props}` 合成对象，因此实例注册表只是机会性路径。同步清空/重挂载实现及其 adapter 空接口已经删除，现场结论保留在调试交接中。
 
 ## 视口归属
 
@@ -159,7 +159,7 @@ npm run verify
 
 ## 已知债务
 
-- `src/legacy/runtime.js` 仍是 3,479 行组合根。
+- `src/legacy/runtime.js` 仍是 3,478 行组合根。
 - 整聊天区回退诊断 `R` 仍可能对应偶发输入框图标闪烁。
 - 历史来源完整性、供应商物理中止、生命周期任务注册表和消息删除 dispatcher 路由仍在 `recovery-plan.md` 中开放。
 - Discord 内部 Store 和快照结构在客户端更新后需要重新观察。

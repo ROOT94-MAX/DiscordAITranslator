@@ -25,7 +25,8 @@ const BUDGET = Object.freeze({
 	// -24 (2026-08-20): content-view projection moved into the display module;
 	// the runtime keeps one delegation instead of owning the forwarded-parent branch.
 	// -12 (2026-08-20): removed the dead direct-original React block factory.
-	runtimeLines: 3479,
+	// -1 (2026-08-20): removed atomic-rebuild-only BDFDB handle wiring.
+	runtimeLines: 3478,
 	moduleLevelVarDeclarators: 2
 });
 

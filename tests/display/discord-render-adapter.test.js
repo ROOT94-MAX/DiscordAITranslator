@@ -30,11 +30,6 @@ function createHarness({
 	rerenderScrollTop = null,
 	stopDuringUpdate = false,
 	startInactive = false,
-	// "paint": the atomic rebuild succeeds and paints like a rebuild would;
-	// "reject": it reports false so the adapter must fall back to rerenderAll;
-	// null: not injected - the production default, which cannot run without
-	// ReactDOM.flushSync and therefore also falls back.
-	atomicRebuildBehavior = null,
 	// "paint": the live per-row repaint paints every requested row;
 	// "noop": rows have no usable instances, so nothing is attempted;
 	// null: not injected.
@@ -42,7 +37,7 @@ function createHarness({
 } = {}) {
 	const visibleRevisions = new Map(alreadyPainted);
 	const scroller = {scrollTop: 240};
-	const calls = {animationFrames: 0, capture: 0, forceUpdate: 0, rerenderAll: 0, rerenderArgs: [], restored: 0, restoredNow: 0, atomicRebuilds: 0, liveRepaints: 0, sequence: []};
+	const calls = {animationFrames: 0, capture: 0, forceUpdate: 0, rerenderAll: 0, rerenderArgs: [], restored: 0, restoredNow: 0, liveRepaints: 0, sequence: []};
 	const nodeDefinitions = messageNodeDefinitions || availableMessageIds.map(messageId => ({
 		key: messageId,
 		id: `chat-messages-${messageId}`,
@@ -107,14 +102,6 @@ function createHarness({
 			if (nodeDefinitions.some(definition => definition.key === messageId)) visibleRevisions.set(messageId, revision);
 		}
 	};
-	const atomicChatRebuild = atomicRebuildBehavior == null ? null : {
-		rebuildOnce() {
-			calls.atomicRebuilds++;
-			if (atomicRebuildBehavior === "reject") return false;
-			paintLikeRebuild();
-			return true;
-		}
-	};
 	const liveRowRepaint = liveRepaintBehavior == null ? null : {
 		repaintRows(messageIds) {
 			if (liveRepaintBehavior === "noop") return [];
@@ -126,7 +113,6 @@ function createHarness({
 	const adapter = createDiscordRenderAdapter({
 		BDFDB,
 		document,
-		atomicChatRebuild,
 		liveRowRepaint,
 		requestAnimationFrame: callback => {
 			calls.animationFrames++;
@@ -456,16 +442,10 @@ test("a reply-preview host still requires the rebuild, so the live path steps as
 	assert.deepEqual(outcome.confirmedIds, ["m1", "m2"]);
 });
 
-test("the rebuild step is BDFDB's debounced rerenderAll again - the synchronous atomic rebuild is retired", async () => {
-	// Field verdict (2026-08-19 evening, "0L/56A/0F" + user report): the atomic
-	// double-flush ran synchronously once per transaction with no cross-call
-	// debounce, so message streams turned into per-message heavyweight rebuilds -
-	// the composer icon blinked on every message and scrolling stuttered. BDFDB's
-	// rerenderAll defers and merges; the field says it feels strictly better.
-	const {adapter, calls} = createHarness({atomicRebuildBehavior: "paint"});
+test("the rebuild step uses BDFDB's established whole-chat fallback", async () => {
+	const {adapter, calls} = createHarness();
 	const outcome = await adapter.refreshMessages(request);
 
-	assert.equal(calls.atomicRebuilds, 0, "the adapter must not run the synchronous atomic rebuild");
 	assert.equal(calls.rerenderAll, 1, "the rebuild goes through BDFDB's deferred, self-merging primitive");
 	assert.deepEqual(outcome.confirmedIds, ["m1", "m2"]);
 	const stats = adapter.getRebuildStats();
