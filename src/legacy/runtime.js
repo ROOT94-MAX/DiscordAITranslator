@@ -85,6 +85,7 @@ module.exports = (_ => {
 		const {createHistoricalJobRegistry} = require("../orchestrator/historical-job-registry");
 		const channelToggleOperations = require("../orchestrator/channel-toggle-operations").createChannelToggleOperations();
 		const {HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX} = require("../orchestrator/historical-translation-job");
+		const {createHistoricalSnapshotCadence} = require("../orchestrator/historical-snapshot-cadence");
 		const {runChunkedHistoricalBatch} = require("../orchestrator/historical-provider-chunking");
 		const {createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION} = require("../protection/protection-logic");
 		const {parseStoredEmbedTranslations} = require("../received/embed-translation-parser");
@@ -127,7 +128,7 @@ module.exports = (_ => {
 
 		const channelTitleStore = createChannelTitleStore();
 		const loadedTranslationStatusStore = createLoadedTranslationStatusStore({isChineseUiLanguage: () => _this && _this.isChineseUiLanguage()});
-		const historicalDisplayTracker = createHistoricalDisplayTracker({isStatusForChannel: channelId => loadedTranslationStatusStore.isForChannel(channelId), getRevision: (_channelId, messageId) => {const view = _this && _this.getReceivedDisplayRuntimeView(messageId); return view ? view.revision : null;}, updateStatus: updates => _this && _this.updateLoadedAutoTranslationStatus(updates)});
+		const historicalDisplayTracker = createHistoricalDisplayTracker({isStatusForChannel: channelId => loadedTranslationStatusStore.isForChannel(channelId), getBatchNumber: () => loadedTranslationStatusStore.getCurrentBatchNumber(), getRevision: (_channelId, messageId) => {const view = _this && _this.getReceivedDisplayRuntimeView(messageId); return view ? view.revision : null;}, updateStatus: updates => _this && _this.updateLoadedAutoTranslationStatus(updates)});
 		var pluginRuntimeActive = true;
 		const DEFAULT_LOADED_AUTO_TRANSLATE_LIMIT = 50;
 		const LOADED_AUTO_TRANSLATE_LIMIT_MIN = 1;
@@ -152,6 +153,35 @@ module.exports = (_ => {
 		// Debug-build-only evidence probe, stripped from release bundles by the compile-time constant, as in display-runtime.js. It also persists to disk because DevTools is not reachable on every client.
 		const secondDebugProbe = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? (secondDebugModule => secondDebugModule.createSecondDebugProbe({log: line => console.info(line), sink: secondDebugModule.createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder})}))(require("../diagnostics/second-debug-probe")) : null;
 		if (secondDebugProbe && typeof window != "undefined") secondDebugProbe.installGlobal(window, {resolveScrollerElement: () => document.querySelector(BDFDB.dotCN.messagesscroller), forceUpdate: (...targets) => BDFDB.ReactUtils.forceUpdate(...targets), rerenderAll: instant => BDFDB.MessageUtils.rerenderAll(instant), getRenderCount: () => secondDebugProbe.getParentRenderCount(), autoRunExperiment: true, autoRunMaxAttempts: 60});
+
+		// Debug-build-only, read-only: captures real MESSAGE_UPDATE dispatch shapes for the per-row repaint endgame (recovery plan route 1). Never dispatches anything.
+		// Strategy ladder (first round returned "no-dispatcher": BDFDB 4.5.4 exposes NO flux dispatcher module at all, so the store-instance handle leads).
+		const messageUpdateProbe = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? (probeModule => probeModule.createMessageUpdateProbe({strategies: [
+			{name: "selected-channel-store-_dispatcher", resolve: () => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && BDFDB.LibraryStores.SelectedChannelStore._dispatcher || null},
+			{name: "message-store-_dispatcher", resolve: () => BDFDB.LibraryStores && BDFDB.LibraryStores.MessageStore && BDFDB.LibraryStores.MessageStore._dispatcher || null},
+			{name: "webpack-by-keys", resolve: () => BdApi && BdApi.Webpack && BdApi.Webpack.getByKeys && BdApi.Webpack.getByKeys("dispatch", "subscribe") || null},
+			{name: "webpack-by-keys-exports", resolve: () => BdApi && BdApi.Webpack && BdApi.Webpack.getByKeys && BdApi.Webpack.getByKeys("dispatch", "subscribe", {searchExports: true}) || null},
+			{name: "webpack-module-scan-exports", resolve: () => BdApi && BdApi.Webpack && BdApi.Webpack.getModule && BdApi.Webpack.getModule(candidate => candidate && typeof candidate.dispatch == "function" && typeof candidate.subscribe == "function", {searchExports: true}) || null},
+			{name: "bdfdb-library-module", resolve: () => BDFDB.LibraryModules && (BDFDB.LibraryModules.Dispatcher || BDFDB.LibraryModules.DispatcherUtils) || null}
+		], log: line => console.info(line), sink: require("../diagnostics/second-debug-probe").createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder, fileName: "translator-message-update-probe.json"})}))(require("../diagnostics/message-update-probe")) : null;
+
+		// Debug-build-only: ONE guarded synthetic MESSAGE_UPDATE against one already-translated message, answering the merge-vs-replace question the probe cannot (see the module header). Uses the probe-proven store dispatcher handle.
+		const messageUpdateExperiment = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? (experimentModule => experimentModule.createMessageUpdateExperiment({
+			resolveDispatcher: () => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && BDFDB.LibraryStores.SelectedChannelStore._dispatcher || null,
+			getSelectedChannelId: () => {try {return BDFDB.LibraryStores.SelectedChannelStore.getChannelId();} catch (error) {return null;}},
+			getStoreMessage: (channelId, messageId) => {try {return BDFDB.LibraryStores.MessageStore.getMessage(channelId, messageId) || null;} catch (error) {return null;}},
+			getGuildId: channelId => {try {const channel = BDFDB.LibraryStores.ChannelStore.getChannel(channelId); return channel && channel.guild_id || null;} catch (error) {return null;}},
+			listTranslatedCandidates: () => {try {return _this.ensureReceivedDisplayRuntime().listTranslated().map(record => ({messageId: record.messageId, channelId: record.channelId}));} catch (error) {return [];}},
+			isViewTranslated: messageId => {try {const view = _this && _this.getReceivedDisplayRuntimeView(String(messageId)); return !!(view && view.translated);} catch (error) {return false;}},
+			log: line => console.info(line),
+			setTimeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay),
+			clearTimeout: timer => BDFDB.TimeUtils.clear(timer),
+			sink: require("../diagnostics/second-debug-probe").createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder, fileName: "translator-message-update-experiment.json"}),
+			maxAttempts: 120
+		}))(require("../diagnostics/message-update-experiment")) : null;
+
+		// Debug-build-only, read-only: captures how forwarded messages (已转发) look on this client - their body lives in forward snapshots the extraction path cannot read yet.
+		const forwardedMessageProbe = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? require("../diagnostics/forwarded-message-probe").createForwardedMessageProbe({log: line => console.info(line), sink: require("../diagnostics/second-debug-probe").createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder, fileName: "translator-forwarded-message-probe.json"})}) : null;
 
 		const {receivedTranslationRuntime} = createReceivedTranslationRuntime({BDFDB, loadedTranslationStatusStore});
 
@@ -208,6 +238,8 @@ module.exports = (_ => {
 
 			onStart () {
 				pluginRuntimeActive = true;
+				if (messageUpdateProbe) messageUpdateProbe.start();
+				if (messageUpdateExperiment) messageUpdateExperiment.start();
 				this.resetReceivedDisplayRuntime();
 				this.ensureLiveTranslationQueue().restartRequestGeneration();
 				this.ensureSentTranslationStore().resetForStart();
@@ -246,6 +278,8 @@ module.exports = (_ => {
 			}
 			onStop () {
 				pluginRuntimeActive = false; channelToggleOperations.reset();
+				if (messageUpdateProbe) messageUpdateProbe.stop();
+				if (messageUpdateExperiment) messageUpdateExperiment.stop();
 				this.invalidateLiveTranslationRequests();
 				this.invalidateSentAutomaticTranslationRequests();
 				this.ensureSentTranslationStore().clearPendingOriginals();
@@ -632,12 +666,21 @@ module.exports = (_ => {
 				return true;
 			}
 
-			matchesPaintedTranslationContent (paintedText, translation) {return receivedTranslationRuntime.matchesPaintedTranslation(this, paintedText, translation);}
+			matchesPaintedTranslationContent (paintedText, translation, message = null) {return receivedTranslationRuntime.matchesPaintedTranslation(this, paintedText, translation, message);}
 
 			extractOriginalContentData (message, options = {}) {
+				if (forwardedMessageProbe) forwardedMessageProbe.record(message);
 				const storedOriginalContentData = receivedTranslationRuntime.resolveOriginalContentDataAnchor(this, message);
 				if (storedOriginalContentData) return this.cloneOriginalContentData(storedOriginalContentData);
 				let messageContent = this.normalizeExtractedMessageText(message && message.content || "");
+				// A forwarded message (已转发) is empty on itself - the body lives in the
+				// forward snapshot (probe evidence 2026-08-19). Reading it here is what
+				// stops forwards from being skipped as contentless; the stream pass
+				// paints the translation back into the same snapshot.
+				if (!messageContent.trim()) {
+					const forwardSnapshots = translationDisplayLogic.getForwardedMessageSnapshots(this, message);
+					if (forwardSnapshots) messageContent = this.normalizeExtractedMessageText(forwardSnapshots[0].message.content);
+				}
 				if (options && options.ignoreReferencedPreview) messageContent = this.stripReferencedPreviewFromContent(message, messageContent);
 				const extractedParts = this.extractLegacyDisplayedTranslationParts(messageContent);
 				return this.cloneOriginalContentData({
@@ -1203,11 +1246,11 @@ module.exports = (_ => {
 
 			rerenderMessagesWithScrollPreserved () {
 				this.attachAutoTranslationScrollWatcher();
-				const manualAnchor = this.getActiveManualTranslationScrollAnchor();
-				const scrollerState = manualAnchor ? null : this.captureMessageScrollerState();
+				// Full repaints are lifecycle operations; reusing an ID-scoped manual anchor
+				// can strand a history reader at the remount's newest virtualized position.
+				const scrollerState = this.captureMessageScrollerState();
 				BDFDB.MessageUtils.rerenderAll(true);
-				if (manualAnchor) this.restoreMessageAnchorState(manualAnchor);
-				else this.restoreMessageScrollerState(scrollerState);
+				this.restoreMessageScrollerState(scrollerState);
 			}
 
 			getLoadedAutoTranslationStatusText (status) {
@@ -1237,25 +1280,8 @@ module.exports = (_ => {
 				return receivedMessageFilterRuntime.getReceivedAutoTranslateSkipReason(this, originalContentData, channelId);
 			}
 
-			getLoadedAutoTranslationInlineStatusText (channelId = null) {
-				return loadedTranslationStatusStore.getInlineStatusText(channelId || BDFDB.LibraryStores.SelectedChannelStore.getChannelId());
-			}
-
 			updateInlineLoadedAutoTranslationStatusElements () {
 				this.ensureLoadedStatusCapsuleController().updateInlineElements();
-			}
-
-			isTranslateMasterSwitchVisuallyEnabled (channelId) {
-				if (!channelId || !this.isTranslationEnabled(channelId)) return false;
-				if (typeof document == "undefined") return false;
-				let buttons = [];
-				try {
-					const selector = [BDFDB.dotCN && BDFDB.dotCN._translatortranslatebutton, BDFDB.disCN && "." + BDFDB.disCN._translatortranslatebutton].filter(Boolean).join(",");
-					buttons = selector ? Array.from(document.querySelectorAll(selector)) : [];
-				}
-				catch (err) {buttons = [];}
-				if (!buttons.length) return false;
-				return buttons.some(button => button && button.classList && button.classList.contains(BDFDB.disCN._translatortranslating));
 			}
 
 			positionLoadedAutoTranslationStatusElement (element) {
@@ -1303,6 +1329,8 @@ module.exports = (_ => {
 					getReceivedAutoTranslateScope: () => this.getReceivedAutoTranslateScope(),
 					isChineseUiLanguage: () => this.isChineseUiLanguage(),
 					positionElement: element => this.positionLoadedAutoTranslationStatusElement(element),
+					isUserScrolling: () => this.isUserActivelyScrollingMessages(),
+					isRuntimeActive: () => pluginRuntimeActive,
 					clearHistoricalTracker: () => historicalDisplayTracker.clear(),
 					hooks: {
 						attachScrollWatcher: () => this.attachAutoTranslationScrollWatcher(),
@@ -1987,23 +2015,18 @@ module.exports = (_ => {
 				return true;
 			}
 
-			scheduleHistoricalTranslationJobStart (channelId) {
-				const entry = this.getHistoricalTranslationJobQueue(channelId, false);
-				if (!entry || entry.startToken) return;
-				const token = {};
-				entry.startToken = token;
-				const startSnapshot = _ => {
-					if (entry.startToken !== token || !this.ensureHistoricalJobRegistry().isCurrentQueue(channelId, entry)) return;
-					entry.startToken = null;
-					this.finishHistoricalTranslationSnapshot(channelId);
-				};
-				if (typeof queueMicrotask == "function") queueMicrotask(startSnapshot);
-				else Promise.resolve().then(startSnapshot);
+			ensureHistoricalSnapshotCadence () {
+				if (!this.historicalSnapshotCadenceInstance) this.historicalSnapshotCadenceInstance = createHistoricalSnapshotCadence({timeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), clear: timer => BDFDB.TimeUtils.clear(timer), isUserActivelyScrolling: channelId => this.isUserActivelyScrollingMessages(channelId), isCurrentQueue: (channelId, entry) => this.ensureHistoricalJobRegistry().isCurrentQueue(channelId, entry), finishSnapshot: channelId => this.finishHistoricalTranslationSnapshot(channelId)});
+				return this.historicalSnapshotCadenceInstance;
 			}
 
+			scheduleHistoricalTranslationJobStart (channelId) {this.ensureHistoricalSnapshotCadence().armQuietWindowSeal(channelId, this.getHistoricalTranslationJobQueue(channelId, false));}
+			clearHistoricalSnapshotSealTimer (entry) {this.ensureHistoricalSnapshotCadence().clearSealTimer(entry);}
 			finishHistoricalTranslationSnapshot (channelId) {
 				const entry = this.getHistoricalTranslationJobQueue(channelId, false);
 				if (!entry) return false;
+				// An explicit finish owns the seal; a still-armed quiet window must not fire later and prematurely seal what collects next.
+				this.clearHistoricalSnapshotSealTimer(entry);
 				const job = [...entry.jobs].reverse().find(candidate => candidate && candidate.state == "collecting" && !candidate.sealed);
 				if (!job) return false;
 				job.seal();
@@ -2014,11 +2037,14 @@ module.exports = (_ => {
 				const entry = this.getHistoricalTranslationJobQueue(channelId, false);
 				if (!entry) return Promise.resolve(null);
 				const config = Object.assign({sealCurrent: true}, options);
-				entry.startToken = null;
+				this.clearHistoricalSnapshotSealTimer(entry);
 				if (entry.runningPromise || entry.pendingLiveHandoffTicket) return entry.runningPromise || Promise.resolve(null);
 				let job = entry.jobs.find(candidate => candidate && candidate.state == "collecting" && candidate.sealed);
 				if (!job && config.sealCurrent) { job = entry.jobs.find(candidate => candidate && candidate.state == "collecting"); if (job) job.seal(); }
 				if (!job) return Promise.resolve(null);
+				// Batches sealed behind the running job start as ONE job with ONE atomic
+				// commit (cadence audit 2026-08-19; policy in historical-snapshot-cadence).
+				this.ensureHistoricalSnapshotCadence().mergeSealedJobs({channelId, entry, job, loadedLimit: this.getReceivedAutoTranslateLoadedLimit(), markMessageQueued: (messageId, marker) => this.ensureLiveTranslationQueue().markMessageQueued(messageId, marker)});
 				job.lastConsumedLiveRequestTicketAtStart = this.ensureLiveTranslationQueue().getLastConsumedLiveRequestTicket(channelId);
 				const runningPromise = Promise.resolve(job.start()).finally(_ => {
 					for (const record of job.items.values()) {
@@ -2028,6 +2054,7 @@ module.exports = (_ => {
 					}
 					if (entry.runningPromise == runningPromise) entry.runningPromise = null;
 					entry.jobs = entry.jobs.filter(candidate => candidate != job);
+					this.ensureHistoricalSnapshotCadence().sealCollectingAtJobEnd(channelId, entry);
 					if (entry.jobs.some(candidate => candidate && candidate.state == "collecting" && candidate.sealed)) { const liveQueue = this.ensureLiveTranslationQueue(), consumedTicket = liveQueue.getLastConsumedLiveRequestTicket(channelId);
 						if (consumedTicket && consumedTicket != job.lastConsumedLiveRequestTicketAtStart) { entry.pendingLiveHandoffTicket = null; this.startCollectedHistoricalTranslationJobs(channelId, {sealCurrent: false}); } else { const pendingTicket = liveQueue.reserveQueuedLiveRequest(channelId); if (!pendingTicket) { entry.pendingLiveHandoffTicket = null; this.startCollectedHistoricalTranslationJobs(channelId, {sealCurrent: false}); } else entry.pendingLiveHandoffTicket = pendingTicket; } }
 					else if (!entry.jobs.length && !entry.startToken && this.ensureHistoricalJobRegistry().isCurrentQueue(channelId, entry)) this.ensureHistoricalJobRegistry().deleteQueue(channelId);
@@ -2092,7 +2119,7 @@ module.exports = (_ => {
 				const entries = channelId ? [this.getHistoricalTranslationJobQueue(channelId, false)].filter(Boolean) : this.ensureHistoricalJobRegistry().listQueues();
 				for (const entry of entries) {
 					entry.generation++;
-					this.ensureLiveTranslationQueue().clearReservedLiveRequest(entry.channelId, entry.pendingLiveHandoffTicket); entry.startToken = null; entry.pendingLiveHandoffTicket = null;
+					this.ensureLiveTranslationQueue().clearReservedLiveRequest(entry.channelId, entry.pendingLiveHandoffTicket); this.clearHistoricalSnapshotSealTimer(entry); entry.pendingLiveHandoffTicket = null;
 					for (const job of entry.jobs) {
 						job.cancel(reason);
 						for (const record of job.items.values()) if (record.source && record.source.message) this.ensureLiveTranslationQueue().clearQueuedMessage(record.source.message.id);
@@ -2253,7 +2280,7 @@ module.exports = (_ => {
 					const liveView = this.getReceivedDisplayRuntimeView(String(messageId));
 					return liveView && liveView.translated && !displayReadyIds.has(String(messageId));
 				}).length;
-				const displayPending = historicalDisplayTracker.begin({channelId: job.channelId, batchKey: job.id, outcome: batchOutcome, displayed, displayableIds: summary.translated.map(item => item && item.message && String(item.message.id)).filter(Boolean), schedule: (messageId, trackingKey) => this.scheduleReceivedDisplayFlush(job.channelId, messageId, null, trackingKey)});
+				const displayPending = historicalDisplayTracker.begin({channelId: job.channelId, batchKey: job.id, outcome: batchOutcome, displayed, displayableIds: summary.translated.map(item => item && item.message && String(item.message.id)).filter(Boolean), schedule: (messageId, trackingKey) => this.scheduleReceivedDisplayFlush(job.channelId, messageId, null, trackingKey, "historical")});
 				this.updateLoadedAutoTranslationStatus({active: false, collecting: false, done: true, channelId: job.channelId, total: job.items.size, processed: job.items.size, displayed: displayed + liveDisplayed, displayPending, skipped: summary.skipped.length, failed: summary.failed.length, retryable: failedCount, aiDropped: summary.failed.length});
 			}
 
@@ -2384,9 +2411,7 @@ module.exports = (_ => {
 				if (!this.composerWiringInstance) this.composerWiringInstance = createComposerWiring({BDFDB, getPlugin: () => this, messageTypes, TranslateButtonComponent});
 				return this.composerWiringInstance;
 			}
-			processChannelTextAreaContainer (e) {
-				this.ensureComposerWiring().processChannelTextAreaContainer(e);
-			}
+			processChannelTextAreaContainer (e) {this.ensureComposerWiring().processChannelTextAreaContainer(e);}
 			processChannelTextAreaEditor (e) {
 				// Do not disable the text area while background/manual message translations are running.
 				// Disabling here interrupts draft typing and can drop unsent text during message list refreshes.
@@ -2428,7 +2453,7 @@ module.exports = (_ => {
 					getDisplayCommitGeneration: channelId => this.getReceivedDisplayCommitGeneration(channelId),
 					markDisplayPending: (record, options) => this.markReceivedDisplayPending(record, options),
 					releaseDisplayPending: record => this.releaseReceivedDisplayPending(record),
-					scheduleDisplayFlush: (channelId, messageId) => this.scheduleReceivedDisplayFlush(channelId, messageId),
+					scheduleDisplayFlush: (channelId, messageId, source) => this.scheduleReceivedDisplayFlush(channelId, messageId, null, null, source || "live"),
 					collectHistoricalMessage: queueItem => this.collectHistoricalTranslationMessage(queueItem),
 					resetLoadedMessageTracking: (channelId = null) => loadedTranslationStatusStore.resetSeen(channelId),
 					clearEligibleReplyPreviewMessages: channelId => this.clearAutoTranslationEligibleReplyPreviewMessages(channelId),
@@ -2593,15 +2618,24 @@ module.exports = (_ => {
 
 			ensureReceivedDisplayRuntime () {
 				if (!this.receivedDisplayRuntimeInstance) this.receivedDisplayRuntimeInstance = createDisplayRuntime({
-					BDFDB: {
-						dotCN: BDFDB.dotCN || {},
-						MessageUtils: BDFDB.MessageUtils
-					},
+					// The atomic rebuild needs the React handles too - wiring only dotCN and
+					// MessageUtils left ReactUtils.flushSync undefined and every transaction
+					// silently fell back to the two-flush rerenderAll (2026-08-19, 0A/56F).
+					BDFDB: {dotCN: BDFDB.dotCN || {}, MessageUtils: BDFDB.MessageUtils, ReactUtils: BDFDB.ReactUtils, ObjectUtils: BDFDB.ObjectUtils, LibraryStores: BDFDB.LibraryStores, DMUtils: BDFDB.DMUtils, ChannelUtils: BDFDB.ChannelUtils},
 					document: {
 						querySelector: selector => typeof document == "undefined" || !document || !selector ? null : document.querySelector(selector)
 					},
 					requestAnimationFrame: callback => typeof requestAnimationFrame == "function" ? requestAnimationFrame(callback) : setTimeout(callback, 0),
 					isRuntimeActive: () => pluginRuntimeActive,
+					// Preview-wave coalescer: managed timer plus the scheduler's repaint gate.
+					setTimeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay),
+					canRepaintNow: () => this.canRepaintReceivedDisplayNow(),
+					// Flux per-row repaint handles (experiment-verified 2026-08-19): the store
+					// dispatcher, the message record, and the guild for the payload envelope.
+					resolveDispatcher: () => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && BDFDB.LibraryStores.SelectedChannelStore._dispatcher || null,
+					getStoreMessage: (channelId, messageId) => {try {return BDFDB.LibraryStores.MessageStore.getMessage(channelId, messageId) || null;} catch (error) {return null;}},
+					getGuildId: channelId => {try {const channel = BDFDB.LibraryStores.ChannelStore.getChannel(channelId); return channel && channel.guild_id || null;} catch (error) {return null;}},
+					onTranslationDisplayed: (channelId, messageId) => this.ensureLoadedStatusCapsuleController().recordTranslationsDisplayed(channelId, [messageId]),
 					getUserScrollIntentSequence: () => this.ensureMessageViewportStore().getUserScrollIntentSequence(),
 					// Scroll preservation is best-effort: a capture or restore failure must never
 					// break a display transaction. The viewport store owns the anchor-over-offset choice.
@@ -2612,7 +2646,8 @@ module.exports = (_ => {
 					restoreScrollState: scrollerState => {
 						try {this.ensureMessageViewportStore().restoreDisplayTransactionScrollState(scrollerState);}
 						catch (error) {}
-					}
+					},
+					restoreScrollStateNow: scrollerState => this.ensureMessageViewportStore().restoreDisplayTransactionScrollStateNow(scrollerState)
 				});
 				return this.receivedDisplayRuntimeInstance;
 			}
@@ -2640,9 +2675,7 @@ module.exports = (_ => {
 				return this.ensureReceivedDisplayRuntime().getDisplayView(messageId);
 			}
 
-			getReceivedDisplayRuntimeView (messageId) {
-				return this.ensureReceivedDisplayRuntime().getDisplayView(messageId);
-			}
+			getReceivedDisplayRuntimeView (messageId) {return this.getReceivedDisplayView(messageId);}
 
 			restoreReceivedDisplayChannel (channelId, options) {
 				return this.ensureReceivedDisplayRuntime().restoreChannel(channelId, options);
@@ -2675,12 +2708,12 @@ module.exports = (_ => {
 			// Repaint cadence lives in the scheduler module; the plugin only supplies the
 			// predicates that depend on Discord state.
 			canRepaintReceivedDisplayNow () {
-				return !this.isTranslatorSettingsSurfaceOpen();
+				return !this.isTranslatorSettingsSurfaceOpen() && !(this.isViewingMessageHistory() && this.isUserActivelyScrollingMessages());
 			}
 
 			ensureReceivedDisplayRepaintScheduler () {
 				if (!this.receivedDisplayRepaintSchedulerInstance) this.receivedDisplayRepaintSchedulerInstance = createDisplayRepaintScheduler({
-					renderMessages: messageIds => this.ensureReceivedDisplayRuntime().renderMessages(messageIds),
+					renderMessages: (messageIds, meta) => this.ensureReceivedDisplayRuntime().renderMessages(messageIds, meta),
 					onRenderOutcome: report => historicalDisplayTracker.handle(report),
 					canRepaintNow: () => this.canRepaintReceivedDisplayNow(),
 					isViewingHistory: () => this.isViewingMessageHistory(),
@@ -2693,7 +2726,7 @@ module.exports = (_ => {
 				return this.receivedDisplayRepaintSchedulerInstance;
 			}
 
-			scheduleReceivedDisplayFlush (channelId, messageId, delay = null, trackingKey = null) {this.ensureReceivedDisplayRepaintScheduler().schedule(channelId, messageId, delay, 1, trackingKey);}
+			scheduleReceivedDisplayFlush (channelId, messageId, delay = null, trackingKey = null, source = null) {this.ensureReceivedDisplayRepaintScheduler().schedule(channelId, messageId, delay, 1, trackingKey, source);}
 
 			clearReceivedDisplayFlushQueue () {
 				this.ensureReceivedDisplayRepaintScheduler().clear();
@@ -2726,33 +2759,11 @@ module.exports = (_ => {
 			getReceivedDisplayViewRenderContent (view) {return translationDisplayLogic.getReceivedDisplayViewRenderContent(this, view);}
 
 			applyReceivedDisplayViewToStream (stream, view) {return translationDisplayLogic.applyReceivedDisplayViewToStream(this, stream, view);}
+			getStreamBodyContent (message) {return translationDisplayLogic.getStreamBodyContent(this, message);} getStreamTranslationRenderContent (message, translation) {return translationDisplayLogic.getStreamTranslationRenderContent(this, message, translation);}
+			paintStreamBody (stream, bodyText) {return translationDisplayLogic.paintStreamBody(this, stream, bodyText);}
 
 			applyReceivedDisplayViewToContent (e, view) {
-				if (!e || !e.returnvalue || !e.returnvalue.props) return;
-				this.cleanupInjectedMessageChildren(this.ensureElementChildrenArray(e.returnvalue));
-				translationDisplayLogic.clearTranslatedRenderDecorations(this, e);
-				if (!view) {
-					delete e.returnvalue.props["data-translator-revision"];
-					return;
-				}
-				e.returnvalue.props["data-translator-revision"] = String(view.revision);
-				if (view.translated && view.translation) {
-					if (this.shouldProtectWrappedTextForPlace(messageTypes.RECEIVED)) e.returnvalue.props.children = this.highlightProtectedWrappedTextInNode(e.returnvalue.props.children, view.messageId);
-					if (this.settings.general.highlightTranslatedMessages) e.returnvalue.props.className = BDFDB.DOMUtils.formatClassName(e.returnvalue.props.className, "translator-translated-message");
-					e.returnvalue.props.style = Object.assign({}, e.returnvalue.props.style, {
-						"--translator-accent-color": this.getTranslatedTextColor(),
-						"--translator-text-color": this.getTranslatedTextColor()
-					});
-					const watermarkNode = translationDisplayLogic.createTranslationWatermarkNode(this, view.translation, "translator-translated-watermark");
-					if (watermarkNode) this.ensureElementChildrenArray(e.returnvalue).push(watermarkNode);
-					if (view.translation.originalContent && this.settings.general.showOriginalMessage && this.settings.general.showOriginalDirectly) this.ensureElementChildrenArray(e.returnvalue).push(this.createOriginalMessageBlock(view.translation.originalContent));
-					return;
-				}
-				if (view.showLoading) this.ensureElementChildrenArray(e.returnvalue).push(BDFDB.ReactUtils.createElement("span", {
-					key: "translator-translation-loading",
-					className: "translator-translation-loading",
-					"aria-label": this.isChineseUiLanguage() ? "正在翻译" : "Translating"
-				}));
+				return translationDisplayLogic.applyReceivedDisplayViewToContent(this, e, view);
 			}
 
 			processMessages (e) {
@@ -3149,18 +3160,6 @@ module.exports = (_ => {
 			}
 			renderDiscordMarkupText (text, keyPrefix = "discord-markup") {
 				return this.ensureDiscordMarkupRenderer().renderDiscordMarkupText(text, keyPrefix);
-			}
-
-			createOriginalMessageBlock (originalText) {
-				if (!originalText) return null;
-				return BDFDB.ReactUtils.createElement("div", {
-					key: "translator-original-message",
-					className: "translator-original-message",
-					children: BDFDB.ReactUtils.createElement("span", {
-						className: this.shouldUseSpoilerInReceivedOriginal() ? "translator-original-spoiler" : null,
-						children: this.renderDiscordMarkupText(originalText, "translator-original")
-					})
-				});
 			}
 
 			getLanguageChoice (direction, place, channelId) {

@@ -9,6 +9,9 @@
 // most once per transaction. The retained full-list path (scheduleFullRepaint)
 // serves the display owners not yet migrated - manual translation, reply previews,
 // embeds, titles - and defers around open settings and a focused text area.
+// 120ms is a pinned product ceiling, not a tuning knob: the throughput contract
+// asserts live translations add no more than 200ms display delay. A 2026-08-19
+// attempt to raise it for startup-bounce smoothing was reverted for that reason.
 const LIVE_REPAINT_DELAY_MS = 120;
 const CALM_REPAINT_DELAY_MS = 1500;
 const BUSY_RETRY_DELAY_MS = 450;
@@ -19,7 +22,7 @@ function createDisplayRepaintScheduler({
 	renderMessages,
 	onRenderOutcome = () => {},
 	canRepaintNow,
-	isViewingHistory,
+	isViewingHistory = () => false,
 	// The full-list repaint path needs the two predicates separately, because it may
 	// be told to ignore one of them.
 	isSettingsSurfaceOpen = () => false,
@@ -36,6 +39,11 @@ function createDisplayRepaintScheduler({
 	const queues = new Map();
 	const activeRequests = new Map();
 	let timer = null;
+	// Cadence audit 2026-08-19: five lanes (live, cached, historical, manual, retry)
+	// share the one visible rebuild symptom. Every request carries its lane so the
+	// transaction can report per-source counts, and path B's full repaints - which
+	// bypass the adapter's counters entirely - are counted here.
+	let fullRepaints = 0;
 
 	function getActiveRequest(channelId, messageId) {
 		const channel = activeRequests.get(String(channelId));
@@ -90,7 +98,9 @@ function createDisplayRepaintScheduler({
 			if (!activeRequests.has(channelId)) activeRequests.set(channelId, new Map());
 			const activeChannel = activeRequests.get(channelId);
 			for (const [messageId, request] of requestsByMessageId) activeChannel.set(messageId, request);
-			const rendering = renderMessages(messageIds);
+			const sources = {};
+			for (const request of requestsByMessageId.values()) for (const source of request.sources) sources[source] = (sources[source] || 0) + 1;
+			const rendering = renderMessages(messageIds, {sources});
 			if (rendering && rendering.then) rendering.then(outcome => {
 				const normalizedOutcome = Object.assign({}, outcome || {});
 				const exhaustedIds = [];
@@ -99,8 +109,8 @@ function createDisplayRepaintScheduler({
 					const request = requestsByMessageId.get(String(messageId)) || {attempt: 1, trackingKeys: new Set()};
 					if (request.attempt < MAX_TARGETED_REPAINT_ATTEMPTS) {
 						const trackingKeys = [...request.trackingKeys];
-						if (!trackingKeys.length) schedule(channelId, messageId, BUSY_RETRY_DELAY_MS, request.attempt + 1);
-						else for (const trackingKey of trackingKeys) schedule(channelId, messageId, BUSY_RETRY_DELAY_MS, request.attempt + 1, trackingKey);
+						if (!trackingKeys.length) schedule(channelId, messageId, BUSY_RETRY_DELAY_MS, request.attempt + 1, null, "retry");
+						else for (const trackingKey of trackingKeys) schedule(channelId, messageId, BUSY_RETRY_DELAY_MS, request.attempt + 1, trackingKey, "retry");
 					}
 					else {
 						exhaustedIds.push(String(messageId));
@@ -126,19 +136,20 @@ function createDisplayRepaintScheduler({
 		}
 	}
 
-	function schedule(channelId, messageId, delay = null, attempt = 1, trackingKey = null) {
+	function schedule(channelId, messageId, delay = null, attempt = 1, trackingKey = null, source = null) {
 		if (!channelId || messageId == null) return;
 		const key = String(channelId);
 		if (!queues.has(key)) queues.set(key, new Map());
 		const requestsByMessageId = queues.get(key);
 		const messageKey = String(messageId);
-		const queued = requestsByMessageId.get(messageKey) || {attempt: 0, trackingKeys: new Set()};
+		const queued = requestsByMessageId.get(messageKey) || {attempt: 0, trackingKeys: new Set(), sources: new Set()};
 		const active = getActiveRequest(key, messageKey);
 		// Duplicate row events join the most advanced retry already queued. Moving the
 		// counter backwards here would turn a bounded retry into an endless loop.
 		queued.attempt = Math.max(queued.attempt, active && active.attempt || 0, Math.max(1, attempt || 1));
 		if (active) for (const activeTrackingKey of active.trackingKeys) queued.trackingKeys.add(activeTrackingKey);
 		if (trackingKey != null && String(trackingKey)) queued.trackingKeys.add(String(trackingKey));
+		queued.sources.add(source ? String(source) : "live");
 		requestsByMessageId.set(messageKey, queued);
 		if (!active) arm(delay == null ? LIVE_REPAINT_DELAY_MS : delay);
 	}
@@ -178,6 +189,7 @@ function createDisplayRepaintScheduler({
 		if (!config.batched) {
 			if (fullRepaintTimer) cancelTimer(fullRepaintTimer);
 			fullRepaintTimer = null;
+			fullRepaints++;
 			repaintAll();
 			return;
 		}
@@ -185,12 +197,14 @@ function createDisplayRepaintScheduler({
 		const delay = isViewingHistory() ? CALM_REPAINT_DELAY_MS : LIVE_REPAINT_DELAY_MS;
 		fullRepaintTimer = scheduleTimer(() => {
 			fullRepaintTimer = null;
+			fullRepaints++;
 			repaintAll();
 		}, delay);
 	}
 
 	return Object.freeze({
 		scheduleFullRepaint,
+		getDiagnostics: () => ({fullRepaints}),
 		hasDeferredFullRepaint: () => deferredFullRepaintPending,
 		flushDeferredFullRepaint() {
 			if (!deferredFullRepaintPending) return;

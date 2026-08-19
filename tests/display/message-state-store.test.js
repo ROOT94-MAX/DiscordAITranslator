@@ -1552,3 +1552,40 @@ test("channel pruning releases a confirmed manual restore after its archive is c
 	assert.equal(store.getDisplayState("manual"), null);
 	assert.equal(store.getChannelGeneration("c1"), undefined);
 });
+
+// The session-counter chokepoint (2026-08-19 audit): displays reach the screen
+// through three doors - scheduler transactions, the batch atomic commit, and the
+// manual commit - but ALL of them mutate a record here. Counting at this store is
+// what makes the capsule total complete; counting at the scheduler tap missed the
+// batch door entirely and the numerator collapsed at every batch boundary.
+
+test("every translated commit reports through onTranslationDisplayed, once per door", () => {
+	const displayedReports = [];
+	const store = createMessageStateStore({onTranslationDisplayed: (channelId, messageId) => displayedReports.push(`${channelId}:${messageId}`)});
+	// Door 1: the single live commit.
+	store.captureSource(snapshot("m1", "c1", "Hello"));
+	store.commitResult(translated("m1", "c1", "Hello", "你好"));
+	// Door 2: the batch atomic commit.
+	store.captureSource(snapshot("m2", "c1", "World"));
+	store.captureSource(snapshot("m3", "c1", "Later"));
+	store.commitBatch([translated("m2", "c1", "World", "世界"), translated("m3", "c1", "Later", "稍后")]);
+	// Door 3: the manual commit.
+	store.commitManualTranslation({messageId: "m4", channelId: "c1", translation: {content: "手动"}});
+	assert.deepEqual(displayedReports, ["c1:m1", "c1:m2", "c1:m3", "c1:m4"]);
+});
+
+test("skips, failures, restores, and previews never report as displayed", () => {
+	const displayedReports = [];
+	const store = createMessageStateStore({onTranslationDisplayed: (channelId, messageId) => displayedReports.push(String(messageId))});
+	store.captureSource(snapshot("m1", "c1", "Hello"));
+	store.commitResult({...translated("m1", "c1", "Hello", ""), status: "skipped", reason: "same_language", translation: null});
+	store.captureSource(snapshot("m2", "c1", "World"));
+	store.commitResult({...translated("m2", "c1", "World", ""), status: "failed", reason: "provider_failed", translation: null});
+	store.commitPreviewResult({messageId: "m3", channelId: "c1", signature: "sig", translation: {signature: "sig", channelId: "c1", auto: true, translatedContent: "预览", originalContent: "Preview"}});
+	assert.deepEqual(displayedReports, [], "no non-display transition may inflate the count");
+	// An untranslate after a real commit does not subtract or re-report.
+	store.captureSource(snapshot("m4", "c1", "Real"));
+	store.commitResult(translated("m4", "c1", "Real", "真的"));
+	store.restoreMessage && store.restoreMessage("m4");
+	assert.deepEqual(displayedReports, ["m4"], "the restore neither subtracts nor double-counts");
+});

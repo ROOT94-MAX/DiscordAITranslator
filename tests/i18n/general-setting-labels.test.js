@@ -13,6 +13,7 @@ test("general setting labels resolve per ui language", () => {
 	assert.equal(chinese.showOriginalMessage, "查看收到的译文时同时显示原文");
 	const russian = getGeneralSettingLabels({isChinese: false, isRussian: true});
 	assert.equal(russian.showOriginalMessage, "Показывать оригинал рядом с переведёнными входящими сообщениями");
+	for (const labels of [english, chinese, russian]) assert.equal(labels.showOriginalDirectly, undefined, "removed controls keep no orphan label");
 });
 
 test("the russian spoiler labels are real cyrillic, not the shipped mojibake", () => {

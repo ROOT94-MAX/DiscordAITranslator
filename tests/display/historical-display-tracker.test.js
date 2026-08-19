@@ -123,3 +123,22 @@ test("a newer message revision retires the old batch row without counting the ne
 
 	assert.deepEqual(updates.at(-1), {channelId: "c1", displayed: 0, displayPending: 0});
 });
+
+test("a report carries the batch number captured when its job began, not the current one", () => {
+	// 2026-08-19 audit: batch-less late reports merged a finished batch's displayed
+	// count into the NEXT batch's status (the 12/26 transients). The batch stamp is
+	// taken at begin() so a straggler identifies the batch it belongs to.
+	const updates = [];
+	let currentBatch = 7;
+	const tracker = createHistoricalDisplayTracker({
+		isStatusForChannel: () => true,
+		getRevision: () => "r1",
+		updateStatus: update => updates.push(update),
+		getBatchNumber: () => currentBatch
+	});
+	tracker.begin({channelId: "c1", batchKey: "job-7", displayed: 0, displayableIds: ["m1"], outcome: {retryIds: ["m1"]}, schedule: () => {}});
+	currentBatch = 8;
+	tracker.handle({channelId: "c1", messageIds: ["m1"], outcome: {confirmedIds: ["m1"]}, trackingKeysByMessageId: {m1: ["job-7"]}});
+	assert.equal(updates.length, 1);
+	assert.equal(updates[0].batch, 7, "the report names the batch it was begun under");
+});

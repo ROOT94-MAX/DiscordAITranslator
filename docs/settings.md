@@ -62,6 +62,7 @@ Stored legacy values that attempted to hide either button are ignored.
 - Global automatic translation default switch
 - Duplicate global language detection helper
 - Duplicate sent-original and received-original controls in the channel popout
+- Direct received-original display mode (`showOriginalDirectly`); the single received-original switch keeps the established inline quote/spoiler presentation
 
 ## Migration Rule
 

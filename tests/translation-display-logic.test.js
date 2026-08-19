@@ -197,10 +197,9 @@ test("buildReceivedDisplayContent appends the original only when the settings as
 	plugin.settings.general.showOriginalMessage = true;
 	assert.equal(logic.buildReceivedDisplayContent(plugin, "Hello", "Hallo"), "Hello\n> Hallo");
 
-	// "show directly" renders the original as its own block later in the render, so the
-	// inline copy must not also be glued onto the body.
+	// A stale persisted value from the removed duplicate mode is ignored.
 	plugin.settings.general.showOriginalDirectly = true;
-	assert.equal(logic.buildReceivedDisplayContent(plugin, "Hello", "Hallo"), "Hello");
+	assert.equal(logic.buildReceivedDisplayContent(plugin, "Hello", "Hallo"), "Hello\n> Hallo");
 
 	// The forced flag is what the manual translation path uses to inline regardless.
 	assert.equal(logic.buildReceivedDisplayContent(plugin, "Hello", "Hallo", true), "Hello\n> Hallo");
@@ -368,6 +367,26 @@ test("prepareMessageContentDisplay restores the archived original when the trans
 	assert.equal(state.message.content, "Hallo", "the render sees the untranslated body again");
 	assert.equal(e.instance.props.message.content, "Hallo", "and the props are rewritten in place");
 	assert.ok(plugin.calls.some(call => call[0] == "consumeSourceArchive" && call[1] == "m1"));
+});
+
+test("prepareMessageContentDisplay restores a cancelled automatic forward through its snapshot body", () => {
+	const logic = createLogic();
+	const plugin = createFakePlugin({
+		matchesPaintedTranslationContent: (painted, translation) => painted === translation.content
+	});
+	plugin.display.displayStates.set("fwd", {
+		status: "cancelled",
+		source: {content: "forwarded original"},
+		restoredTranslation: {content: "转发译文"}
+	});
+	const originalEntry = {message: {content: "转发译文"}};
+	const e = {instance: {props: {message: {id: "fwd", channel_id: "c1", content: "", messageSnapshots: [originalEntry]}}}};
+
+	const state = logic.prepareMessageContentDisplay(plugin, e);
+	assert.equal(state.translation, null);
+	assert.equal(state.message.content, "", "the forward parent stays contentless");
+	assert.equal(state.message.messageSnapshots[0].message.content, "forwarded original");
+	assert.equal(originalEntry.message.content, "转发译文", "restoration clones instead of mutating Discord's record");
 });
 
 test("prepareMessageContentDisplay leaves the archive alone while a translation is displayed", () => {
@@ -606,14 +625,14 @@ test("applyMessageContentRenderDecorations reports the sent direction for own me
 	assert.deepEqual(plugin.calls.find(call => call[0] == "shouldProtectWrappedTextForPlace"), ["shouldProtectWrappedTextForPlace", MESSAGE_DIRECTIONS.SENT]);
 });
 
-test("applyMessageContentRenderDecorations appends the original block only when it is not already inline", () => {
+test("applyMessageContentRenderDecorations never appends the removed direct-original block", () => {
 	const logic = createLogic();
 	const plugin = createFakePlugin();
 	plugin.settings.general.showOriginalMessage = true;
 	plugin.settings.general.showOriginalDirectly = true;
 	const e = {returnvalue: {props: {className: "", children: []}}};
 	logic.applyMessageContentRenderDecorations(plugin, e, {id: "m1"}, {content: "Hello", originalContent: "Hallo", contentIncludesOriginal: false});
-	assert.deepEqual(e.returnvalue.props.children.map(child => child.type), ["TooltipContainer", "original-block"]);
+	assert.deepEqual(e.returnvalue.props.children.map(child => child.type), ["TooltipContainer"], "a stale setting cannot revive the deleted display mode");
 
 	const inlined = {returnvalue: {props: {className: "", children: []}}};
 	logic.applyMessageContentRenderDecorations(plugin, inlined, {id: "m1"}, {content: "Hello", originalContent: "Hallo", contentIncludesOriginal: true});
@@ -827,4 +846,159 @@ test("processEmbed ignores embeds with no message id", () => {
 	const e = {returnvalue: null, instance: {props: {embed: {id: "e1"}}}};
 	assert.equal(logic.processEmbed(plugin, e), undefined);
 	assert.deepEqual(e.instance.props.embed, {id: "e1"});
+});
+
+test("every content render registers its live instance for the per-row repaint path", () => {
+	// The live repaint (2026-08-19, replaces rebuild-per-transaction) can only
+	// force-update instances it has seen; the content render hook is the one place
+	// every mounted row passes through.
+	const logic = createLogic();
+	const plugin = createFakePlugin();
+	const recorded = [];
+	plugin.display.recordContentInstance = (messageId, instance) => recorded.push([messageId, instance]);
+	const e = {instance: {props: {message: {id: "m1", channel_id: "c1", content: "hello"}}}};
+
+	logic.prepareMessageContentDisplay(plugin, e);
+
+	assert.equal(recorded.length, 1, "the render hook must register the row's instance");
+	assert.equal(recorded[0][0], "m1");
+	assert.equal(recorded[0][1], e.instance);
+});
+
+test("a forwarded message paints its translation into the snapshot, not into its empty content", () => {
+	// Field report 2026-08-19: 已转发 messages never translated - their body lives in
+	// messageSnapshots[0].message.content (probe evidence), which the paint must
+	// target because the forward renderer never reads the message's own content.
+	const logic = createLogic();
+	const plugin = createFakePlugin({normalizeExtractedMessageText: value => value == null ? "" : String(value)});
+	class SnapshotEntry {
+		constructor(message) {this.message = message; this.moderatorReport = null;}
+		entryMethod() {return "entry";}
+	}
+	class SnapshotMessage {
+		constructor(content) {this.content = content; this.embeds = [];}
+		recordMethod() {return "record";}
+	}
+	const originalEntry = new SnapshotEntry(new SnapshotMessage("the forwarded body"));
+	const stream = {content: {id: "fwd-1", content: "", messageSnapshots: [originalEntry], messageReference: {message_id: "orig-1"}}};
+	const view = {
+		translated: true,
+		content: "the forwarded body",
+		translation: {translatedContent: "翻译后的正文", originalContent: "the forwarded body"},
+		source: {content: "the forwarded body", embeds: []}
+	};
+
+	logic.applyReceivedDisplayViewToStream(plugin, stream, view);
+
+	assert.equal(stream.content.content, "", "the forward's own content stays empty");
+	assert.equal(stream.content.messageSnapshots[0].message.content, "翻译后的正文", "the paint lands in the snapshot body");
+	assert.equal(stream.content.messageReference.message_id, "orig-1", "the forward frame reference survives the clone");
+	assert.equal(originalEntry.message.content, "the forwarded body", "the store-owned snapshot object is never mutated");
+	assert.equal(stream.content.messageSnapshots[0].entryMethod(), "entry", "the snapshot entry keeps its prototype");
+	assert.equal(stream.content.messageSnapshots[0].message.recordMethod(), "record", "the snapshot message keeps its prototype");
+
+	// A second pass over the already-painted snapshot is a no-op, not a re-clone.
+	const paintedContent = stream.content;
+	logic.applyReceivedDisplayViewToStream(plugin, stream, view);
+	assert.equal(stream.content, paintedContent, "an already-painted forward does not clone again");
+});
+
+test("a forwarded translation with direct-original enabled composes one copy inside the forward frame", () => {
+	const logic = createLogic();
+	const plugin = createFakePlugin({normalizeExtractedMessageText: value => value == null ? "" : String(value)});
+	plugin.settings.general.showOriginalMessage = true;
+	plugin.settings.general.showOriginalDirectly = true;
+	plugin.settings.general.highlightTranslatedMessages = true;
+	const stream = {content: {id: "fwd", content: "", messageSnapshots: [{message: {content: "forwarded original"}}]}};
+	const translation = {content: "转发译文", translatedContent: "转发译文", originalContent: "forwarded original"};
+	logic.applyReceivedDisplayViewToStream(plugin, stream, {translated: true, translation, content: "forwarded original"});
+
+	const painted = stream.content.messageSnapshots[0].message.content;
+	assert.match(painted, /^转发译文/);
+	assert.equal((painted.match(/forwarded original/g) || []).length, 1, "the snapshot carries exactly one original copy");
+
+	const parentEvent = {returnvalue: {props: {className: "message", children: ["empty-parent"]}}};
+	logic.applyMessageContentRenderDecorations(plugin, parentEvent, stream.content, translation);
+	assert.equal(parentEvent.returnvalue.props.className.includes("translator-translated-message"), false, "the empty forward parent never becomes a blank translated block");
+	assert.equal(parentEvent.returnvalue.props.children.some(child => child && child.type == "TooltipContainer"), false, "the parent owns no watermark");
+
+	// Discord normalises the snapshot record again before MessageContent and drops
+	// unknown marker properties. Deduplication therefore has to use the visible body,
+	// not an identity tag attached to our intermediate clone.
+	const normalizedSnapshotMessage = {content: painted};
+	const snapshotEvent = {returnvalue: {props: {className: "message", children: ["painted snapshot body"]}}};
+	logic.applyMessageContentRenderDecorations(plugin, snapshotEvent, normalizedSnapshotMessage, translation);
+	assert.equal(snapshotEvent.returnvalue.props.className.includes("translator-translated-message"), true, "the nested snapshot owns the translated styling");
+	assert.equal(snapshotEvent.returnvalue.props.children.some(child => child && child.type == "TooltipContainer"), true, "the nested snapshot owns one watermark");
+	assert.equal(snapshotEvent.returnvalue.props.children.some(child => child && child.type == "original-block"), false, "the inline snapshot original is not appended again as a direct block");
+});
+
+test("a store-view render marks but never decorates the empty forwarded parent", () => {
+	const logic = createLogic();
+	const plugin = createFakePlugin();
+	plugin.settings.general.showOriginalMessage = true;
+	plugin.settings.general.showOriginalDirectly = true;
+	plugin.settings.general.highlightTranslatedMessages = true;
+	const e = {
+		instance: {props: {message: {id: "fwd", content: "", messageSnapshots: [{message: {content: "译文"}}]}}},
+		returnvalue: {props: {className: "message", children: ["empty-parent"]}}
+	};
+	logic.applyReceivedDisplayViewToContent(plugin, e, {
+		revision: 7,
+		messageId: "fwd",
+		translated: true,
+		translation: {content: "译文", originalContent: "original"}
+	});
+	assert.equal(e.returnvalue.props["data-translator-revision"], "7", "DOM confirmation still sees the transaction");
+	assert.equal(e.returnvalue.props.className.includes("translator-translated-message"), false);
+	assert.deepEqual(e.returnvalue.props.children, ["empty-parent"], "no watermark or original block is injected into the empty parent");
+});
+
+test("restoring a forwarded message puts the snapshot original back", () => {
+	const logic = createLogic();
+	const plugin = createFakePlugin({normalizeExtractedMessageText: value => value == null ? "" : String(value)});
+	const stream = {content: {id: "fwd-1", content: "", messageSnapshots: [{message: {content: "翻译后的正文", embeds: []}}]}};
+	const view = {
+		translated: false,
+		status: "cancelled",
+		content: "the forwarded body",
+		restoredTranslation: {content: "翻译后的正文"},
+		source: {content: "the forwarded body", embeds: []}
+	};
+
+	logic.applyReceivedDisplayViewToStream(plugin, stream, view);
+
+	assert.equal(stream.content.messageSnapshots[0].message.content, "the forwarded body");
+	assert.equal(stream.content.content, "", "the own content stays empty through the restore too");
+});
+
+test("getForwardedMessageSnapshots ignores ordinary messages and empty snapshots", () => {
+	const logic = createLogic();
+	assert.equal(logic.getForwardedMessageSnapshots(null, {content: "has text", messageSnapshots: [{message: {content: "x"}}]}), null, "a message with its own content is not a forward");
+	assert.equal(logic.getForwardedMessageSnapshots(null, {content: "", messageSnapshots: []}), null);
+	assert.equal(logic.getForwardedMessageSnapshots(null, {content: "", messageSnapshots: [{message: {content: "  "}}]}), null, "an image-only forward has nothing to translate");
+	assert.ok(logic.getForwardedMessageSnapshots(null, {content: "", message_snapshots: [{message: {content: "raw gateway shape"}}]}), "gateway snake_case is recognized");
+});
+
+test("paintStreamBody writes a forward's body into a snapshot clone and a normal message directly", () => {
+	// The legacy branches (manual translation, archive restore, cancel restore)
+	// wrote stream.content.content directly, which a forward frame never displays -
+	// manual translate and untranslate on forwards were invisible (2026-08-19 night).
+	const logic = createLogic();
+	const plugin = createFakePlugin({normalizeExtractedMessageText: value => value == null ? "" : String(value)});
+
+	const normalStream = {content: {id: "m1", content: "original"}};
+	logic.paintStreamBody(plugin, normalStream, "translated");
+	assert.equal(normalStream.content.content, "translated", "ordinary messages keep the legacy direct write");
+	assert.equal(normalStream.content.id, "m1", "the same object is written, not replaced");
+
+	const snapshotEntry = {message: {content: "forwarded original"}};
+	const forwardStream = {content: {id: "fwd", content: "", messageSnapshots: [snapshotEntry]}};
+	logic.paintStreamBody(plugin, forwardStream, "翻译后的正文");
+	assert.equal(forwardStream.content.messageSnapshots[0].message.content, "翻译后的正文", "the forward paint lands in the snapshot");
+	assert.equal(forwardStream.content.content, "", "the forward's own content stays empty");
+	assert.equal(snapshotEntry.message.content, "forwarded original", "the store-owned snapshot object is never mutated");
+
+	assert.equal(logic.getStreamBodyContent(plugin, forwardStream.content), "翻译后的正文", "the echo read sees the same body the reader sees");
+	assert.equal(logic.getStreamBodyContent(plugin, normalStream.content), "translated");
 });

@@ -15,6 +15,74 @@ const AI_SKIP_TRANSLATION_TOKEN = "__SKIP_TRANSLATION__";
 const PROVIDER_REQUEST_TIMEOUT_MS = 30000;
 // Base pauses for the two pressure signals; a 429 is a harder no than a 5xx.
 const PROVIDER_RATE_LIMIT_BACKOFF_MS = 5000;
+// The free web endpoint carries q in the URL. This is an encoded-length limit,
+// not a JavaScript-character limit: one CJK character expands to nine characters
+// under encodeURIComponent, and the request helper may encode the form once more.
+const FREE_ENGINE_CHUNK_LIMIT = 1200;
+
+// Lossless split: chunks always concatenate back to the exact input. Paragraph
+// boundaries first, sentence boundaries inside an oversized paragraph, hard cuts
+// only for a single sentence longer than the limit.
+function splitTextIntoTranslationChunks(text, limit = FREE_ENGINE_CHUNK_LIMIT) {
+	const value = String(text == null ? "" : text);
+	const encodedLength = part => encodeURIComponent(part).length;
+	const boundedLimit = Math.max(16, Number(limit) || FREE_ENGINE_CHUNK_LIMIT);
+	if (encodedLength(value) <= boundedLimit) return [value];
+	const units = [];
+	const addHardSplit = part => {
+		let hardPart = "";
+		let hardLength = 0;
+		// Wire-only DTA tokens are indivisible. A hard cut through one recreates the
+		// exact missing-placeholder failure this splitter is meant to prevent.
+		const symbols = part.match(/__DTA_\d+__|⟦\d+⟧|[\s\S]/gu) || [];
+		for (const symbol of symbols) {
+			const symbolLength = encodedLength(symbol);
+			if (hardPart && hardLength + symbolLength > boundedLimit) {
+				units.push(hardPart);
+				hardPart = "";
+				hardLength = 0;
+			}
+			hardPart += symbol;
+			hardLength += symbolLength;
+		}
+		if (hardPart) units.push(hardPart);
+	};
+	for (const paragraphPart of value.split(/(\r?\n+)/)) {
+		if (!paragraphPart) continue;
+		if (encodedLength(paragraphPart) <= boundedLimit) {
+			units.push(paragraphPart);
+			continue;
+		}
+		for (const sentence of paragraphPart.split(/(?<=[.!?。！？；;])/)) {
+			if (!sentence) continue;
+			if (encodedLength(sentence) <= boundedLimit) units.push(sentence);
+			else addHardSplit(sentence);
+		}
+	}
+	const chunks = [];
+	let current = "";
+	let currentLength = 0;
+	for (const unit of units) {
+		const unitLength = encodedLength(unit);
+		if (current && currentLength + unitLength > boundedLimit) {
+			chunks.push(current);
+			current = "";
+			currentLength = 0;
+		}
+		current += unit;
+		currentLength += unitLength;
+	}
+	if (current) chunks.push(current);
+	return chunks.length ? chunks : [value];
+}
+
+function encodeGoogleFreeProtectionTokens(text) {
+	return String(text == null ? "" : text).replace(/⟦(\d+)⟧/g, "__DTA_$1__");
+}
+
+function decodeGoogleFreeProtectionTokens(text) {
+	return String(text == null ? "" : text).replace(/__\s*DTA\s*_\s*(\d+)\s*__/g, "⟦$1⟧");
+}
 const PROVIDER_SERVER_ERROR_BACKOFF_MS = 2000;
 // Consecutive pressure doubles the pause; four doublings of the 429 base already
 // exceed the ceiling, so the step cannot usefully grow past that.
@@ -37,7 +105,7 @@ const translationEngines = {
 		auto: true,
 		funcName: "googleCloudTranslate",
 		languages: googleLanguages,
-		key: "AIzaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+		key: "Paste Google Cloud API key",
 		endpoint: "https://translation.googleapis.com/language/translate/v2",
 		model: "nmt"
 	},
@@ -50,7 +118,7 @@ const translationEngines = {
 			"zh-CN": "zh-Hans",
 			"zh-TW": "zh-Hant"
 		},
-		key: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+		key: "Paste Azure Translator key",
 		endpoint: "https://api.cognitive.microsofttranslator.com/translate"
 	},
 	deepl: {
@@ -59,14 +127,14 @@ const translationEngines = {
 		funcName: "deepLTranslate",
 		languages: ["bg","cs","da","de","en","el","es","et","fi","fr","hu","id","it","ja","ko","lt","lv","nl","no","pl","pt","ro","ru","sk","sl","sv","tr","uk","zh"],
 		premium: true,
-		key: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx"
+		key: "Paste DeepL API key"
 	},
 	deepseek: {
 		name: "DeepSeek",
 		auto: true,
 		funcName: "deepSeekTranslate",
 		languages: googleLanguages,
-		key: "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+		key: "Paste DeepSeek API key",
 		endpoint: "https://api.deepseek.com/chat/completions",
 		// deepseek-chat and deepseek-reasoner were retired; v4-flash is the cheap tier.
 		model: "deepseek-v4-flash"
@@ -76,7 +144,7 @@ const translationEngines = {
 		auto: true,
 		funcName: "openAiTranslate",
 		languages: googleLanguages,
-		key: "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+		key: "Paste OpenAI API key",
 		endpoint: "https://api.openai.com/v1/responses",
 		model: "gpt-5.6-luna"
 	},
@@ -85,7 +153,7 @@ const translationEngines = {
 		auto: true,
 		funcName: "geminiTranslate",
 		languages: googleLanguages,
-		key: "AIzaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+		key: "Paste Gemini API key",
 		endpoint: "https://generativelanguage.googleapis.com/v1beta/models",
 		model: "gemini-2.5-flash"
 	},
@@ -94,7 +162,7 @@ const translationEngines = {
 		auto: true,
 		funcName: "openAiCompatibleTranslate",
 		languages: googleLanguages,
-		key: "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+		key: "Paste provider API key",
 		endpoint: "https://your-provider.example/v1/chat/completions",
 		model: "your-model-id"
 	},
@@ -517,7 +585,16 @@ function createProviderClient({
 		return notify(message, options);
 	}
 
+	// A chunked batch hitting a dead provider fails every chunk with the same error;
+	// the user needs the message once, not once per chunk (2026-08-19: three
+	// identical quota popups). Only exact repeats inside the window stay silent.
+	const DANGER_TOAST_DEDUP_MS = 10000;
+	let lastDangerToast = {message: "", at: 0};
+
 	function dangerToast(message) {
+		const timestamp = now();
+		if (message === lastDangerToast.message && timestamp - lastDangerToast.at < DANGER_TOAST_DEDUP_MS) return null;
+		lastDangerToast = {message, at: timestamp};
 		return toast(message, {type: "danger", position: "center"});
 	}
 
@@ -877,38 +954,57 @@ function createProviderClient({
 
 	// Each adapter writes the language a provider reports back onto data.input, because
 	// the caller renders "translated from X" from that same object.
+	// The free endpoint takes the text in the request URL, so a long message used to
+	// fail as one oversized request (field 2026-08-19: long messages never translated
+	// on the free engine). The text now travels in bounded chunks; any chunk failing
+	// fails the whole translation so a partial paint can never look complete.
 	function googleApiTranslate(data, callback) {
-		request("https://translate.googleapis.com/translate_a/single", {
-			form: {
-				"client": "gtx",
-				"dt": "t",
-				"dj": "1",
-				"source": "input",
-				"sl": data.input.id,
-				"tl": data.output.id,
-				"q": encodeURIComponent(data.text)
-			}
-		}, (error, response, body) => {
-			const labels = getLabels();
-			const languages = getLanguages();
-			if (!error && body && response && response && response.statusCode == 200) {
-				try {
-					body = JSON.parse(body);
-					if (!data.specialCase && body.src && body.src && languages[body.src]) {
-						data.input.id = body.src;
-						data.input.name = languages[body.src].name;
-						data.input.ownlang = languages[body.src].ownlang;
-					}
-					callback(body.sentences.map(n => n && n.trans).filter(n => n).join(""));
+		// Google sometimes drops the compact corner-bracket placeholder entirely
+		// (field reproduction: ⟦4⟧ disappeared from an otherwise valid 200 reply).
+		// A wire-only ASCII sentinel survives the same request and is reversed before
+		// the shared strict placeholder guard sees the translation.
+		const chunks = splitTextIntoTranslationChunks(encodeGoogleFreeProtectionTokens(data.text), FREE_ENGINE_CHUNK_LIMIT);
+		const translatedParts = [];
+		const requestChunk = index => {
+			if (index >= chunks.length) return callback(decodeGoogleFreeProtectionTokens(translatedParts.join("")));
+			request("https://translate.googleapis.com/translate_a/single", {
+				form: {
+					"client": "gtx",
+					"dt": "t",
+					"dj": "1",
+					"source": "input",
+					"sl": data.input.id,
+					"tl": data.output.id,
+					"q": encodeURIComponent(chunks[index])
 				}
-				catch (err) {callback("");}
-			}
-			else {
-				if (response && response && response.statusCode == 429) dangerToast(`${labels.toast_translating_failed}. ${labels.toast_translating_tryanother}. ${labels.error_hourlylimit}`);
-				else dangerToast(`${labels.toast_translating_failed}. ${labels.toast_translating_tryanother}. ${labels.error_serverdown}`);
-				callback("");
-			}
-		});
+			}, (error, response, body) => {
+				const labels = getLabels();
+				const languages = getLanguages();
+				if (!error && body && response && response && response.statusCode == 200) {
+					try {
+						body = JSON.parse(body);
+						// The detected language comes from the first chunk only; later
+						// chunks of the same message cannot disagree meaningfully.
+						if (index === 0 && !data.specialCase && body.src && body.src && languages[body.src]) {
+							data.input.id = body.src;
+							data.input.name = languages[body.src].name;
+							data.input.ownlang = languages[body.src].ownlang;
+						}
+						const translated = body.sentences.map(n => n && n.trans).filter(n => n).join("");
+						if (!translated) return callback("");
+						translatedParts.push(translated);
+						requestChunk(index + 1);
+					}
+					catch (err) {callback("");}
+				}
+				else {
+					if (response && response && response.statusCode == 429) dangerToast(`${labels.toast_translating_failed}. ${labels.toast_translating_tryanother}. ${labels.error_hourlylimit}`);
+					else dangerToast(`${labels.toast_translating_failed}. ${labels.toast_translating_tryanother}. ${labels.error_serverdown}`);
+					callback("");
+				}
+			});
+		};
+		requestChunk(0);
 	}
 
 	function googleCloudTranslate(data, callback) {
@@ -1470,6 +1566,8 @@ module.exports = {
 	PROVIDER_BACKOFF_MAX_STEP,
 	PROVIDER_BACKOFF_MAX_MS,
 	CREDENTIAL_REQUIRED_ENGINES,
+	FREE_ENGINE_CHUNK_LIMIT,
+	splitTextIntoTranslationChunks,
 	VALIDATABLE_ENGINES,
 	AI_MODEL_ENGINES,
 	translationEngines,

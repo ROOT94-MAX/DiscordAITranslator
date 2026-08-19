@@ -80,7 +80,7 @@ function createTranslationPipeline({BDFDB, getPlugin, messageTypes, languageType
 							status: "translated",
 							translation: storedCachedTranslation
 						}), {refresh: false}).then(outcome => {
-							if (outcome && outcome.deferredIds && outcome.deferredIds.length) plugin.scheduleReceivedDisplayFlush(channelId, message.id);
+							if (outcome && outcome.deferredIds && outcome.deferredIds.length) plugin.scheduleReceivedDisplayFlush(channelId, message.id, null, null, "manual");
 							finish(true);
 						}, _ => finish(false));
 						return;
@@ -89,7 +89,7 @@ function createTranslationPipeline({BDFDB, getPlugin, messageTypes, languageType
 					// display transaction; the per-message flush paints and acknowledges it
 					// through the same chain the automatic path uses (5a).
 					plugin.applyStoredTranslationToMessage(message, storedCachedTranslation, originalContentData);
-					plugin.scheduleReceivedDisplayFlush(channelId, message.id);
+					plugin.scheduleReceivedDisplayFlush(channelId, message.id, null, null, "manual");
 					return finish(true);
 				}
 				const allTextsToTranslate = plugin.buildTranslationRequestText(originalContentData);
@@ -141,13 +141,13 @@ function createTranslationPipeline({BDFDB, getPlugin, messageTypes, languageType
 										status: "translated",
 										translation: storedTranslation
 									}), {refresh: false}).then(outcome => {
-										if (outcome && outcome.deferredIds && outcome.deferredIds.length) plugin.scheduleReceivedDisplayFlush(channelId, message.id);
+										if (outcome && outcome.deferredIds && outcome.deferredIds.length) plugin.scheduleReceivedDisplayFlush(channelId, message.id, null, null, "manual");
 										finish(true);
 									}, _ => finish(false));
 									return;
 								}
 								plugin.applyStoredTranslationToMessage(message, storedTranslation, originalContentData);
-								plugin.scheduleReceivedDisplayFlush(channelId, message.id);
+								plugin.scheduleReceivedDisplayFlush(channelId, message.id, null, null, "manual");
 								plugin.persistTranslationCacheEntry(message.id, signature, storedTranslation);
 							}
 							else if (meta && meta.skipped && options.auto) {

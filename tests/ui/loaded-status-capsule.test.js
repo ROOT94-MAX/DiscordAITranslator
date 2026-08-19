@@ -78,7 +78,7 @@ function createHarness(overrides = {}) {
 	const {fakeDocument, body} = createFakeDom();
 	const listeners = [];
 	const fakeWindow = {
-		addEventListener: (...args) => listeners.push(["add", args[0]]),
+		addEventListener: (...args) => listeners.push(["add", args[0], args[1]]),
 		removeEventListener: (...args) => listeners.push(["remove", args[0]])
 	};
 	// The real store arms refresh/hide timers on raw setTimeout; neuter them so the
@@ -190,4 +190,102 @@ test("skip-reason and title text compose in both ui languages", () => {
 	const title = controller.getTitleText({active: true, channelId: "channel-1", total: 2, processed: 1, lastSkipReason: "link_only", lastSkipPreview: "https://x"});
 	assert.match(title, /Last skipped/);
 	assert.match(title, /link-only/);
+});
+
+test("an update that changes nothing skips the repaint and the reposition", () => {
+	// 2026-08-19 jank report: every render outcome refreshed the capsule even when
+	// the numbers were identical, and each refresh forced a reposition (sync layout
+	// reads). Identical content must cost nothing.
+	const {controller, calls} = createHarness();
+	const status = {active: false, done: true, channelId: "channel-1", batch: 1, total: 5, processed: 5, displayed: 5};
+	controller.update(status);
+	const positionsAfterFirst = calls.position;
+	assert.ok(positionsAfterFirst >= 1, "setup: the first paint positions the capsule");
+	controller.update(status);
+	assert.equal(calls.position, positionsAfterFirst, "identical content repositions nothing");
+	controller.update(Object.assign({}, status, {displayed: 4, displayPending: 1}));
+	assert.equal(calls.position, positionsAfterFirst + 1, "a real change still repaints and repositions");
+});
+
+test("the watcher's reposition waits out an active user scroll and lands once it idles", () => {
+	const timers = [];
+	let scrolling = true;
+	const {controller, calls, listeners} = createHarness({
+		isUserScrolling: () => scrolling,
+		setTimeout: (callback, delay) => {timers.push({callback, delay}); return timers.length;},
+		clearTimeout: handle => {const timer = timers[handle - 1]; if (timer) timer.fired = true;}
+	});
+	controller.update({active: true, collecting: false, done: false, channelId: "channel-1", total: 5, processed: 2, displayed: 1});
+	const positionsAfterPaint = calls.position;
+	const scrollListener = listeners.find(entry => entry[0] == "add" && entry[1] == "scroll");
+	assert.ok(scrollListener && typeof scrollListener[2] == "function", "setup: the scroll watcher is attached");
+	scrollListener[2]();
+	let pending = timers.filter(timer => !timer.fired);
+	assert.equal(pending.length, 1, "the scroll event arms one debounced reposition");
+	pending[0].fired = true;
+	pending[0].callback();
+	assert.equal(calls.position, positionsAfterPaint, "mid-scroll the reposition defers instead of forcing layout");
+	scrolling = false;
+	pending = timers.filter(timer => !timer.fired);
+	assert.equal(pending.length, 1, "the deferral re-armed itself");
+	pending[0].fired = true;
+	pending[0].callback();
+	assert.equal(calls.position, positionsAfterPaint + 1, "the reposition lands once the scroll idles");
+});
+
+test("recording displayed translations is silent; the heartbeat reveals the new count in one jump", () => {
+	// 2026-08-19 report: the batch commit loop fired a capsule repaint per record and
+	// the numerator visibly crawled 87, 88, 89... The batch paints atomically, so the
+	// counter must too: recording only stores ids, and the next tick (or the batch's
+	// own status update) shows the total in one step.
+	const {controller, store, calls, fakeDocument} = createHarness();
+	controller.update({active: true, collecting: false, done: false, channelId: "channel-1", batch: 1, total: 20, processed: 0, displayed: 0});
+	const positionsAfterPaint = calls.position;
+	for (let index = 0; index < 20; index++) controller.recordTranslationsDisplayed("channel-1", [`m${index}`]);
+	assert.equal(calls.position, positionsAfterPaint, "twenty recordings repaint nothing");
+	controller.update({});
+	const text = getCapsule(fakeDocument).querySelector(".translator-loaded-status-text");
+	assert.match(text.textContent, /^20\//, "the next tick shows all twenty in one jump");
+	assert.equal(store.getStatus().sessionDisplayed, 20, "the ids were recorded silently");
+});
+
+test("a stopped plugin instance cannot resurrect the capsule or re-arm its heartbeat", () => {
+	// The "old capsule residue" root cause (2026-08-19 Σ-format sighting): after a
+	// plugin hot reload, a late async callback on the DEAD instance (a provider chunk
+	// answering, a job completing) called update(), which recreated the shared element
+	// and re-armed the 1s refresh unconditionally - the dead instance then repainted
+	// the capsule with its OLD text renderer every second. And because the LIVE
+	// instance stops watching the element once its own capsule hides, the stale pill
+	// lingered on screen. A stopped instance must remove and stand down instead.
+	let runtimeActive = true;
+	let rearmed = 0;
+	let cancelled = 0;
+	const store = Object.assign({}, createLoadedTranslationStatusStore({isChineseUiLanguage: () => false}), {
+		scheduleRefresh: () => {rearmed++;},
+		scheduleHide: () => {},
+		schedulePosition: callback => callback(),
+		cancelTimers: () => {cancelled++;}
+	});
+	const {controller, fakeDocument} = createHarness({store, isRuntimeActive: () => runtimeActive});
+	controller.update({active: true, channelId: "channel-1", total: 5, processed: 1});
+	assert.ok(getCapsule(fakeDocument), "setup: the capsule shows while the runtime is active");
+	const rearmedWhileActive = rearmed;
+
+	runtimeActive = false;
+	controller.update({active: true, done: false, channelId: "channel-1", total: 13, processed: 5});
+
+	assert.equal(getCapsule(fakeDocument), null, "a post-stop update removes the capsule instead of repainting it");
+	assert.equal(rearmed, rearmedWhileActive, "a post-stop update must never re-arm the refresh heartbeat");
+	assert.ok(cancelled >= 1, "a post-stop update cancels whatever timers were still pending");
+});
+
+test("the runtime hands the capsule controller its runtime-active gate", () => {
+	const fs = require("node:fs");
+	const path = require("node:path");
+	const runtime = fs.readFileSync(path.resolve(__dirname, "..", "..", "src", "legacy", "runtime.js"), "utf8");
+	const start = runtime.indexOf("createLoadedStatusCapsuleController({");
+	assert.notEqual(start, -1, "controller construction not found");
+	const end = runtime.indexOf("});", start);
+	const block = runtime.slice(start, end);
+	assert.match(block, /isRuntimeActive: \(\) => pluginRuntimeActive/, "the capsule pipeline must be gated on the live plugin instance");
 });

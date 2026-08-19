@@ -1,5 +1,7 @@
 # Architecture
 
+Operational incident history, rejected approaches, and future-agent guardrails are consolidated in `field-debugging-guide.md`. Read it before changing repaint cadence, viewport restoration, capsule counting/positioning, provider integrity checks, or forwarded-message rendering.
+
 ## Status
 
 This document defines the approved target architecture for the repository. The deterministic `src/` build exists, and v0.3.38 (2026-08-16) shipped the display repair series that restored hover-independent translation display on current clients.

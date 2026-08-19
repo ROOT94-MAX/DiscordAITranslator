@@ -1,4 +1,4 @@
-function createHistoricalDisplayTracker({isStatusForChannel = () => false, getRevision = () => null, updateStatus = () => {}} = {}) {
+function createHistoricalDisplayTracker({isStatusForChannel = () => false, getRevision = () => null, updateStatus = () => {}, getBatchNumber = () => null} = {}) {
 	const batches = new Map();
 	let batchSequence = 0;
 
@@ -19,7 +19,10 @@ function createHistoricalDisplayTracker({isStatusForChannel = () => false, getRe
 			const displayable = new Set((Array.isArray(displayableIds) ? displayableIds : [...ids]).map(normalizeId));
 			const identity = normalizeId(batchKey) || `${key}:display:${++batchSequence}`;
 			const revisions = new Map([...ids].map(messageId => [messageId, getRevision(key, messageId)]));
-			batches.set(key, {identity, ids, displayable, revisions, displayed: Math.max(0, displayed || 0)});
+			// The batch stamp is taken at begin(): a straggler report must name the batch
+			// it belongs to, or its counters merge into whatever batch runs when it lands
+			// (2026-08-19 audit: the 12/26 transients).
+			batches.set(key, {identity, ids, displayable, revisions, displayed: Math.max(0, displayed || 0), batch: getBatchNumber()});
 			for (const messageId of ids) schedule(messageId, identity);
 			return ids.size;
 		},
@@ -50,7 +53,9 @@ function createHistoricalDisplayTracker({isStatusForChannel = () => false, getRe
 			pending.displayed += displayableResolved;
 			if (!pending.ids.size) batches.delete(key);
 			if (!isStatusForChannel(key)) return false;
-			updateStatus({channelId: key, displayed: pending.displayed, displayPending: pending.ids.size});
+			const statusUpdate = {channelId: key, displayed: pending.displayed, displayPending: pending.ids.size};
+			if (pending.batch != null) statusUpdate.batch = pending.batch;
+			updateStatus(statusUpdate);
 			return true;
 		},
 		clear() {

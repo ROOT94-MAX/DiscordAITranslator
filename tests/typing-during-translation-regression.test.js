@@ -48,6 +48,26 @@ test("the retained legacy manual-path refresh repaints through the proven chat r
 	assert.deepEqual(chatLayerRerenders, [true], "the manual-path refresh must rebuild the chat once with the instant variant");
 });
 
+test("a lifecycle repaint preserves the current viewport instead of a stale manual-translation lock", () => {
+	// The manual row transaction already consumed its ID-scoped anchor. Clicking the
+	// channel auto-translate switch inside the 4.5s lock window is a different, whole-
+	// channel operation and must preserve where the reader is now.
+	const plugin = createBasePluginInstance({
+		callSetLanguages: false,
+		bdfdb: {MessageUtils: {rerenderAll: () => {}}}
+	});
+	const currentViewport = {scrollTop: 320, keepBottom: false, anchor: {messageId: "august-3"}, userScrollIntentSequence: 4};
+	plugin.getActiveManualTranslationScrollAnchor = () => ({messageId: "old-manual-row"});
+	plugin.captureMessageScrollerState = () => currentViewport;
+	plugin.restoreMessageAnchorState = () => {throw new Error("a full lifecycle repaint must not follow the old manual lock");};
+	let restored = null;
+	plugin.restoreMessageScrollerState = state => {restored = state;};
+
+	plugin.rerenderMessagesWithScrollPreserved();
+
+	assert.equal(restored, currentViewport);
+});
+
 function createScrollRestoreHarness() {
 	const realDocument = global.document;
 	const realRequestAnimationFrame = global.requestAnimationFrame;
@@ -141,13 +161,24 @@ test("layout-induced scroll events do not cancel the single anchor correction", 
 	}
 });
 
-test("automatic translation scroll preservation uses no delayed timeout corrections", () => {
+test("delayed settle corrections exist but a user gesture disarms every one of them", () => {
+	// Superseding an older pin (was: "no delayed timeout corrections at all"). The
+	// original bug was delayed corrections yanking the scroller after the user
+	// resumed scrolling. The settle ladder that fixes late-layout drift (the
+	// 4:02->4:10 report, 2026-08-19) is allowed back ONLY because every pass runs
+	// under the intent veto: one user gesture and the remaining passes write nothing.
 	const harness = createScrollRestoreHarness();
 	try {
+		harness.plugin.attachAutoTranslationScrollWatcher();
 		const scrollerState = harness.plugin.captureMessageScrollerState();
 		harness.plugin.restoreMessageScrollerState(scrollerState);
+		assert.ok(harness.timerCallbacks.length > 0, "the settle ladder is armed");
 
-		assert.equal(harness.timerCallbacks.length, 0);
+		harness.userScroll();
+		harness.scroller.scrollTop = 350;
+		for (const callback of harness.timerCallbacks.splice(0)) callback();
+
+		assert.equal(harness.scroller.scrollTop, 350, "a gesture disarms every settle pass");
 	}
 	finally {
 		harness.restore();
@@ -394,4 +425,22 @@ test("a sent original remains editable after the short echo-correlation window e
 	finally {
 		Date.now = realNow;
 	}
+});
+
+test("no repaint lands while the user is actively scrolling through history", () => {
+	// 2026-08-19 report: with auto-translate on, scrolling up through history kept
+	// snapping the scroller back. Every landed transaction rebuilds the list and
+	// restores a captured scroll state - mid-gesture that restore IS the snap-back.
+	// The commit is already stored; the repaint defers until the scroll idles
+	// (the scheduler re-checks canRepaintNow on its busy-retry cadence).
+	const plugin = createPluginInstance({callSetLanguages: false});
+	plugin.isTranslatorSettingsSurfaceOpen = () => false;
+	plugin.isViewingMessageHistory = () => true;
+	plugin.isUserActivelyScrollingMessages = () => true;
+	assert.equal(plugin.canRepaintReceivedDisplayNow(), false, "a mid-scroll history view must not repaint");
+	plugin.isUserActivelyScrollingMessages = () => false;
+	assert.equal(plugin.canRepaintReceivedDisplayNow(), true, "the paint lands once the scroll idles");
+	plugin.isUserActivelyScrollingMessages = () => true;
+	plugin.isViewingMessageHistory = () => false;
+	assert.equal(plugin.canRepaintReceivedDisplayNow(), true, "the live view keeps painting; the bottom lock owns that case");
 });

@@ -35,10 +35,13 @@ function createPositionHarness({anchorRect, hintNodes, deepHintNodes} = {}) {
 		getBoundingClientRect: () => ({...anchor}),
 		parentElement: composerWrapper
 	};
+	// Live anchor state, so a test can unmount the composer mid-run the way a
+	// whole-layer rebuild does on the real client.
+	const domState = {anchorNode};
 	const plugin = createPluginInstance({callSetLanguages: false});
 	// Set after instance creation: createPluginInstance replaces global.window itself.
 	global.document = {
-		querySelectorAll: selector => selector == '[class*="channelTextArea"]' || selector == 'form [role="textbox"]' ? (anchorNode ? [anchorNode] : []) : []
+		querySelectorAll: selector => selector == '[class*="channelTextArea"]' || selector == 'form [role="textbox"]' ? (domState.anchorNode ? [domState.anchorNode] : []) : []
 	};
 	global.window = Object.assign({}, global.window, {innerWidth: 1520, innerHeight: 1220});
 	const element = {
@@ -52,6 +55,7 @@ function createPositionHarness({anchorRect, hintNodes, deepHintNodes} = {}) {
 		element,
 		levelScans: () => counters.parent.count,
 		deepScans: () => counters.deep.count,
+		removeAnchor() {domState.anchorNode = null;},
 		restore() {
 			global.document = realDocument;
 			global.window = realWindow;
@@ -60,14 +64,16 @@ function createPositionHarness({anchorRect, hintNodes, deepHintNodes} = {}) {
 }
 
 function hintNode(rect) {
-	return {getBoundingClientRect: () => ({...rect}), textContent: "已开启"};
+	// isConnected is boolean true on every attached DOM node; the cache's liveness
+	// check treats a missing flag as a disconnected node and would rescan per tick.
+	return {getBoundingClientRect: () => ({...rect}), textContent: "已开启", isConnected: true};
 }
 
 test("with a passing slow-mode hint the capsule floats above it, right edges aligned", () => {
 	const harness = createPositionHarness({hintNodes: [hintNode({left: 1430, top: 1101, right: 1490, bottom: 1117, width: 60, height: 16})]});
 	try {
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
-		assert.equal(harness.element.style.left, `${1490 - 180}px`, "the capsule's right edge shares the hint's right vertical line");
+		assert.equal(harness.element.style.right, `${1520 - 1490}px`, "the capsule's right edge shares the hint's right vertical line");
 		assert.equal(harness.element.style.top, `${1101 - 20 - 8}px`, "the capsule floats 8px above the hint");
 	}
 	finally {harness.restore();}
@@ -80,7 +86,7 @@ test("real-client geometry: the typing-strip cooldown hint aligns the capsule ex
 	const harness = createPositionHarness({hintNodes: [hintNode({left: 1361, top: 1103, right: 1501, bottom: 1126, width: 140, height: 23})]});
 	try {
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
-		assert.equal(harness.element.style.left, `${1501 - 180}px`, "the capsule's right edge lands on the hint's right edge (1501)");
+		assert.equal(harness.element.style.right, `${1520 - 1501}px`, "the capsule's right edge lands on the hint's right edge (1501)");
 		assert.equal(harness.element.style.top, `${1103 - 20 - 8}px`, "the capsule floats 8px above the cooldown strip");
 	}
 	finally {harness.restore();}
@@ -94,7 +100,7 @@ test("a hint in the strip below the input (this client's layout) is accepted and
 	const harness = createPositionHarness({hintNodes: [hintNode({left: 1430, top: 1201, right: 1490, bottom: 1217, width: 60, height: 16})]});
 	try {
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
-		assert.equal(harness.element.style.left, `${1490 - 180}px`, "the capsule's right edge shares the below-input hint's right edge");
+		assert.equal(harness.element.style.right, `${1520 - 1490}px`, "the capsule's right edge shares the below-input hint's right edge");
 		assert.equal(harness.element.style.top, `${1201 - 20 - 8}px`, "the capsule floats 8px above the hint");
 	}
 	finally {harness.restore();}
@@ -107,18 +113,63 @@ test("a slow-mode-like node away from the composer's top-right is rejected by th
 	const harness = createPositionHarness({hintNodes: [hintNode({left: 1430, top: 1000, right: 1490, bottom: 1016, width: 60, height: 16})]});
 	try {
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
-		assert.equal(harness.element.style.left, `${1493 - 12 - 180}px`, "falls back to the composer's right edge");
+		assert.equal(harness.element.style.right, `${1520 - 1493 + 12}px`, "falls back to the composer's right edge");
 		assert.equal(harness.element.style.top, `${1127 - 20 - 8}px`, "sits directly above the input, never on the icons");
 	}
 	finally {harness.restore();}
 });
 
-test("without any hint the capsule sits directly above the input, right-aligned", () => {
+test("without any hint the capsule hugs the input, 8px above its top edge", () => {
+	// The user-verified position (2026-08-19 decision): a 26px "hint-strip clearance"
+	// experiment made the capsule float over message content and read as drift, so the
+	// fallback returned to hugging the input. Overlap with a real slow-mode strip is
+	// owned by detection, not by fallback distance.
 	const harness = createPositionHarness();
 	try {
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
-		assert.equal(harness.element.style.left, `${1493 - 12 - 180}px`);
+		assert.equal(harness.element.style.right, `${1520 - 1493 + 12}px`);
 		assert.equal(harness.element.style.top, `${1127 - 20 - 8}px`);
+	}
+	finally {harness.restore();}
+});
+
+test("a cached hint whose live rect collapses is dropped instead of aligning the capsule to the viewport origin", () => {
+	// Discord can hide the strip while the node stays connected (rect collapses to
+	// zero). Aligning to that rect flung the capsule to the top-left corner - one of
+	// the "old capsule residue" jumps reported 2026-08-19.
+	const liveRect = {left: 1361, top: 1103, right: 1501, bottom: 1126, width: 140, height: 23};
+	const node = {getBoundingClientRect: () => ({...liveRect}), textContent: "已开启", isConnected: true};
+	const harness = createPositionHarness({hintNodes: [node]});
+	try {
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+		assert.equal(harness.element.style.top, `${1103 - 20 - 8}px`, "setup: aligned above the live hint");
+
+		Object.assign(liveRect, {left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0});
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+
+		assert.equal(harness.element.style.right, `${1520 - 1493 + 12}px`, "falls back to the composer's right edge");
+		assert.equal(harness.element.style.top, `${1127 - 20 - 8}px`, "falls back above the input, never the viewport corner");
+	}
+	finally {harness.restore();}
+});
+
+test("losing the composer anchor mid-rebuild keeps the capsule's last position", () => {
+	// Every display transaction rebuilds the whole chat layer; for a frame the
+	// composer is unmounted. Teleporting to the legacy bottom-right corner and back
+	// is the other "old capsule residue" jump (2026-08-19). A capsule that was
+	// already positioned holds its spot until an anchor exists again.
+	const harness = createPositionHarness();
+	try {
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+		const right = harness.element.style.right;
+		const top = harness.element.style.top;
+		assert.ok(right && top, "setup: the capsule was positioned from the anchor");
+
+		harness.removeAnchor();
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+
+		assert.equal(harness.element.style.right, right, "anchor loss must not move the capsule");
+		assert.equal(harness.element.style.top, top, "anchor loss must not move the capsule");
 	}
 	finally {harness.restore();}
 });
@@ -127,7 +178,7 @@ test("without a composer anchor the capsule falls back to the viewport's bottom-
 	const harness = createPositionHarness({anchorRect: null});
 	try {
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
-		assert.equal(harness.element.style.left, `${1520 - 108 - 180}px`);
+		assert.equal(harness.element.style.right, "108px");
 		assert.equal(harness.element.style.top, `${1220 - 54 - 20}px`);
 	}
 	finally {harness.restore();}
@@ -196,17 +247,62 @@ test("a repeated heartbeat tick on the same composer costs zero hint scans", () 
 	finally {harness.restore();}
 });
 
-test("a hint beyond the composer's parent is never scanned for", () => {
-	// The ancestor walk never detected the hint on this client (149 recorded misses)
-	// while its per-second rescans caused the flicker regression. Deeper levels are
-	// off limits entirely: a slow-mode-like node there must leave the capsule on the
-	// plain fallback and cost zero deep queries.
+test("a hint living beyond the composer's parent is found and the capsule sits above it", () => {
+	// Real-client evidence (2026-08-19 screenshot): the slow-mode hint renders in a
+	// scope above the composer's parent, which is why the parent-only scan missed it
+	// 149 times while the capsule covered the hint. The widened walk may read the
+	// deeper scopes - the 2026-08-16 flicker lesson lives in the CACHE contract
+	// below, not in the scope: cost came from per-tick rescans, never from depth.
 	const harness = createPositionHarness({deepHintNodes: [hintNode({left: 1361, top: 1103, right: 1501, bottom: 1126, width: 140, height: 23})]});
 	try {
 		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
-		assert.equal(harness.element.style.left, `${1493 - 12 - 180}px`, "the fallback position is used");
-		assert.equal(harness.element.style.top, `${1127 - 20 - 8}px`);
-		assert.equal(harness.deepScans(), 0, "no level beyond the composer's parent is ever queried");
+		assert.equal(harness.element.style.right, `${1520 - 1501}px`, "right edges align to the hint");
+		assert.equal(harness.element.style.top, `${1103 - 20 - 8}px`, "the capsule sits directly above the hint");
+		const firstPassDeepScans = harness.deepScans();
+		assert.ok(firstPassDeepScans >= 1, "setup: the deep scope was scanned once");
+
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+		assert.equal(harness.deepScans(), firstPassDeepScans, "heartbeat ticks must reuse the cached deep result, never rescan per tick");
+	}
+	finally {harness.restore();}
+});
+
+test("the innermost text node wins over its wider wrapper, so the pill hugs the visible text", () => {
+	// 2026-08-19 report: with a hint present the pill overflowed the border. The DOM
+	// wraps the slow-mode text in wider containers whose textContent also matches;
+	// the old right+bottom score always picked the widest wrapper, whose right edge
+	// sits past the visible text (guards allow up to anchor.right + 24). Selection
+	// must prefer the smallest matching node - the text itself.
+	const wrapper = hintNode({left: 1300, top: 1101, right: 1510, bottom: 1121, width: 210, height: 20});
+	const textSpan = hintNode({left: 1430, top: 1103, right: 1490, bottom: 1117, width: 60, height: 14});
+	const harness = createPositionHarness({hintNodes: [wrapper, textSpan]});
+	try {
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+		assert.equal(harness.element.style.right, `${1520 - 1490}px`, "the pill's right edge lands on the text span, not the wrapper");
+		assert.equal(harness.element.style.top, `${1103 - 20 - 8}px`, "the pill sits directly above the text span");
+	}
+	finally {harness.restore();}
+});
+
+test("slow-mode-like text inside a message row is never mistaken for the native hint", () => {
+	// Real-client evidence (2026-08-19 screenshot): the 3-level ancestor walk can
+	// reach a scope containing the message list, and translated messages routinely
+	// contain 已开启 / slow mode as ordinary text. The last message's lines sit exactly
+	// in the proximity band above the input, and the smallest-node rule then aligned
+	// the capsule onto a MESSAGE instead of Discord's hint strip. Anything inside a
+	// message row or the messages scroller is structurally rejected.
+	const messageTextNode = {
+		getBoundingClientRect: () => ({left: 1400, top: 1101, right: 1490, bottom: 1117, width: 90, height: 16}),
+		textContent: "慢速模式已开启",
+		isConnected: true,
+		closest: selector => String(selector).includes("chat-messages") ? {} : null
+	};
+	const harness = createPositionHarness({hintNodes: [messageTextNode]});
+	try {
+		harness.plugin.positionLoadedAutoTranslationStatusElement(harness.element);
+		assert.equal(harness.element.style.right, `${1520 - 1493 + 12}px`, "falls back to the composer's right edge");
+		assert.equal(harness.element.style.top, `${1127 - 20 - 8}px`, "the capsule must not align to message text");
 	}
 	finally {harness.restore();}
 });

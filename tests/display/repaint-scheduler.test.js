@@ -285,3 +285,112 @@ test("cancelFullRepaintTimers clears every pending timer and the deferred flag",
 	scheduler.flushDeferredFullRepaint();
 	assert.equal(state.repaints, 0, "a cancelled deferral cannot resurrect a repaint");
 });
+
+test("a transaction repaint keeps the pinned live delay even while viewing history", () => {
+	// Weighed and settled (2026-08-19 flicker audit): slowing the transaction cadence
+	// in history was tried and rejected - the prompt-display contract in
+	// tests/integration/received-display-throughput.test.js pins that a translation
+	// must not sit invisible while the reader is scrolled up. The composer icon
+	// flicker is owned by the rebuild mechanism (see discord-render-adapter), not by
+	// this cadence.
+	const timers = [];
+	const scheduler = createDisplayRepaintScheduler({
+		renderMessages: messageIds => Promise.resolve({confirmedIds: messageIds}),
+		canRepaintNow: () => true,
+		isViewingHistory: () => true,
+		setTimeout: (callback, delay) => {
+			timers.push({callback, delay});
+			return timers.length;
+		},
+		clearTimeout: () => {}
+	});
+
+	scheduler.schedule("c1", "m1");
+	assert.equal(timers[0].delay, LIVE_REPAINT_DELAY_MS);
+});
+
+test("the flush hands per-source trigger counts to the render callback", async () => {
+	// Cadence audit 2026-08-19: five lanes (live, cached, historical, manual, retry)
+	// share the one visible symptom of a whole-layer rebuild. Attribution starts here:
+	// every schedule call carries its lane, and the transaction reports the counts.
+	const timers = [];
+	const metas = [];
+	const scheduler = createDisplayRepaintScheduler({
+		renderMessages: (messageIds, meta) => {
+			metas.push({messageIds: messageIds.slice(), meta});
+			return Promise.resolve({confirmedIds: messageIds});
+		},
+		canRepaintNow: () => true,
+		isViewingHistory: () => false,
+		setTimeout: (callback, delay) => {
+			timers.push({callback, delay});
+			return timers.length;
+		},
+		clearTimeout: () => {}
+	});
+
+	scheduler.schedule("c1", "m1", 0, 1, null, "historical");
+	scheduler.schedule("c1", "m2", 0, 1, null, "cached");
+	scheduler.schedule("c1", "m3", 0);
+	timers.shift().callback();
+	await Promise.resolve();
+
+	assert.equal(metas.length, 1, "one transaction covers all three requests");
+	assert.deepEqual(metas[0].meta.sources, {historical: 1, cached: 1, live: 1}, "untagged requests default to the live lane");
+});
+
+test("a bounded retry re-enters the next transaction tagged as retry", async () => {
+	// Retries have their own cadence (450ms, max 3 attempts); the diagnostics must
+	// separate them from fresh commits or a retry storm reads as a live storm.
+	const timers = [];
+	const metas = [];
+	const scheduler = createDisplayRepaintScheduler({
+		renderMessages: (messageIds, meta) => {
+			metas.push(meta);
+			return Promise.resolve(metas.length === 1 ? {retryIds: messageIds} : {confirmedIds: messageIds});
+		},
+		canRepaintNow: () => true,
+		isViewingHistory: () => false,
+		setTimeout: (callback, delay) => {
+			timers.push({callback, delay});
+			return timers.length;
+		},
+		clearTimeout: () => {}
+	});
+
+	scheduler.schedule("c1", "m1", 0, 1, null, "historical");
+	timers.shift().callback();
+	await Promise.resolve();
+	timers.shift().callback();
+	await Promise.resolve();
+
+	assert.deepEqual(metas[1].sources, {retry: 1});
+});
+
+test("lifecycle full repaints are counted for the settings diagnostics", () => {
+	// Path B (settings close, engine switch, channel enable) rebuilds outside the
+	// adapter, so its rebuilds were invisible to the repaint counters - the exact
+	// blind spot the 2026-08-19 cadence audit hit.
+	const timers = [];
+	let repaints = 0;
+	const scheduler = createDisplayRepaintScheduler({
+		renderMessages: () => Promise.resolve({}),
+		canRepaintNow: () => true,
+		isViewingHistory: () => false,
+		repaintAll: () => {repaints++;},
+		setTimeout: (callback, delay) => {
+			timers.push({callback, delay});
+			return timers.length;
+		},
+		clearTimeout: () => {}
+	});
+
+	scheduler.scheduleFullRepaint();
+	assert.equal(repaints, 1);
+	assert.equal(scheduler.getDiagnostics().fullRepaints, 1);
+
+	scheduler.scheduleFullRepaint({batched: true});
+	timers.shift().callback();
+	assert.equal(repaints, 2);
+	assert.equal(scheduler.getDiagnostics().fullRepaints, 2);
+});

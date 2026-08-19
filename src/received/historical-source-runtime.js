@@ -107,7 +107,10 @@ function createHistoricalSourceRuntime({
 			if (accepted) finishHistoricalTranslationSnapshot(channelId);
 			else {
 				const failedCount = getFailedHistoricalTranslationCount(channelId);
-				updateLoadedAutoTranslationStatus({active: false, collecting: false, done: true, channelId, batch: getCurrentBatchNumber(channelId), total: result.total || 0, processed: 0, displayed: 0, skipped: 0, failed: 0, retryable: failedCount, aiDropped: 0});
+				// A scan that accepted nothing reports total 0 so the capsule renders
+				// its "no pending messages" state; claiming the scanned count as the
+				// total painted a fake 0/N failure (docs/product.md).
+				updateLoadedAutoTranslationStatus({active: false, collecting: false, done: true, channelId, batch: getCurrentBatchNumber(channelId), total: 0, processed: 0, displayed: 0, skipped: 0, failed: 0, retryable: failedCount, aiDropped: 0});
 			}
 			return Object.assign({accepted}, result);
 		}

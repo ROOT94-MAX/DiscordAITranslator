@@ -246,7 +246,9 @@ function createLiveTranslationQueue({
 	// request is finished, so a failed commit cannot strand a loading indicator.
 	function completeCommit(queueItem, channelId, commit) {
 		const finish = outcome => {
-			if (outcome && outcome.deferredIds && outcome.deferredIds.length) scheduleDisplayFlush(channelId, queueItem.message.id);
+			// The flush carries its lane so the rebuild diagnostics can separate cache
+			// replays from fresh provider translations (cadence audit 2026-08-19).
+			if (outcome && outcome.deferredIds && outcome.deferredIds.length) scheduleDisplayFlush(channelId, queueItem.message.id, queueItem.cachedTranslation ? "cached" : "live");
 			requestRegistry.finishRequest(queueItem.liveRequest);
 		};
 		return Promise.resolve(commit).then(finish, _ => finish(null));

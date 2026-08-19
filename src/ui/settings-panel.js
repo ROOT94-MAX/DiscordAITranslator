@@ -53,9 +53,26 @@ function renderSettingsPanel(plugin, collapseStates = {}, dependencies = {}) {
 			// at runtime. The build identity line lets anyone compare the loaded plugin
 			// against the repository artifact in one glance.
 			const buildId = plugin.getBuildId && plugin.getBuildId();
+			// Repaint-path diagnostics (2026-08-19 flicker audit): shows whether display
+			// transactions run through the atomic single-task rebuild or silently fall
+			// back to the two-flush rerenderAll, so a user screenshot answers the
+			// question no non-technical report can.
+			let rebuildStats = null;
+			try {rebuildStats = plugin.ensureReceivedDisplayRuntime && plugin.ensureReceivedDisplayRuntime().getRebuildStats();}
+			catch (err) {rebuildStats = null;}
+			let fullRepaints = 0;
+			try {fullRepaints = plugin.ensureReceivedDisplayRepaintScheduler ? plugin.ensureReceivedDisplayRepaintScheduler().getDiagnostics().fullRepaints : 0;}
+			catch (err) {fullRepaints = 0;}
+			// Rebuild attribution (cadence audit 2026-08-19): the per-lane counts answer
+			// WHICH lane rebuilds - a user screenshot of this line arbitrates between
+			// live commits, cache replays, historical batches, manual paints and retries.
+			const sourceLabels = [["live", "live"], ["cached", "cache"], ["historical", "hist"], ["manual", "man"], ["retry", "retry"], ["preview", "prev"], ["other", "other"]];
+			const bySource = rebuildStats && rebuildStats.rebuildsBySource || {};
+			const sourceText = sourceLabels.filter(([key]) => bySource[key]).map(([key, label]) => `${label} ${bySource[key]}`).join(", ");
+			const rebuildStatsText = rebuildStats ? ` · repaint ${rebuildStats.live || 0}L/${rebuildStats.rebuild || 0}R${sourceText ? ` (${sourceText})` : ""}${fullRepaints ? ` · full ${fullRepaints}` : ""}` : "";
 			settingsItems.push(BDFDB.ReactUtils.createElement("div", {
 				className: "translator-settings-note",
-				children: `v${plugin.getVersion()}${buildId ? ` · build ${buildId}` : ""}`
+				children: `v${plugin.getVersion()}${buildId ? ` · build ${buildId}` : ""}${rebuildStatsText}`
 			}));
 			const recommendedEngines = ["microsoft", "googlecloud", "googleapi", "deepseek", "openai", "gemini", "oaicompat"];
 			const getSettingsPanelRoot = () => document.querySelector(".translator-settings-panel-root");
@@ -1299,7 +1316,6 @@ function renderSettingsPanel(plugin, collapseStates = {}, dependencies = {}) {
 						"sendOriginalMessage",
 						"useSpoilerInSentOriginal",
 						"showOriginalMessage",
-						"showOriginalDirectly",
 						"useSpoilerInReceivedOriginal",
 						"showOriginalInReplyPreview",
 					]),

@@ -213,3 +213,9 @@ test("the settings panel exposes the loaded backfill scope and limit controls", 
 	assert.match(source, /receivedAutoTranslateLoadedLimit/, "the panel must write the backfill limit");
 	assert.match(source, /getReceivedAutoTranslateLoadedLimit\(\)/, "the control reads the effective limit, not the raw stored value");
 });
+
+test("the settings panel exposes one received-original control, not a duplicate mode", () => {
+	const source = fs.readFileSync(path.resolve(__dirname, "..", "src", "ui", "settings-panel.js"), "utf8");
+	assert.match(source, /"showOriginalMessage"/);
+	assert.doesNotMatch(source, /showOriginalDirectly/);
+});

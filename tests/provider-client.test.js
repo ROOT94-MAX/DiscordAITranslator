@@ -151,6 +151,14 @@ test("the engine catalog stays mutable so iTranslate can cache its scraped key",
 	assert.equal(Object.keys(enginePortals).every(key => !!translationEngines[key]), true, "every portal names a real engine");
 });
 
+test("engine form placeholders never resemble live provider credentials", () => {
+	const secretShapes = [/^sk-[A-Za-z0-9_-]{20,}$/, /^AIza[0-9A-Za-z_-]{20,}$/];
+	for (const [engineKey, engine] of Object.entries(translationEngines)) {
+		if (!engine.key) continue;
+		assert.equal(secretShapes.some(pattern => pattern.test(engine.key)), false, `${engineKey} uses a descriptive placeholder, not a token-shaped fake secret`);
+	}
+});
+
 test("endpoints are coerced to the one path each adapter posts to", () => {
 	assert.equal(normalizeApiEndpoint("openai", "https://api.openai.com"), "https://api.openai.com/v1/responses");
 	assert.equal(normalizeApiEndpoint("openai", "https://api.openai.com/v1"), "https://api.openai.com/v1/responses");
@@ -488,6 +496,52 @@ test("Google's keyless endpoint carries its form verbatim and adopts the detecte
 	harness.respond(0, null, {statusCode: 200}, JSON.stringify({src: "fr", sentences: [{trans: "你"}, {}, {trans: "好"}]}));
 	assert.equal(translated, "你好");
 	assert.deepEqual(data.input, {id: "fr", name: "French", ownlang: "Francais", auto: true}, "the detected source is written back for the caller to render");
+});
+
+test("Google's keyless endpoint transports protected placeholders in a form it preserves", () => {
+	// Field reproduction 2026-08-20: Google returned 200 for the long message but
+	// silently dropped ⟦4⟧ (ANNOYING), so the strict protection guard rejected the
+	// otherwise valid translation. The adapter owns the reversible wire-only token.
+	const harness = createHarness();
+	let translated = null;
+	harness.client.googleApiTranslate(translationData({text: "Prompt editing is ⟦4⟧ with ⟦5⟧ parameters."}), value => {translated = value;});
+
+	const wireText = decodeURIComponent(harness.lastCall().options.form.q);
+	assert.equal(wireText, "Prompt editing is __DTA_4__ with __DTA_5__ parameters.");
+	harness.respond(0, null, {statusCode: 200}, JSON.stringify({src: "en", sentences: [{trans: "提示编辑是 __DTA_4__，使用 __DTA_5__ 参数。"}]}));
+	assert.equal(translated, "提示编辑是 ⟦4⟧，使用 ⟦5⟧ 参数。", "the internal placeholder shape is restored before the protection guard sees the result");
+});
+
+test("Google's keyless endpoint translates a long CJK message in bounded lossless requests", () => {
+	// The request transports q in the URL. A raw-character limit is insufficient:
+	// one CJK character expands to nine URI characters before the request helper
+	// serializes the form, which is why some Discord-length messages still failed
+	// after the first long-message patch.
+	const harness = createHarness({languages: {ja: {name: "Japanese", ownlang: "日本語"}}});
+	const source = Array.from({length: 24}, (_, index) => `第${index}段です。これは長い転送テスト本文です。`).join("\n\n");
+	const data = translationData({text: source, input: {id: "auto", name: "Auto", auto: true}});
+	let translated = null;
+	harness.client.googleApiTranslate(data, value => {translated = value;});
+
+	const sentChunks = [];
+	let requestIndex = 0;
+	while (translated === null) {
+		const call = harness.calls[requestIndex];
+		assert.ok(call, `chunk ${requestIndex} must be requested`);
+		assert.ok(call.options.form.q.length <= FREE_ENGINE_CHUNK_LIMIT, "the encoded q value, not the raw source length, is bounded");
+		sentChunks.push(decodeURIComponent(call.options.form.q));
+		harness.respond(requestIndex, null, {statusCode: 200}, JSON.stringify({
+			src: "ja",
+			sentences: [{trans: `译文${requestIndex}|`}]
+		}));
+		requestIndex++;
+		assert.ok(requestIndex < 100, "chunking must terminate");
+	}
+
+	assert.ok(requestIndex > 1, "the long message uses more than one bounded request");
+	assert.equal(sentChunks.join(""), source, "chunk boundaries do not drop or duplicate source text");
+	assert.equal(translated, Array.from({length: requestIndex}, (_, index) => `译文${index}|`).join(""));
+	assert.deepEqual(data.input, {id: "ja", name: "Japanese", ownlang: "日本語", auto: true}, "only the first chunk supplies source detection");
 });
 
 test("a rate-limited Google reply is distinguished from a dead one in the toast", () => {
@@ -1172,4 +1226,60 @@ test("deepseek requests ask for the non-thinking mode, other engines are untouch
 	const compat = createHarness({authKeys: {oaicompat: {key: "k", endpoint: "https://host.test/v1/chat/completions", model: "m"}}});
 	compat.client.translate("oaicompat", translationData(), () => {});
 	assert.equal(JSON.parse(compat.calls[0].options.body).thinking, undefined);
+});
+
+test("identical failure toasts within the dedup window collapse to one", async () => {
+	// 2026-08-19 report: a 26-message backfill is three chunks; a dead provider
+	// (quota exhausted) failed all three and the user got three identical popups.
+	// The same danger message repeats silently inside the window and speaks again
+	// after it, and a different message is never suppressed.
+	const harness = createHarness({authKeys: AI_AUTH});
+	for (let chunk = 0; chunk < 3; chunk++) {
+		const pending = harness.client.requestAiBatchTranslationDetailed("openai", preparedItems());
+		harness.respond(chunk, null, {statusCode: 401}, "bad credentials");
+		await pending;
+	}
+	assert.equal(harness.toasts.length, 1, "three identical chunk failures speak once");
+	assert.match(harness.toasts[0].message, /KEYOUTDATED/);
+
+	harness.advance(11000);
+	const later = harness.client.requestAiBatchTranslationDetailed("openai", preparedItems());
+	harness.respond(3, null, {statusCode: 401}, "bad credentials");
+	await later;
+	assert.equal(harness.toasts.length, 2, "after the window the same failure speaks again");
+
+	harness.client.googleApiTranslate(translationData(), () => {});
+	harness.respond(4, null, {statusCode: 429}, "");
+	assert.equal(harness.toasts.length, 3, "a different failure message inside the window is never suppressed");
+	assert.match(harness.toasts.at(-1).message, /HOURLY$/);
+});
+
+const {splitTextIntoTranslationChunks, FREE_ENGINE_CHUNK_LIMIT} = require("../src/providers/provider-client");
+
+test("splitTextIntoTranslationChunks is lossless and bounded", () => {
+	// Field 2026-08-19: long messages failed on the free engine because the whole
+	// text traveled in one request URL. Chunks must concatenate back exactly and
+	// each stay within the limit.
+	const shortText = "short message";
+	assert.deepEqual(splitTextIntoTranslationChunks(shortText, 100), [shortText]);
+
+	const paragraphs = Array.from({length: 30}, (_, index) => `Paragraph ${index} with some words in it.`).join("\n\n");
+	const chunks = splitTextIntoTranslationChunks(paragraphs, 200);
+	assert.ok(chunks.length > 1, "a long text splits");
+	assert.ok(chunks.every(chunk => chunk.length <= 200), "every chunk respects the limit");
+	assert.equal(chunks.join(""), paragraphs, "concatenation reproduces the exact input");
+
+	const sentenceSpaces = "First sentence. Second sentence! Third one? Fourth.";
+	assert.equal(splitTextIntoTranslationChunks(sentenceSpaces, 20).join(""), sentenceSpaces, "sentence-boundary splits keep the whitespace");
+
+	const oneGiantWord = "x".repeat(5000);
+	const hardChunks = splitTextIntoTranslationChunks(oneGiantWord, FREE_ENGINE_CHUNK_LIMIT);
+	assert.ok(hardChunks.every(chunk => chunk.length <= FREE_ENGINE_CHUNK_LIMIT));
+	assert.equal(hardChunks.join(""), oneGiantWord);
+
+	const nearBoundaryPlaceholder = `${"x".repeat(55)}__DTA_123__${"y".repeat(40)}`;
+	const placeholderChunks = splitTextIntoTranslationChunks(nearBoundaryPlaceholder, 60);
+	assert.equal(placeholderChunks.join(""), nearBoundaryPlaceholder);
+	assert.ok(placeholderChunks.some(chunk => chunk.includes("__DTA_123__")), "a hard cut never slices a transport placeholder in half");
+	assert.ok(placeholderChunks.every(chunk => !/__DTA_\d*$|^\d+__/.test(chunk)), "no chunk carries a placeholder fragment");
 });

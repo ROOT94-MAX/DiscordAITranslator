@@ -17,7 +17,7 @@ test("the defaults schema keeps its sections and the load-bearing values", () =>
 	const defaults = createPluginDefaults(FIXTURE);
 	assert.deepEqual(Object.keys(defaults), ["general", "choices", "filters", "exceptions", "prefixes", "engines"]);
 	assert.equal(defaults.general.translatedTextColor.value, "#7cc7ff");
-	assert.equal(defaults.general.showOriginalDirectly.value, true);
+	assert.equal(defaults.general.showOriginalDirectly, undefined, "the duplicate received-original mode is no longer a setting");
 	assert.equal(defaults.filters.receivedAutoTranslateScope.value, "new_only");
 	assert.equal(defaults.filters.receivedAutoTranslateLoadedLimit.value, "50");
 	assert.equal(defaults.filters.translationSimilarityThreshold.value, 0.9);

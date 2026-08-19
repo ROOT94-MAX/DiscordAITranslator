@@ -1,18 +1,52 @@
 const {createMessageStateStore} = require("./message-state-store");
 const {createTranslationDisplayController} = require("./translation-display-controller");
 const {createDiscordRenderAdapter} = require("./discord-render-adapter");
+const {createLiveRowRepaint} = require("./live-row-repaint");
+const {createFluxRowRepaint} = require("./flux-row-repaint");
+const {resolveFlushSync} = require("./atomic-chat-rebuild");
 
 function createDisplayRuntime(dependencies) {
 	// The compile-time constant strips the journal implementation from release bundles;
 	// node test runs see an undefined identifier and disable the journal the same way.
 	const debugEnabled = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__;
 	const journal = debugEnabled ? require("../diagnostics/display-transition-journal").createDisplayTransitionJournal({enabled: true}) : null;
-	const store = createMessageStateStore({journal});
-	const renderAdapter = createDiscordRenderAdapter(dependencies);
-	const controller = createTranslationDisplayController({store, renderAdapter, journal});
+	const store = createMessageStateStore({journal, onTranslationDisplayed: dependencies.onTranslationDisplayed});
+	// Per-row repaint, two routes under one adapter slot. The instance registry only
+	// works on class-component clients (this client's reading is 0L - BDFDB hands
+	// function components a synthetic instance); the flux route is the one the
+	// 2026-08-19 experiment verified on this client: a no-op MESSAGE_UPDATE merges
+	// cleanly and the row re-renders through Discord's own store path. The adapter's
+	// DOM confirm still owns the verdict either way.
+	const liveRowRepaint = createLiveRowRepaint({
+		reactUtils: dependencies.BDFDB && dependencies.BDFDB.ReactUtils,
+		resolveFlushSync: () => resolveFlushSync(dependencies.BDFDB && dependencies.BDFDB.ReactUtils)
+	});
+	const fluxRowRepaint = createFluxRowRepaint({
+		resolveDispatcher: dependencies.resolveDispatcher || (() => null),
+		getStoreMessage: dependencies.getStoreMessage || (() => null),
+		getGuildId: dependencies.getGuildId || (() => null)
+	});
+	const rowRepaint = {
+		repaintRows(messageIds, context) {
+			const attempted = new Set(liveRowRepaint.repaintRows(messageIds));
+			const remaining = messageIds.filter(messageId => !attempted.has(String(messageId)));
+			if (remaining.length) for (const messageId of fluxRowRepaint.repaintRows(remaining, context || {})) attempted.add(messageId);
+			return [...attempted];
+		}
+	};
+	const renderAdapter = createDiscordRenderAdapter(Object.assign({}, dependencies, {liveRowRepaint: rowRepaint}));
+	// The preview-wave coalescer needs a managed timer and the repaint gate; absent
+	// wiring falls back to the controller's own defaults (globals, always-open gate).
+	const controller = createTranslationDisplayController({store, renderAdapter, journal, setTimeout: dependencies.setTimeout, canRepaintNow: dependencies.canRepaintNow});
 
 	return Object.freeze({
 		getTransitionJournal: () => journal,
+		// Settings-panel diagnostics: how many transactions painted per-row (live) or
+		// through the whole-layer rebuild, with per-lane rebuild attribution.
+		getRebuildStats: () => renderAdapter.getRebuildStats(),
+		// Called from the message-content render hook on every content render, so the
+		// live path always holds the newest instance for each mounted row.
+		recordContentInstance: (messageId, instance) => liveRowRepaint.recordContentInstance(messageId, instance),
 		captureSource: snapshot => store.captureSource(snapshot),
 		setChannelGeneration: (channelId, generation) => store.setChannelGeneration(channelId, generation),
 		getChannelGeneration: channelId => store.getChannelGeneration(channelId),
@@ -21,7 +55,7 @@ function createDisplayRuntime(dependencies) {
 		releasePending: request => store.releasePending(request),
 		commitMessageResult: (result, options) => controller.commitMessageResult(result, options),
 		commitHistoricalBatch: results => controller.commitHistoricalBatch(results),
-		renderMessages: messageIds => controller.renderMessages(messageIds),
+		renderMessages: (messageIds, meta) => controller.renderMessages(messageIds, meta),
 		refreshDisplayTransaction: request => controller.refreshDisplayTransaction(request),
 		deleteMessage: (messageId, channelId, options) => controller.deleteMessage(messageId, channelId, options),
 		restoreMessage: (messageId, options) => controller.restoreMessage(messageId, options),

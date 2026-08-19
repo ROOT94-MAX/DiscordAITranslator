@@ -29,11 +29,20 @@ function createHarness({
 	rerenderError = null,
 	rerenderScrollTop = null,
 	stopDuringUpdate = false,
-	startInactive = false
+	startInactive = false,
+	// "paint": the atomic rebuild succeeds and paints like a rebuild would;
+	// "reject": it reports false so the adapter must fall back to rerenderAll;
+	// null: not injected - the production default, which cannot run without
+	// ReactDOM.flushSync and therefore also falls back.
+	atomicRebuildBehavior = null,
+	// "paint": the live per-row repaint paints every requested row;
+	// "noop": rows have no usable instances, so nothing is attempted;
+	// null: not injected.
+	liveRepaintBehavior = null
 } = {}) {
 	const visibleRevisions = new Map(alreadyPainted);
 	const scroller = {scrollTop: 240};
-	const calls = {animationFrames: 0, capture: 0, forceUpdate: 0, rerenderAll: 0, rerenderArgs: [], restored: 0};
+	const calls = {animationFrames: 0, capture: 0, forceUpdate: 0, rerenderAll: 0, rerenderArgs: [], restored: 0, restoredNow: 0, atomicRebuilds: 0, liveRepaints: 0, sequence: []};
 	const nodeDefinitions = messageNodeDefinitions || availableMessageIds.map(messageId => ({
 		key: messageId,
 		id: `chat-messages-${messageId}`,
@@ -93,11 +102,35 @@ function createHarness({
 			}
 		}
 	};
+	const paintLikeRebuild = () => {
+		if (confirmOnRebuild) for (const [messageId, revision] of confirmRevisions) {
+			if (nodeDefinitions.some(definition => definition.key === messageId)) visibleRevisions.set(messageId, revision);
+		}
+	};
+	const atomicChatRebuild = atomicRebuildBehavior == null ? null : {
+		rebuildOnce() {
+			calls.atomicRebuilds++;
+			if (atomicRebuildBehavior === "reject") return false;
+			paintLikeRebuild();
+			return true;
+		}
+	};
+	const liveRowRepaint = liveRepaintBehavior == null ? null : {
+		repaintRows(messageIds) {
+			if (liveRepaintBehavior === "noop") return [];
+			calls.liveRepaints++;
+			paintLikeRebuild();
+			return messageIds.slice();
+		}
+	};
 	const adapter = createDiscordRenderAdapter({
 		BDFDB,
 		document,
+		atomicChatRebuild,
+		liveRowRepaint,
 		requestAnimationFrame: callback => {
 			calls.animationFrames++;
+			calls.sequence.push("frame");
 			callback();
 		},
 		getUserScrollIntentSequence: () => userIntentSequence,
@@ -109,6 +142,12 @@ function createHarness({
 		},
 		restoreScrollState: state => {
 			calls.restored++;
+			calls.sequence.push("restoredDeferred");
+			scroller.scrollTop = state.scrollTop;
+		},
+		restoreScrollStateNow: state => {
+			calls.restoredNow++;
+			calls.sequence.push("restoreNow");
 			scroller.scrollTop = state.scrollTop;
 		}
 	});
@@ -373,4 +412,89 @@ test("the scroll capture receives the transaction's message ids", async () => {
 	const {adapter, calls} = createHarness();
 	await adapter.refreshMessages(request);
 	assert.deepEqual(calls.captureContext, {messageIds: ["m1", "m2"]});
+});
+
+
+
+
+
+
+test("a live row repaint satisfies the transaction with no rebuild at all", async () => {
+	// The architectural fix for the 79A/0F field reading (2026-08-19): translated rows
+	// repaint themselves through their registered content instances, so the common
+	// case costs ZERO whole-layer rebuilds - no composer remount (icon flicker), no
+	// scroll restore dance (bounce).
+	const {adapter, calls} = createHarness({liveRepaintBehavior: "paint"});
+	const outcome = await adapter.refreshMessages(request);
+
+	assert.deepEqual(outcome.confirmedIds, ["m1", "m2"]);
+	assert.equal(calls.liveRepaints, 1, "the live path ran once for the batch");
+	assert.equal(calls.rerenderAll, 0, "no whole-layer rebuild when every row confirmed live");
+	assert.equal(calls.restoredNow, 1, "the live path re-applies the anchor synchronously");
+	const stats = adapter.getRebuildStats();
+	assert.equal(stats.live, 1);
+	assert.equal(stats.rebuild, 0);
+});
+
+test("rows the live repaint cannot confirm fall through to the rebuild in the same transaction", async () => {
+	const {adapter, calls} = createHarness({liveRepaintBehavior: "noop"});
+	const outcome = await adapter.refreshMessages(request);
+
+	assert.deepEqual(outcome.confirmedIds, ["m1", "m2"]);
+	assert.equal(calls.rerenderAll, 1, "the rebuild still owns rows the live path could not paint");
+	const stats = adapter.getRebuildStats();
+	assert.equal(stats.live, 0);
+	assert.equal(stats.rebuild, 1);
+});
+
+test("a reply-preview host still requires the rebuild, so the live path steps aside", async () => {
+	const {adapter, calls} = createHarness({liveRepaintBehavior: "paint"});
+	const outcome = await adapter.refreshMessages(Object.assign({}, request, {ownerMessageIds: ["m1"]}));
+
+	assert.equal(calls.liveRepaints, 0, "preview hosts have no per-row paint yet");
+	assert.equal(calls.rerenderAll, 1);
+	assert.deepEqual(outcome.confirmedIds, ["m1", "m2"]);
+});
+
+test("the rebuild step is BDFDB's debounced rerenderAll again - the synchronous atomic rebuild is retired", async () => {
+	// Field verdict (2026-08-19 evening, "0L/56A/0F" + user report): the atomic
+	// double-flush ran synchronously once per transaction with no cross-call
+	// debounce, so message streams turned into per-message heavyweight rebuilds -
+	// the composer icon blinked on every message and scrolling stuttered. BDFDB's
+	// rerenderAll defers and merges; the field says it feels strictly better.
+	const {adapter, calls} = createHarness({atomicRebuildBehavior: "paint"});
+	const outcome = await adapter.refreshMessages(request);
+
+	assert.equal(calls.atomicRebuilds, 0, "the adapter must not run the synchronous atomic rebuild");
+	assert.equal(calls.rerenderAll, 1, "the rebuild goes through BDFDB's deferred, self-merging primitive");
+	assert.deepEqual(outcome.confirmedIds, ["m1", "m2"]);
+	const stats = adapter.getRebuildStats();
+	assert.equal(stats.live, 0);
+	assert.equal(stats.rebuild, 1);
+});
+
+test("a rebuild attributes itself to the transaction's trigger sources", async () => {
+	// Cadence audit 2026-08-19: the settings counters must answer WHICH lane is
+	// rebuilding (live, cached, historical, manual, retry), not just how often. The
+	// transaction carries its source counts and the adapter books the rebuild once
+	// per source present, plus a small ring for later inspection.
+	const {adapter} = createHarness({liveRepaintBehavior: "noop"});
+	await adapter.refreshMessages(Object.assign({}, request, {sources: {historical: 2}}));
+
+	const stats = adapter.getRebuildStats();
+	assert.equal(stats.rebuild, 1);
+	assert.deepEqual(stats.rebuildsBySource, {historical: 1}, "one transaction books once per source present");
+	assert.equal(stats.recentRebuilds.length, 1);
+	assert.equal(stats.recentRebuilds[0].size, 2);
+	assert.deepEqual(stats.recentRebuilds[0].sources, {historical: 2});
+	assert.equal(typeof stats.recentRebuilds[0].at, "number");
+});
+
+test("a transaction the live path satisfies attributes no rebuild source", async () => {
+	const {adapter} = createHarness({liveRepaintBehavior: "paint"});
+	await adapter.refreshMessages(Object.assign({}, request, {sources: {live: 2}}));
+
+	const stats = adapter.getRebuildStats();
+	assert.deepEqual(stats.rebuildsBySource, {});
+	assert.deepEqual(stats.recentRebuilds, []);
 });

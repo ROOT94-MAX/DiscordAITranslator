@@ -34,6 +34,13 @@ function hasOwn(object, key) {
 	return !!object && Object.prototype.hasOwnProperty.call(object, key);
 }
 
+// Shallow clone that keeps the prototype, so a patched forward snapshot still
+// carries whatever record methods Discord's renderer calls on it.
+function cloneWithPrototype(source) {
+	try {return Object.assign(Object.create(Object.getPrototypeOf(source) || null), source);}
+	catch (error) {return Object.assign({}, source);}
+}
+
 function normalizeEmbedText(plugin, value) {
 	if (plugin && typeof plugin.normalizeExtractedMessageText == "function") return plugin.normalizeExtractedMessageText(value == null ? "" : value);
 	return value == null ? "" : String(value);
@@ -104,28 +111,133 @@ function createTranslationDisplayLogic({BDFDB} = {}) {
 			}
 			return String(view.content == null ? "" : view.content);
 		},
+		// A forwarded message (已转发) has no content of its own - the body lives in
+		// the forward snapshot (probe evidence 2026-08-19, translator-forwarded-
+		// message-probe.json: snapshot message has content but no id and no author).
+		// Detection requires the OWN content to be empty, so an ordinary message that
+		// merely references another never takes this path.
+		getForwardedMessageSnapshots(_plugin, message) {
+			if (!message) return null;
+			if (typeof message.content == "string" && message.content.trim()) return null;
+			const snapshots = message.messageSnapshots || message.message_snapshots;
+			if (!Array.isArray(snapshots) || !snapshots.length) return null;
+			const snapshotMessage = snapshots[0] && snapshots[0].message;
+			if (!snapshotMessage || typeof snapshotMessage.content != "string" || !snapshotMessage.content.trim()) return null;
+			return snapshots;
+		},
+		isForwardContainerMessage(plugin, message) {
+			return !!translationDisplayLogic.getForwardedMessageSnapshots(plugin, message);
+		},
+		// The body a reader actually sees: the forward snapshot's content for a
+		// forward, the message's own content otherwise. Every echo check and every
+		// paint must go through this pair, or a forward branch goes blind (the
+		// manual translate/untranslate blindness, field 2026-08-19 night).
+		getStreamBodyContent(plugin, message) {
+			const forwardSnapshots = translationDisplayLogic.getForwardedMessageSnapshots(plugin, message);
+			return forwardSnapshots ? forwardSnapshots[0].message.content : message && message.content;
+		},
+		getStreamTranslationRenderContent(plugin, message, translation) {
+			if (!translation) return "";
+			const normalized = plugin.normalizeStoredTranslationData(translation) || translation;
+			const translatedContent = normalized.translatedContent != null && normalized.translatedContent !== "" ? normalized.translatedContent : normalized.content;
+			return translationDisplayLogic.buildReceivedDisplayContent(plugin, String(translatedContent == null ? "" : translatedContent), normalized.originalContent || "");
+		},
+		// Forward-aware clone of a stream message with the body text painted in the
+		// place the renderer reads it. Returns null when nothing needs to change.
+		cloneStreamMessageWithBody(plugin, streamContent, bodyText) {
+			const forwardSnapshots = translationDisplayLogic.getForwardedMessageSnapshots(plugin, streamContent);
+			if (forwardSnapshots) {
+				if (String(forwardSnapshots[0].message.content) === bodyText) return null;
+				const clonedMessage = new BDFDB.DiscordObjects.Message(streamContent);
+				// The Message constructor is not guaranteed to carry the forward fields;
+				// losing messageReference would break the forward frame itself.
+				for (const key of ["messageSnapshots", "message_snapshots", "messageReference", "message_reference"]) {
+					if (streamContent[key] != null && clonedMessage[key] == null) clonedMessage[key] = streamContent[key];
+				}
+				const patchedEntry = cloneWithPrototype(forwardSnapshots[0]);
+				patchedEntry.message = cloneWithPrototype(forwardSnapshots[0].message);
+				patchedEntry.message.content = bodyText;
+				clonedMessage[streamContent.messageSnapshots ? "messageSnapshots" : "message_snapshots"] = [patchedEntry].concat(forwardSnapshots.slice(1));
+				return clonedMessage;
+			}
+			if (streamContent.content === bodyText) return null;
+			const clonedMessage = new BDFDB.DiscordObjects.Message(streamContent);
+			clonedMessage.content = bodyText;
+			return clonedMessage;
+		},
+		// The forward-aware replacement for the legacy `stream.content.content = text`
+		// writes: forwards need a snapshot clone, ordinary messages keep the direct
+		// write the legacy branches always had.
+		paintStreamBody(plugin, stream, bodyText) {
+			if (!stream || !stream.content) return;
+			const forwardSnapshots = translationDisplayLogic.getForwardedMessageSnapshots(plugin, stream.content);
+			if (!forwardSnapshots) {
+				stream.content.content = bodyText;
+				return;
+			}
+			const clonedMessage = translationDisplayLogic.cloneStreamMessageWithBody(plugin, stream.content, bodyText);
+			if (clonedMessage) stream.content = clonedMessage;
+		},
 		applyReceivedDisplayViewToStream(plugin, stream, view) {
 			if (!stream || !stream.content || !view) return;
-			const displayContent = translationDisplayLogic.getReceivedDisplayViewRenderContent(plugin, view);
+			const displayContent = view.translated && view.translation
+				? translationDisplayLogic.getStreamTranslationRenderContent(plugin, stream.content, view.translation)
+				: translationDisplayLogic.getReceivedDisplayViewRenderContent(plugin, view);
 			const sourceEmbeds = !view.translated && view.source && Array.isArray(view.source.embeds) ? view.source.embeds : null;
 			const currentEmbeds = Array.isArray(stream.content.embeds) ? stream.content.embeds : [];
 			const restoreEmbeds = !!sourceEmbeds && (currentEmbeds.length !== sourceEmbeds.length || sourceEmbeds.some((sourceEmbed, index) => !embedProjectionMatches(plugin, currentEmbeds[index], sourceEmbed)));
-			if (stream.content.content === displayContent && !restoreEmbeds) return;
-			const clonedMessage = new BDFDB.DiscordObjects.Message(stream.content);
-			clonedMessage.content = displayContent;
+			let clonedMessage = translationDisplayLogic.cloneStreamMessageWithBody(plugin, stream.content, displayContent);
+			if (!clonedMessage && !restoreEmbeds) return;
+			if (!clonedMessage) {
+				clonedMessage = new BDFDB.DiscordObjects.Message(stream.content);
+				for (const key of ["messageSnapshots", "message_snapshots", "messageReference", "message_reference"]) {
+					if (stream.content[key] != null && clonedMessage[key] == null) clonedMessage[key] = stream.content[key];
+				}
+			}
 			if (restoreEmbeds) clonedMessage.embeds = sourceEmbeds.map((sourceEmbed, index) => restoreEmbedFromSource(currentEmbeds[index], sourceEmbed));
 			stream.content = clonedMessage;
 		},
+		applyReceivedDisplayViewToContent(plugin, e, view) {
+			if (!e || !e.returnvalue || !e.returnvalue.props) return;
+			plugin.cleanupInjectedMessageChildren(plugin.ensureElementChildrenArray(e.returnvalue));
+			translationDisplayLogic.clearTranslatedRenderDecorations(plugin, e);
+			if (translationDisplayLogic.isForwardContainerMessage(plugin, e.instance && e.instance.props && e.instance.props.message)) {
+				if (view) e.returnvalue.props["data-translator-revision"] = String(view.revision);
+				else delete e.returnvalue.props["data-translator-revision"];
+				return;
+			}
+			if (!view) {
+				delete e.returnvalue.props["data-translator-revision"];
+				return;
+			}
+			e.returnvalue.props["data-translator-revision"] = String(view.revision);
+			if (view.translated && view.translation) {
+				if (plugin.shouldProtectWrappedTextForPlace(MESSAGE_DIRECTIONS.RECEIVED)) e.returnvalue.props.children = plugin.highlightProtectedWrappedTextInNode(e.returnvalue.props.children, view.messageId);
+				if (plugin.settings.general.highlightTranslatedMessages) e.returnvalue.props.className = BDFDB.DOMUtils.formatClassName(e.returnvalue.props.className, "translator-translated-message");
+				e.returnvalue.props.style = Object.assign({}, e.returnvalue.props.style, {
+					"--translator-accent-color": plugin.getTranslatedTextColor(),
+					"--translator-text-color": plugin.getTranslatedTextColor()
+				});
+				const watermarkNode = translationDisplayLogic.createTranslationWatermarkNode(plugin, view.translation, "translator-translated-watermark");
+				if (watermarkNode) plugin.ensureElementChildrenArray(e.returnvalue).push(watermarkNode);
+				return;
+			}
+			if (view.showLoading) plugin.ensureElementChildrenArray(e.returnvalue).push(BDFDB.ReactUtils.createElement("span", {
+				key: "translator-translation-loading",
+				className: "translator-translation-loading",
+				"aria-label": plugin.isChineseUiLanguage() ? "正在翻译" : "Translating"
+			}));
+		},
 		buildReceivedDisplayContent(plugin, translatedContent, originalContent, forceInlineOriginal = false) {
 			let content = (translatedContent || "").trim();
-			const shouldInlineOriginal = !!(originalContent && (forceInlineOriginal || plugin.settings.general.showOriginalMessage && !plugin.settings.general.showOriginalDirectly));
+			const shouldInlineOriginal = !!(originalContent && (forceInlineOriginal || plugin.settings.general.showOriginalMessage));
 			if (shouldInlineOriginal) content += plugin.formatOriginalTextForMessage(originalContent, plugin.shouldUseSpoilerInReceivedOriginal());
 			return content;
 		},
 		refreshTranslationDisplay(plugin, translation) {
 			if (!translation) return null;
 			translation = Object.assign(translation, plugin.normalizeStoredTranslationData(translation));
-			const inlineOriginalBySetting = !!(translation.originalContent && plugin.settings.general.showOriginalMessage && !plugin.settings.general.showOriginalDirectly);
+			const inlineOriginalBySetting = !!(translation.originalContent && plugin.settings.general.showOriginalMessage);
 			translation.content = translationDisplayLogic.buildReceivedDisplayContent(plugin, translation.translatedContent || translation.content, translation.originalContent, false);
 			translation.contentIncludesOriginal = inlineOriginalBySetting;
 			return translation;
@@ -317,6 +429,13 @@ function createTranslationDisplayLogic({BDFDB} = {}) {
 		},
 		prepareMessageContentDisplay(plugin, e) {
 			let message = e.instance.props.message;
+			// Every content render registers its live instance: a later translation
+			// commit can then repaint exactly this row (adapter live path, 2026-08-19)
+			// instead of rebuilding the whole chat layer.
+			if (message && message.id) {
+				try {plugin.ensureReceivedDisplayRuntime().recordContentInstance(message.id, e.instance);}
+				catch (err) {}
+			}
 			const channelId = plugin.getMessageChannelId(message);
 			let translation = translationDisplayLogic.getActiveMessageTranslation(plugin, message, channelId);
 			if (!translation && plugin.ensureReceivedDisplayRuntime().hasSourceArchive(message.id)) {
@@ -328,10 +447,12 @@ function createTranslationDisplayLogic({BDFDB} = {}) {
 			// on screen because the content component can re-render without a stream pass.
 			if (!translation && message.id) {
 				const state = plugin.ensureReceivedDisplayRuntime().getDisplayState(message.id);
+				const visibleBody = translationDisplayLogic.getStreamBodyContent(plugin, message);
 				if (state && state.status == "cancelled" && state.restoredTranslation && state.source && state.source.content
-					&& message.content !== state.source.content
-					&& plugin.matchesPaintedTranslationContent(message.content, state.restoredTranslation)) {
-					message.content = state.source.content;
+					&& visibleBody !== state.source.content
+					&& plugin.matchesPaintedTranslationContent(visibleBody, state.restoredTranslation, message)) {
+					const restoredMessage = translationDisplayLogic.cloneStreamMessageWithBody(plugin, message, state.source.content);
+					if (restoredMessage) message = e.instance.props.message = restoredMessage;
 				}
 			}
 			if (!translation) translation = translationDisplayLogic.resolveLoadedMessageContentTranslation(plugin, message, channelId);
@@ -376,6 +497,10 @@ function createTranslationDisplayLogic({BDFDB} = {}) {
 			let children = plugin.ensureElementChildrenArray(e.returnvalue);
 			plugin.cleanupInjectedMessageChildren(children);
 			translationDisplayLogic.clearTranslatedRenderDecorations(plugin, e);
+			// The parent message of a forward has no body; styling it creates the empty
+			// translated rectangle seen above the native "Forwarded" header. The nested
+			// snapshot clone owns body, watermark and colour instead.
+			if (translationDisplayLogic.isForwardContainerMessage(plugin, message)) return;
 			const translationPlace = plugin.isOwnMessage(message) ? MESSAGE_DIRECTIONS.SENT : MESSAGE_DIRECTIONS.RECEIVED;
 			if (translation && plugin.shouldProtectWrappedTextForPlace(translationPlace)) {
 				e.returnvalue.props.children = plugin.highlightProtectedWrappedTextInNode(e.returnvalue.props.children, message.id);
@@ -390,7 +515,6 @@ function createTranslationDisplayLogic({BDFDB} = {}) {
 			if (watermarkNode) children.push(watermarkNode);
 			const loadingNode = !translation && translationDisplayLogic.createTranslationLoadingNode(plugin, message);
 			if (loadingNode) children.push(loadingNode);
-			if (translation && translation.originalContent && plugin.settings.general.showOriginalMessage && plugin.settings.general.showOriginalDirectly && !translation.contentIncludesOriginal) children.push(plugin.createOriginalMessageBlock(translation.originalContent));
 		},
 		processEmbed(plugin, e) {
 			if (!e.instance.props.embed || !e.instance.props.embed.message_id) return;

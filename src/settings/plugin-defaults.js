@@ -8,7 +8,6 @@ function createPluginDefaults({messageTypes, languageTypes, defaultLanguages}) {
 			interfaceLanguage:		{value: "system", 	popout: false},
 			sendOriginalMessage:		{value: false, 	popout: false},
 			showOriginalMessage:		{value: false, 	popout: false},
-			showOriginalDirectly:		{value: true, 	popout: false},
 			showOriginalInReplyPreview:	{value: false, 	popout: false},
 			useSpoilerInSentOriginal:	{value: false, 	popout: false},
 			useSpoilerInReceivedOriginal:	{value: false, 	popout: false},
