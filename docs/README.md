@@ -2,6 +2,8 @@
 
 This directory contains the canonical project documentation.
 
+Project overview: [English](../README.md) | [简体中文](../README.zh-CN.md)
+
 ## Reading Order
 
 1. [Product behavior](product.md)
