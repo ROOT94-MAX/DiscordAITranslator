@@ -189,7 +189,11 @@ test("message action translator button remains usable while another translation 
 });
 
 test("manual message controls do not use the global translating gate", () => {
-	const source = fs.readFileSync(path.resolve(__dirname, "..", "src", "legacy", "runtime.js"), "utf8");
+	// The manual controls live in the runtime and, since display-unification 5d,
+	// in the context-menu wiring module; the contract covers both homes.
+	const source = ["src/legacy/runtime.js", "src/ui/context-menu-wiring.js"]
+		.map(file => fs.readFileSync(path.resolve(__dirname, "..", ...file.split("/")), "utf8"))
+		.join("\n");
 	const manualCalls = [...source.matchAll(/translateMessage\([^\n]+\{manual: true, independentOfTextAreaSwitch: true[^\n]+/g)].map(match => match[0]);
 
 	assert.equal(manualCalls.length >= 3, true);
@@ -208,4 +212,10 @@ test("the settings panel exposes the loaded backfill scope and limit controls", 
 	assert.match(source, /receivedAutoTranslateScope/, "the panel must write the backfill scope");
 	assert.match(source, /receivedAutoTranslateLoadedLimit/, "the panel must write the backfill limit");
 	assert.match(source, /getReceivedAutoTranslateLoadedLimit\(\)/, "the control reads the effective limit, not the raw stored value");
+});
+
+test("the settings panel exposes one received-original control, not a duplicate mode", () => {
+	const source = fs.readFileSync(path.resolve(__dirname, "..", "src", "ui", "settings-panel.js"), "utf8");
+	assert.match(source, /"showOriginalMessage"/);
+	assert.doesNotMatch(source, /showOriginalDirectly/);
 });

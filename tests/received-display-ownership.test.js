@@ -93,3 +93,23 @@ test("the extracted live queue cannot reach display state at all", () => {
 	assert.doesNotMatch(queueSource, FULL_LIST_REPAINT);
 	assert.doesNotMatch(queueSource, LEGACY_WHOLE_MESSAGE_WRITER);
 });
+
+test("the translation pipeline repaints per message, never the whole list", () => {
+	// Display-unification 5a: after the manual paint joined the transaction chain,
+	// no pipeline path may fall back to the full-list repaint.
+	const pipelineSource = fs.readFileSync(path.resolve(__dirname, "..", "src", "orchestrator", "translation-pipeline.js"), "utf8");
+	assert.doesNotMatch(pipelineSource, FULL_LIST_REPAINT);
+	assert.match(pipelineSource, /scheduleReceivedDisplayFlush/);
+});
+
+test("display-transaction scroll restore honors the manual translation anchor", () => {
+	// The legacy full-list path anchored the clicked message during manual repaints;
+	// the transaction path must keep that anchor or manual translation jumps the view.
+	// The choice lives in the viewport store; the runtime wiring must call it.
+	const wiring = methodSlice("runtime", "ensureReceivedDisplayRuntime", "resetReceivedDisplayRuntime");
+	assert.match(wiring, /captureDisplayTransactionScrollState\(context\)/);
+	assert.match(wiring, /restoreDisplayTransactionScrollState\(/);
+	const viewportSource = fs.readFileSync(path.resolve(__dirname, "..", "src", "viewport", "message-viewport-store.js"), "utf8");
+	const captureImplementation = viewportSource.slice(viewportSource.indexOf("captureDisplayTransactionScrollState"), viewportSource.indexOf("restoreDisplayTransactionScrollState"));
+	assert.match(captureImplementation, /getActiveManualScrollAnchor\(\)/, "the manual anchor must win over the offset capture");
+});

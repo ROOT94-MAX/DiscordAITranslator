@@ -12,7 +12,20 @@ const runtimePath = path.join(root, "src", "legacy", "runtime.js");
 // The size backstop that used to live in build-contract.test.js was raised the
 // moment it was breached, which made it worthless; do not repeat that here.
 const BUDGET = Object.freeze({
-	runtimeLines: 4322,
+	// +3 (2026-08-19): preview-wave coalescer wiring (managed timer + repaint gate).
+	// +34 (2026-08-19): debug-only wiring, all stripped from release builds - the
+	// MESSAGE_UPDATE probe (strategy ladder), the one-shot merge-semantics
+	// experiment, and the forwarded-message shape probe. Not retained legacy.
+	// +5 (2026-08-19): flux per-row repaint handles (dispatcher, message record,
+	// guild) into the display runtime - the experiment-verified endgame wiring.
+	// +8 (2026-08-19): forwarded-message extraction reads the forward snapshot body
+	// so 已转发 messages stop being skipped as contentless.
+	// +2 (2026-08-19): getStreamBodyContent/paintStreamBody delegations - the
+	// forward-aware body accessors the legacy stream writes route through.
+	// -24 (2026-08-20): content-view projection moved into the display module;
+	// the runtime keeps one delegation instead of owning the forwarded-parent branch.
+	// -12 (2026-08-20): removed the dead direct-original React block factory.
+	runtimeLines: 3479,
 	moduleLevelVarDeclarators: 2
 });
 

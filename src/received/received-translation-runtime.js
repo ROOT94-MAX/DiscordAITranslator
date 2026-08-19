@@ -294,7 +294,7 @@ function createReceivedTranslationRuntime({
 		// The shapes we could have painted for this translation. Recomposed at render time
 		// from the current display settings, so a settings change made after the commit must
 		// still read as our own output rather than as a user edit.
-		matchesPaintedTranslation(plugin, paintedText, translation) {
+		matchesPaintedTranslation(plugin, paintedText, translation, message = null) {
 			if (!translation) return false;
 			const painted = plugin.normalizeExtractedMessageText(paintedText || "").trim();
 			if (!painted) return false;
@@ -302,8 +302,9 @@ function createReceivedTranslationRuntime({
 				translation.content,
 				translation.translatedContent,
 				plugin.buildReceivedDisplayContent(translation.translatedContent || translation.content, translation.originalContent || "")
-			].map(value => plugin.normalizeExtractedMessageText(value || "").trim()).filter(Boolean);
-			return known.includes(painted);
+			];
+			if (message && typeof plugin.getStreamTranslationRenderContent == "function") known.push(plugin.getStreamTranslationRenderContent(message, translation));
+			return known.map(value => plugin.normalizeExtractedMessageText(value || "").trim()).filter(Boolean).includes(painted);
 		},
 		resolveOriginalContentDataAnchor(plugin, message) {
 			const archive = message && message.id && plugin.ensureReceivedDisplayRuntime().peekSourceArchive(message.id);
@@ -315,7 +316,16 @@ function createReceivedTranslationRuntime({
 			// captured as a source change and the original never came back.
 			const translation = record && (record.status == "translated" && record.translation || record.status == "cancelled" && record.restoredTranslation);
 			if (!translation || !record.source || !record.source.content) return null;
-			return receivedTranslationRuntime.matchesPaintedTranslation(plugin, message.content, translation) ? record.source : null;
+			// A forward's paint lands in the snapshot, not in message.content; the echo
+			// check must read the same body the extraction reads, or every stream pass
+			// would take its own paint for a source edit and re-queue the forward.
+			let paintedBody = message.content;
+			if (!paintedBody || !String(paintedBody).trim()) {
+				const snapshots = message.messageSnapshots || message.message_snapshots;
+				const snapshotMessage = Array.isArray(snapshots) && snapshots.length && snapshots[0] && snapshots[0].message || null;
+				if (snapshotMessage && snapshotMessage.content) paintedBody = snapshotMessage.content;
+			}
+			return receivedTranslationRuntime.matchesPaintedTranslation(plugin, paintedBody, translation, message) ? record.source : null;
 		},
 		createCheckMessageContext(plugin, message, channel, options = {}) {
 			const channelId = channel && channel.id || BDFDB.LibraryStores.SelectedChannelStore.getChannelId();
@@ -394,15 +404,21 @@ function createReceivedTranslationRuntime({
 				if (cachedTranslation && !context.historicalLoad) storeCommitted = receivedTranslationRuntime.commitCachedDisplayResult(plugin, message, context, cachedTranslation);
 			}
 			const storeView = !translation && plugin.getReceivedDisplayRuntimeView(message.id);
+			// All body writes and echo reads go through the forward-aware pair: a
+			// forward's body lives in its snapshot, and the legacy direct content
+			// writes painted (and restored) into the empty own content, which the
+			// forward frame never displays (field 2026-08-19 night: manual translate
+			// and manual untranslate on a forward were invisible).
 			if (translation) {
 				plugin.refreshTranslationDisplay(translation);
-				stream.content.content = translation.content;
+				plugin.paintStreamBody(stream, plugin.getStreamTranslationRenderContent(stream.content, translation));
 			}
 			else if (storeView && storeView.translated) {
 				plugin.applyReceivedDisplayViewToStream(stream, storeView);
 			}
 			else if (plugin.ensureReceivedDisplayRuntime().hasSourceArchive(message.id)) {
-				stream.content.content = plugin.ensureReceivedDisplayRuntime().consumeSourceArchive(message.id).message.content;
+				const archive = plugin.ensureReceivedDisplayRuntime().consumeSourceArchive(message.id);
+				plugin.paintStreamBody(stream, plugin.getStreamBodyContent(archive && archive.message));
 				messageChanged = true;
 			}
 			// The automatic path's untranslate: the record is cancelled, the message still
@@ -410,9 +426,9 @@ function createReceivedTranslationRuntime({
 			// restoredTranslation is the proof the paint is ours; the record's source is
 			// the original to put back.
 			else if (storeView && storeView.status == "cancelled" && storeView.restoredTranslation && storeView.content
-				&& stream.content.content !== storeView.content
-				&& receivedTranslationRuntime.matchesPaintedTranslation(plugin, stream.content.content, storeView.restoredTranslation)) {
-				stream.content.content = storeView.content;
+				&& plugin.getStreamBodyContent(stream.content) !== storeView.content
+				&& receivedTranslationRuntime.matchesPaintedTranslation(plugin, plugin.getStreamBodyContent(stream.content), storeView.restoredTranslation, stream.content)) {
+				plugin.paintStreamBody(stream, storeView.content);
 				messageChanged = true;
 			}
 			return {translation, storeCommitted, messageChanged, cachedTranslation, canAutoTranslateMessage};

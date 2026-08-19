@@ -9,22 +9,6 @@ function createTranslatorStyles(BDFDB) {
 					${BDFDB.dotCN._translatorconfigbutton} {
 						margin: 2px 3px 0 6px;
 					}
-					.translator-original-message {
-						margin-top: 6px;
-						padding: 0;
-						border: 0;
-						white-space: pre-wrap;
-						line-height: 1.35;
-						opacity: 0.9;
-						color: var(--text-normal) !important;
-						text-align: left;
-					}
-					.translator-original-message > span {
-						display: block;
-						width: 100%;
-						color: var(--text-normal) !important;
-						text-align: left;
-					}
 					.translator-discord-emoji {
 						width: 1.375em;
 						height: 1.375em;
@@ -77,13 +61,6 @@ function createTranslatorStyles(BDFDB) {
 						padding: 0 4px;
 						border-radius: 4px;
 						font-weight: 600;
-					}
-					.translator-original-spoiler {
-						filter: blur(4px);
-						transition: filter 120ms ease;
-					}
-					.translator-original-message:hover .translator-original-spoiler {
-						filter: blur(0);
 					}
 					.translator-reply-preview-multiline {
 						overflow: visible !important;

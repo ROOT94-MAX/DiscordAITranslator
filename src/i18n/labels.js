@@ -1025,4 +1025,42 @@ function getLabelsForUiLanguage(uiLanguageId) {
 				}
 }
 
-module.exports = {getLabelsForUiLanguage};
+// The general-settings label map, moved verbatim from the legacy runtime in
+// display-unification 5d. Missing keys stay undefined so the plugin's fallback
+// chain (locale labels, then the setting's default description) takes over.
+function getGeneralSettingLabels({isChinese = false, isRussian = false} = {}) {
+	const labels = isChinese ? {
+		sendOriginalMessage: "发送译文时同时附带原文",
+		showOriginalMessage: "查看收到的译文时同时显示原文",
+		useSpoilerInOriginal: "原文使用剧透样式显示",
+		highlightTranslatedMessages: "给译文消息添加更显眼的左侧色条与背景",
+		protectQuotedText: "自动保护并高亮包裹符内的内容",
+		showOriginalInReplyPreview: "别人引用这条消息时只显示译文",
+		useSpoilerInSentOriginal: "发送附带原文时使用剧透/刮刮乐遮盖",
+		useSpoilerInReceivedOriginal: "查看收到的原文时使用剧透/刮刮乐遮盖"
+	} : {
+		sendOriginalMessage: "Also send the original text with translated outgoing messages",
+		showOriginalMessage: "Also show the original text with translated incoming messages",
+		useSpoilerInOriginal: "Show original text as spoiler blocks",
+		highlightTranslatedMessages: "Highlight translated messages with a left accent and background",
+		protectQuotedText: "Automatically protect and highlight wrapped content",
+		showOriginalInReplyPreview: "Show translated text only in reply previews",
+		useSpoilerInSentOriginal: "Hide attached outgoing original text behind spoiler (scratch-off) blocks",
+		useSpoilerInReceivedOriginal: "Show received original text as spoiler (scratch-off) blocks"
+	};
+	if (isRussian) Object.assign(labels, {
+		interfaceLanguage: "Язык интерфейса плагина",
+		sendOriginalMessage: "Добавлять оригинал к переведённым исходящим сообщениям",
+		showOriginalMessage: "Показывать оригинал рядом с переведёнными входящими сообщениями",
+		highlightTranslatedMessages: "Подсвечивать переведённые сообщения",
+		translatedTextColor: "Цвет переведённого текста",
+		protectQuotedText: "Автоматически защищать и подсвечивать текст в обрамляющих символах",
+		useSpoilerInOriginal: "Показывать оригинал как спойлер",
+		// Recovered from the shipped mojibake (UTF-8 cyrillic misread as GBK, reversed).
+		useSpoilerInSentOriginal: "Прятать исходный текст в исходящих сообщениях как спойлер",
+		useSpoilerInReceivedOriginal: "Показывать оригинал входящих сообщений как спойлер"
+	});
+	return labels;
+}
+
+module.exports = {getGeneralSettingLabels, getLabelsForUiLanguage};

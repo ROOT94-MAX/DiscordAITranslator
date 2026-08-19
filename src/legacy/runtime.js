@@ -65,10 +65,18 @@ module.exports = (_ => {
 		const {createTranslatorStyles} = require("../ui/styles");
 		const {renderSettingsPanel} = require("../ui/settings-panel");
 		const {createTranslateComponents, translateIcon, translateIconUntranslate} = require("../ui/translate-components");
+		const {createComposerWiring} = require("../ui/composer-wiring");
+		const {createTranslationPipeline} = require("../orchestrator/translation-pipeline");
+		const {createSpecialCaseCodecs} = require("../i18n/special-case-codecs");
+		const {createContextMenuWiring} = require("../ui/context-menu-wiring");
+		const {createDiscordMarkupRenderer} = require("../display/discord-markup-renderer");
+		const {createPluginDefaults, MODULE_PATCHES} = require("../settings/plugin-defaults");
+		const {createReplyPreviewQueue} = require("../received/reply-preview-queue");
 		const loadedStatusPosition = require("../ui/loaded-status-position");
+		const {createLoadedStatusCapsuleController} = require("../ui/loaded-status-capsule");
 		const {createChannelTitleStore} = require("../channel-title/channel-title-store");
 		const {createMessageViewportStore} = require("../viewport/message-viewport-store");
-		const {LOADED_STATUS_COMPLETION_HIDE_MS, LOADED_STATUS_REFRESH_MS, createLoadedTranslationStatusStore} = require("../status/loaded-translation-status-store");
+		const {createLoadedTranslationStatusStore} = require("../status/loaded-translation-status-store");
 		const {createTranslationCacheStore} = require("../cache/translation-cache-store");
 		const {createProviderClient, translationEngines, enginePortals} = require("../providers/provider-client");
 		const {createSentTranslationStore} = require("../sent/sent-translation-store");
@@ -77,6 +85,7 @@ module.exports = (_ => {
 		const {createHistoricalJobRegistry} = require("../orchestrator/historical-job-registry");
 		const channelToggleOperations = require("../orchestrator/channel-toggle-operations").createChannelToggleOperations();
 		const {HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX} = require("../orchestrator/historical-translation-job");
+		const {createHistoricalSnapshotCadence} = require("../orchestrator/historical-snapshot-cadence");
 		const {runChunkedHistoricalBatch} = require("../orchestrator/historical-provider-chunking");
 		const {createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION} = require("../protection/protection-logic");
 		const {parseStoredEmbedTranslations} = require("../received/embed-translation-parser");
@@ -106,7 +115,7 @@ module.exports = (_ => {
 			getChannelEnablementStateValue,
 			channelEnablementStatesEqual
 		} = require("../settings/settings-store");
-		const {getLabelsForUiLanguage} = require("../i18n/labels");
+		const {getGeneralSettingLabels, getLabelsForUiLanguage} = require("../i18n/labels");
 		const {getCustomTextValue} = require("../i18n/text");
 		var _this;
 		const translationProtectionSignatureVersion = TRANSLATION_PROTECTION_SIGNATURE_VERSION;
@@ -116,16 +125,10 @@ module.exports = (_ => {
 			// resolve the plugin per call instead of capturing it now.
 			getPlugin: () => _this
 		});
-		const brailleConverter = {
-			"0":"⠴", "1":"⠂", "2":"⠆", "3":"⠒", "4":"⠲", "5":"⠢", "6":"⠖", "7":"⠶", "8":"⠦", "9":"⠔", "!":"⠮", "\"":"⠐", "#":"⠼", "$":"⠫", "%":"⠩", "&":"⠯", "'":"⠄", "(":"⠷", ")":"⠾", "*":"⠡", "+":"⠬", ",":"⠠", "-":"⠤", ".":"⠨", "/":"⠌", ":":"⠱", ";":"⠰", "<":"⠣", "=":"⠿", ">":"⠜", "?":"⠹", "@":"⠈", "a":"⠁", "b":"⠃", "c":"⠉", "d":"⠙", "e":"⠑", "f":"⠋", "g":"⠛", "h":"⠓", "i":"⠊", "j":"⠚", "k":"⠅", "l":"⠇", "m":"⠍", "n":"⠝", "o":"⠕", "p":"⠏", "q":"⠟", "r":"⠗", "s":"⠎", "t":"⠞", "u":"⠥", "v":"⠧", "w":"⠺", "x":"⠭", "y":"⠽", "z":"⠵", "[":"⠪", "\\":"⠳", "]":"⠻", "^":"⠘", "⠁":"a", "⠂":"1", "⠃":"b", "⠄":"'", "⠅":"k", "⠆":"2", "⠇":"l", "⠈":"@", "⠉":"c", "⠊":"i", "⠋":"f", "⠌":"/", "⠍":"m", "⠎":"s", "⠏":"p", "⠐":"\"", "⠑":"e", "⠒":"3", "⠓":"h", "⠔":"9", "⠕":"o", "⠖":"6", "⠗":"r", "⠘":"^", "⠙":"d", "⠚":"j", "⠛":"g", "⠜":">", "⠝":"n", "⠞":"t", "⠟":"q", "⠠":", ", "⠡":"*", "⠢":"5", "⠣":"<", "⠤":"-", "⠥":"u", "⠦":"8", "⠧":"v", "⠨":".", "⠩":"%", "⠪":"[", "⠫":"$", "⠬":"+", "⠭":"x", "⠮":"!", "⠯":"&", "⠰":";", "⠱":":", "⠲":"4", "⠳":"\\", "⠴":"0", "⠵":"z", "⠶":"7", "⠷":"(", "⠸":"_", "⠹":"?", "⠺":"w", "⠻":"]", "⠼":"#", "⠽":"y", "⠾":")", "⠿":"=", "_":"⠸"
-		};
 
-		const morseConverter = {
-			"0":"−−−−−", "1":"·−−−−", "2":"··−−−", "3":"···−−", "4":"····−", "5":"·····", "6":"−····", "7":"−−···", "8":"−−−··", "9":"−−−−·", "!":"−·−·−−", "\"":"·−··−·", "$":"···−··−", "&":"·−···", "'":"·−−−−·", "(":"−·−−·", ")":"−·−−·−", "+":"·−·−·", ",":"−−··−−", "-":"−····−", ".":"·−·−·−", "/":"−··−·", ":":"−−−···", ";":"−·−·−·", "=":"−···−", "?":"··−−··", "@":"·−−·−·", "a":"·−", "b":"−···", "c":"−·−·", "d":"−··", "e":"·", "f":"··−·", "g":"−−·", "h":"····", "i":"··", "j":"·−−−", "k":"−·−", "l":"·−··", "m":"−−", "n":"−·", "o":"−−−", "p":"·−−·", "q":"−−·−", "r":"·−·", "s":"···", "t":"−", "u":"··−", "v":"···−", "w":"·−−", "x":"−··−", "y":"−·−−", "z":"−−··", "·":"e", "··":"i", "···":"s", "····":"h", "·····":"5", "····−":"4", "···−":"v", "···−··−":"$", "···−−":"3", "··−":"u", "··−·":"f", "··−−··":"?", "··−−·−":"_", "··−−−":"2", "·−":"a", "·−·":"r", "·−··":"l", "·−···":"&", "·−··−·":"\"", "·−·−·":"+", "·−·−·−":".", "·−−":"w", "·−−·":"p", "·−−·−·":"@", "·−−−":"j", "·−−−−":"1", "·−−−−·":"'", "−":"t", "−·":"n", "−··":"d", "−···":"b", "−····":"6", "−····−":"-", "−···−":"=", "−··−":"x", "−··−·":"/", "−·−":"k", "−·−·":"c", "−·−·−·":";", "−·−·−−":"!", "−·−−":"y", "−·−−·":"(", "−·−−·−":")", "−−":"m", "−−·":"g", "−−··":"z", "−−···":"7", "−−··−−":",", "−−·−":"q", "−−−":"o", "−−−··":"8", "−−−···":":", "−−−−·":"9", "−−−−−":"0", "_":"··−−·−"
-		};
 		const channelTitleStore = createChannelTitleStore();
 		const loadedTranslationStatusStore = createLoadedTranslationStatusStore({isChineseUiLanguage: () => _this && _this.isChineseUiLanguage()});
-		const historicalDisplayTracker = createHistoricalDisplayTracker({isStatusForChannel: channelId => loadedTranslationStatusStore.isForChannel(channelId), getRevision: (_channelId, messageId) => {const view = _this && _this.getReceivedDisplayRuntimeView(messageId); return view ? view.revision : null;}, updateStatus: updates => _this && _this.updateLoadedAutoTranslationStatus(updates)});
+		const historicalDisplayTracker = createHistoricalDisplayTracker({isStatusForChannel: channelId => loadedTranslationStatusStore.isForChannel(channelId), getBatchNumber: () => loadedTranslationStatusStore.getCurrentBatchNumber(), getRevision: (_channelId, messageId) => {const view = _this && _this.getReceivedDisplayRuntimeView(messageId); return view ? view.revision : null;}, updateStatus: updates => _this && _this.updateLoadedAutoTranslationStatus(updates)});
 		var pluginRuntimeActive = true;
 		const DEFAULT_LOADED_AUTO_TRANSLATE_LIMIT = 50;
 		const LOADED_AUTO_TRANSLATE_LIMIT_MIN = 1;
@@ -151,6 +154,35 @@ module.exports = (_ => {
 		const secondDebugProbe = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? (secondDebugModule => secondDebugModule.createSecondDebugProbe({log: line => console.info(line), sink: secondDebugModule.createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder})}))(require("../diagnostics/second-debug-probe")) : null;
 		if (secondDebugProbe && typeof window != "undefined") secondDebugProbe.installGlobal(window, {resolveScrollerElement: () => document.querySelector(BDFDB.dotCN.messagesscroller), forceUpdate: (...targets) => BDFDB.ReactUtils.forceUpdate(...targets), rerenderAll: instant => BDFDB.MessageUtils.rerenderAll(instant), getRenderCount: () => secondDebugProbe.getParentRenderCount(), autoRunExperiment: true, autoRunMaxAttempts: 60});
 
+		// Debug-build-only, read-only: captures real MESSAGE_UPDATE dispatch shapes for the per-row repaint endgame (recovery plan route 1). Never dispatches anything.
+		// Strategy ladder (first round returned "no-dispatcher": BDFDB 4.5.4 exposes NO flux dispatcher module at all, so the store-instance handle leads).
+		const messageUpdateProbe = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? (probeModule => probeModule.createMessageUpdateProbe({strategies: [
+			{name: "selected-channel-store-_dispatcher", resolve: () => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && BDFDB.LibraryStores.SelectedChannelStore._dispatcher || null},
+			{name: "message-store-_dispatcher", resolve: () => BDFDB.LibraryStores && BDFDB.LibraryStores.MessageStore && BDFDB.LibraryStores.MessageStore._dispatcher || null},
+			{name: "webpack-by-keys", resolve: () => BdApi && BdApi.Webpack && BdApi.Webpack.getByKeys && BdApi.Webpack.getByKeys("dispatch", "subscribe") || null},
+			{name: "webpack-by-keys-exports", resolve: () => BdApi && BdApi.Webpack && BdApi.Webpack.getByKeys && BdApi.Webpack.getByKeys("dispatch", "subscribe", {searchExports: true}) || null},
+			{name: "webpack-module-scan-exports", resolve: () => BdApi && BdApi.Webpack && BdApi.Webpack.getModule && BdApi.Webpack.getModule(candidate => candidate && typeof candidate.dispatch == "function" && typeof candidate.subscribe == "function", {searchExports: true}) || null},
+			{name: "bdfdb-library-module", resolve: () => BDFDB.LibraryModules && (BDFDB.LibraryModules.Dispatcher || BDFDB.LibraryModules.DispatcherUtils) || null}
+		], log: line => console.info(line), sink: require("../diagnostics/second-debug-probe").createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder, fileName: "translator-message-update-probe.json"})}))(require("../diagnostics/message-update-probe")) : null;
+
+		// Debug-build-only: ONE guarded synthetic MESSAGE_UPDATE against one already-translated message, answering the merge-vs-replace question the probe cannot (see the module header). Uses the probe-proven store dispatcher handle.
+		const messageUpdateExperiment = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? (experimentModule => experimentModule.createMessageUpdateExperiment({
+			resolveDispatcher: () => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && BDFDB.LibraryStores.SelectedChannelStore._dispatcher || null,
+			getSelectedChannelId: () => {try {return BDFDB.LibraryStores.SelectedChannelStore.getChannelId();} catch (error) {return null;}},
+			getStoreMessage: (channelId, messageId) => {try {return BDFDB.LibraryStores.MessageStore.getMessage(channelId, messageId) || null;} catch (error) {return null;}},
+			getGuildId: channelId => {try {const channel = BDFDB.LibraryStores.ChannelStore.getChannel(channelId); return channel && channel.guild_id || null;} catch (error) {return null;}},
+			listTranslatedCandidates: () => {try {return _this.ensureReceivedDisplayRuntime().listTranslated().map(record => ({messageId: record.messageId, channelId: record.channelId}));} catch (error) {return [];}},
+			isViewTranslated: messageId => {try {const view = _this && _this.getReceivedDisplayRuntimeView(String(messageId)); return !!(view && view.translated);} catch (error) {return false;}},
+			log: line => console.info(line),
+			setTimeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay),
+			clearTimeout: timer => BDFDB.TimeUtils.clear(timer),
+			sink: require("../diagnostics/second-debug-probe").createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder, fileName: "translator-message-update-experiment.json"}),
+			maxAttempts: 120
+		}))(require("../diagnostics/message-update-experiment")) : null;
+
+		// Debug-build-only, read-only: captures how forwarded messages (已转发) look on this client - their body lives in forward snapshots the extraction path cannot read yet.
+		const forwardedMessageProbe = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? require("../diagnostics/forwarded-message-probe").createForwardedMessageProbe({log: line => console.info(line), sink: require("../diagnostics/second-debug-probe").createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder, fileName: "translator-forwarded-message-probe.json"})}) : null;
+
 		const {receivedTranslationRuntime} = createReceivedTranslationRuntime({BDFDB, loadedTranslationStatusStore});
 
 		const translationDisplayLogic = createTranslationDisplayLogic({BDFDB});
@@ -168,89 +200,12 @@ module.exports = (_ => {
 
 			onLoad () {
 				_this = this;
-				this.defaults = {
-					general: {
-						interfaceLanguage:		{value: "system", 	popout: false},
-						sendOriginalMessage:		{value: false, 	popout: false},
-						showOriginalMessage:		{value: false, 	popout: false},
-						showOriginalDirectly:		{value: true, 	popout: false},
-						showOriginalInReplyPreview:	{value: false, 	popout: false},
-						useSpoilerInSentOriginal:	{value: false, 	popout: false},
-						useSpoilerInReceivedOriginal:	{value: false, 	popout: false},
-						highlightTranslatedMessages:	{value: true, 	popout: false},
-						showTranslationLabel:		{value: true, 	popout: false},
-						translatedTextColor:		{value: "#7cc7ff", popout: false},
-						protectQuotedText:		{value: true, 	popout: false,	description: "Automatically protect and highlight wrapped content"},
-						useSpoilerInOriginal:		{value: false, 	popout: false,	description: "Use Spoilers instead of Quotes for the original Message Text"}
-					},
-					choices: {},
-					filters: {
-						autoTranslateSourceLanguages:	{value: []},
-						receivedAutoTranslateScope:	{value: "new_only"},
-						receivedAutoTranslateLoadedRangeMode: {value: "count"},
-						receivedAutoTranslateLoadedTimeWindow: {value: "1h"},
-						receivedAutoTranslateLoadedLimit: {value: "50"},
-						continueLoadedAutoTranslateOnScroll: {value: true},
-						pauseLoadedAutoTranslateWhileScrolling: {value: true},
-						receivedAutoTranslateSourceLanguages: {value: []},
-						autoTranslateDecisionMode: {value: "basic"},
-						aiAutoTranslatePrompt: {value: ""},
-						languageDetectionStrategy: {value: "local_first"},
-						skipMixedReceivedMessages:	{value: false},
-						skipSameLanguageReceivedMessages: {value: true},
-					useLocalLanguagePrecheck:	{value: true},
-						treatLanguageVariantsAsSame: {value: true},
-						dropSimilarTranslations:	{value: true},
-						minimumAutoTranslateLength:	{value: 2},
-						translationSimilarityThreshold: {value: 0.9}
-					},
-					exceptions: {
-						wordStart:			{value: ["!"],	max: 3},
-						protectedTerms:		{value: [],		max: 80},
-						protectedTermsForSent:	{value: true},
-						protectedTermsForReceived:	{value: true},
-						wrapperPairs:		{value: ['"|"', '“|”', '`|`'], max: 20},
-						wrapperPairsForSent:	{value: true},
-						wrapperPairsForReceived:	{value: true}
-					},
-					prefixes: {
-						translationPrefixData: 		{value: [
-							{prefix: "$fr", language: "fr"},
-							{prefix: "$de", language: "de"},
-							{prefix: "$es", language: "es"},
-							{prefix: "$jp", language: "ja"}
-						]}
-					},
-					engines: {
-						translator:			{value: "googleapi"},
-						backup:				{value: "----"}
-					}
-				};
-				for (let m in messageTypes) this.defaults.choices[messageTypes[m]] = {value: Object.keys(languageTypes).reduce((newObj, l) => (newObj[languageTypes[l]] = defaultLanguages[l], newObj), {})};
-				this.modulePatches = {
-					before: [
-						"ChannelTextAreaContainer",
-						"ChannelTextAreaEditor",
-						"Embed",
-						"MessageReply",
-						"Messages"
-					],
-					after: [
-						"ChannelTextAreaButtons",
-						"ChannelThreadItem",
-						"Embed",
-						"HeaderBarChannelName",
-						"HeaderBarTitle",
-						"MessageReply",
-						"MessageButtons",
-						"MessageContent",
-						"ThreadCard",
-						"ThreadSidebar"
-					]
-				};
-
+				this.defaults = createPluginDefaults({messageTypes, languageTypes, defaultLanguages});
+				// BDFDB owns these lists after registration, so it gets mutable copies.
+				this.modulePatches = {before: [...MODULE_PATCHES.before], after: [...MODULE_PATCHES.after]};
 				this.css = createTranslatorStyles(BDFDB);
 			}
+
 			handleEditedMessageSubmit (methodArguments, originalMethod) {
 				const args = Array.from(methodArguments || []);
 				const channelId = args[0];
@@ -283,6 +238,8 @@ module.exports = (_ => {
 
 			onStart () {
 				pluginRuntimeActive = true;
+				if (messageUpdateProbe) messageUpdateProbe.start();
+				if (messageUpdateExperiment) messageUpdateExperiment.start();
 				this.resetReceivedDisplayRuntime();
 				this.ensureLiveTranslationQueue().restartRequestGeneration();
 				this.ensureSentTranslationStore().resetForStart();
@@ -321,6 +278,8 @@ module.exports = (_ => {
 			}
 			onStop () {
 				pluginRuntimeActive = false; channelToggleOperations.reset();
+				if (messageUpdateProbe) messageUpdateProbe.stop();
+				if (messageUpdateExperiment) messageUpdateExperiment.stop();
 				this.invalidateLiveTranslationRequests();
 				this.invalidateSentAutomaticTranslationRequests();
 				this.ensureSentTranslationStore().clearPendingOriginals();
@@ -365,63 +324,7 @@ module.exports = (_ => {
 			}
 
 			getGeneralSettingLabel (key) {
-				const isChinese = this.isChineseUiLanguage();
-				const isRussian = this.isRussianUiLanguage();
-				const labels = isChinese ? {
-					sendOriginalMessage: "发送译文时同时附带原文",
-					showOriginalMessage: "查看收到的译文时同时显示原文",
-					useSpoilerInOriginal: "原文使用剧透样式显示"
-				} : {
-					sendOriginalMessage: "Also send the original text with translated outgoing messages",
-					showOriginalMessage: "Also show the original text with translated incoming messages",
-					useSpoilerInOriginal: "Show original text as spoiler blocks"
-				};
-				Object.assign(labels, isChinese ? {
-					showOriginalDirectly: "直接显示收到消息的原文",
-					useSpoilerInOriginal: "原文使用剧透样式显示"
-				} : {
-					showOriginalDirectly: "Show received original text directly",
-					useSpoilerInOriginal: "Show original text as spoiler blocks"
-				});
-				Object.assign(labels, isChinese ? {
-					highlightTranslatedMessages: "给译文消息添加更显眼的左侧色条与背景",
-					showTranslationLabel: "在译文消息上方显示“译文”标签"
-				} : {
-					highlightTranslatedMessages: "Highlight translated messages with a left accent and background",
-					showTranslationLabel: "Show a visible 'Translated' label above translated messages"
-				});
-				Object.assign(labels, isChinese ? {
-					protectQuotedText: "自动保护并高亮包裹符内的内容"
-				} : {
-					protectQuotedText: "Automatically protect and highlight wrapped content"
-				});
-				Object.assign(labels, isChinese ? {
-					showOriginalInReplyPreview: "别人引用这条消息时只显示译文"
-				} : {
-					showOriginalInReplyPreview: "Show translated text only in reply previews"
-				});
-				Object.assign(labels, isChinese ? {
-					useSpoilerInSentOriginal: "发送附带原文时使用剧透/刮刮乐遮盖",
-					useSpoilerInReceivedOriginal: "查看收到的原文时使用剧透/刮刮乐遮盖"
-				} : {
-					useSpoilerInSentOriginal: "Hide attached outgoing original text behind spoiler (scratch-off) blocks",
-					useSpoilerInReceivedOriginal: "Show received original text as spoiler (scratch-off) blocks"
-				});
-				if (isRussian) Object.assign(labels, {
-					interfaceLanguage: "Язык интерфейса плагина",
-					sendOriginalMessage: "Добавлять оригинал к переведённым исходящим сообщениям",
-					showOriginalMessage: "Показывать оригинал рядом с переведёнными входящими сообщениями",
-					showOriginalDirectly: "Показывать оригинал входящих сообщений напрямую",
-					highlightTranslatedMessages: "Подсвечивать переведённые сообщения",
-					showTranslationLabel: "Показывать метку перевода",
-					translatedTextColor: "Цвет переведённого текста",
-					protectQuotedText: "Автоматически защищать и подсвечивать текст в обрамляющих символах",
-					useSpoilerInOriginal: "Показывать оригинал как спойлер"
-				});
-				if (isRussian) Object.assign(labels, {
-					useSpoilerInSentOriginal: "袩褉褟褌邪褌褜 懈褋褏芯写薪褘泄 褌械泻褋褌 胁 懈褋褏芯写褟褖懈褏 褋芯芯斜褖械薪懈褟褏 泻邪泻 褋锌芯泄谢械褉",
-					useSpoilerInReceivedOriginal: "袩芯泻邪蟹褘胁邪褌褜 芯褉懈谐懈薪邪谢 胁褏芯写褟褖懈褏 褋芯芯斜褖械薪懈泄 泻邪泻 褋锌芯泄谢械褉"
-				});
+				const labels = getGeneralSettingLabels({isChinese: this.isChineseUiLanguage(), isRussian: this.isRussianUiLanguage()});
 				return labels[key] || this.labels[`general_${key}`] || this.defaults.general[key].description;
 			}
 
@@ -664,20 +567,7 @@ module.exports = (_ => {
 			}
 
 			injectMessageLanguageActions (children, index, message, channel) {
-				if (!children || !message || !channel) return;
-				const insertIndex = index > -1 ? index + 1 : 0;
-				children.splice(insertIndex, 0,
-					BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-						label: this.getCustomText("context_detect_message_language"),
-						id: BDFDB.ContextMenuUtils.createItemId(this.name, "detect-message-language"),
-						action: _ => this.handleMessageLanguageAction(message, channel, false)
-					}),
-					BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-						label: this.getCustomText("context_reply_in_detected_language"),
-						id: BDFDB.ContextMenuUtils.createItemId(this.name, "reply-in-detected-language"),
-						action: _ => this.handleMessageLanguageAction(message, channel, true)
-					})
-				);
+				this.ensureContextMenuWiring().injectMessageLanguageActions(children, index, message, channel);
 			}
 
 			cloneOriginalContentData (originalContentData) {
@@ -776,12 +666,21 @@ module.exports = (_ => {
 				return true;
 			}
 
-			matchesPaintedTranslationContent (paintedText, translation) {return receivedTranslationRuntime.matchesPaintedTranslation(this, paintedText, translation);}
+			matchesPaintedTranslationContent (paintedText, translation, message = null) {return receivedTranslationRuntime.matchesPaintedTranslation(this, paintedText, translation, message);}
 
 			extractOriginalContentData (message, options = {}) {
+				if (forwardedMessageProbe) forwardedMessageProbe.record(message);
 				const storedOriginalContentData = receivedTranslationRuntime.resolveOriginalContentDataAnchor(this, message);
 				if (storedOriginalContentData) return this.cloneOriginalContentData(storedOriginalContentData);
 				let messageContent = this.normalizeExtractedMessageText(message && message.content || "");
+				// A forwarded message (已转发) is empty on itself - the body lives in the
+				// forward snapshot (probe evidence 2026-08-19). Reading it here is what
+				// stops forwards from being skipped as contentless; the stream pass
+				// paints the translation back into the same snapshot.
+				if (!messageContent.trim()) {
+					const forwardSnapshots = translationDisplayLogic.getForwardedMessageSnapshots(this, message);
+					if (forwardSnapshots) messageContent = this.normalizeExtractedMessageText(forwardSnapshots[0].message.content);
+				}
 				if (options && options.ignoreReferencedPreview) messageContent = this.stripReferencedPreviewFromContent(message, messageContent);
 				const extractedParts = this.extractLegacyDisplayedTranslationParts(messageContent);
 				return this.cloneOriginalContentData({
@@ -1165,47 +1064,14 @@ module.exports = (_ => {
 				return BDFDB.ReactUtils.createElement(node.type, Object.assign({}, props, {key: node.key, ref: node.ref}));
 			}
 
-			queueReplyPreviewTranslation (message, channelId, contextOptions = {}) {
-				if (!message || !message.id || !channelId || this.ensureReceivedDisplayRuntime().isPreviewPending(message.id)) return;
-				const baseMessage = contextOptions.baseMessage || null;
-				if (baseMessage && !this.shouldAutoTranslateReplyPreview(baseMessage, message, channelId)) return;
-				if (this.ensureReceivedDisplayRuntime().isSuppressed(message.id)) return;
-				if (!this.isTranslationEnabled(channelId) || this.isOwnMessage(message)) return;
-				const originalContent = (message.content || "").trim();
-				if (!originalContent) return;
-				const signature = this.createReplyPreviewSignature(message, channelId, originalContent);
-				const existingTranslation = this.ensureReceivedDisplayRuntime().getPreviewTranslation(message.id);
-				if (existingTranslation && existingTranslation.signature == signature) return;
-				const cachedTranslation = this.getCachedReceivedTranslation(message, channelId);
-				if (cachedTranslation) {
-					const previewTranslation = this.createReplyPreviewTranslationData(message, channelId, cachedTranslation);
-					if (previewTranslation) {const previewCommit = this.ensureReceivedDisplayRuntime().commitPreviewResult({messageId: message.id, channelId, signature, translation: previewTranslation}); if (previewCommit && previewCommit.catch) previewCommit.catch(_ => {});}
-					return;
-				}
-				const request = this.ensureReceivedDisplayRuntime().markPreviewPending({messageId: message.id, channelId, signature});
-				this.translateText(originalContent, messageTypes.RECEIVED, (translation, input, output) => {
-					if (!pluginRuntimeActive || !this.ensureReceivedDisplayRuntime().releasePreviewPending(message.id, request)) return;
-					if (this.createReplyPreviewSignature(message, channelId, (message.content || "").trim()) != signature) return;
-					if (baseMessage && !this.shouldAutoTranslateReplyPreview(baseMessage, message, channelId)) return;
-					if (!this.isTranslationEnabled(channelId)) return;
-					if (translation) {
-						const previewCommit = this.ensureReceivedDisplayRuntime().commitPreviewResult({messageId: message.id, channelId, signature, translation: {
-							signature,
-							channelId,
-							auto: true,
-							translatedContent: (translation || "").trim(),
-							originalContent,
-							input,
-							output
-						}}); if (previewCommit && previewCommit.catch) previewCommit.catch(_ => {});
-					}
-				}, null, {
-					showToast: false,
-					showFailureToast: false,
-					trackBusy: false,
-					channelId
-				});
+			ensureReplyPreviewQueue () {
+				if (!this.replyPreviewQueueInstance) this.replyPreviewQueueInstance = createReplyPreviewQueue({getPlugin: () => this, messageTypes, isRuntimeActive: () => pluginRuntimeActive});
+				return this.replyPreviewQueueInstance;
 			}
+			queueReplyPreviewTranslation (message, channelId, contextOptions = {}) {
+				this.ensureReplyPreviewQueue().queueReplyPreviewTranslation(message, channelId, contextOptions);
+			}
+
 			resetAutoTranslationTracking (channelId = null) {this.ensureHistoricalSourceRuntime().advanceGeneration(channelId); return this.ensureLiveTranslationQueue().resetTracking(channelId);}
 			getAutoTranslationChannelState (channelId) {return this.ensureLiveTranslationQueue().getChannelState(channelId);}
 			prepareAutoTranslationChannelSession (channelId) {this.ensureHistoricalSourceRuntime().handleChannelSessionChange(this.ensureLiveTranslationQueue().getLastChannelId(), channelId); return this.ensureLiveTranslationQueue().prepareChannelSession(channelId);}
@@ -1380,11 +1246,11 @@ module.exports = (_ => {
 
 			rerenderMessagesWithScrollPreserved () {
 				this.attachAutoTranslationScrollWatcher();
-				const manualAnchor = this.getActiveManualTranslationScrollAnchor();
-				const scrollerState = manualAnchor ? null : this.captureMessageScrollerState();
+				// Full repaints are lifecycle operations; reusing an ID-scoped manual anchor
+				// can strand a history reader at the remount's newest virtualized position.
+				const scrollerState = this.captureMessageScrollerState();
 				BDFDB.MessageUtils.rerenderAll(true);
-				if (manualAnchor) this.restoreMessageAnchorState(manualAnchor);
-				else this.restoreMessageScrollerState(scrollerState);
+				this.restoreMessageScrollerState(scrollerState);
 			}
 
 			getLoadedAutoTranslationStatusText (status) {
@@ -1395,18 +1261,7 @@ module.exports = (_ => {
 			}
 
 			getLoadedAutoTranslationSkipReasonText (reason) {
-				switch (reason) {
-					case "symbol_only": return this.isChineseUiLanguage() ? "\u7eaf\u7b26\u53f7/\u65e0\u81ea\u7136\u8bed\u8a00" : "symbol-only/no natural language";
-					case "link_only": return this.isChineseUiLanguage() ? "\u4ec5\u94fe\u63a5/\u53d7\u4fdd\u62a4\u5185\u5bb9" : "link-only/protected content";
-					case "same_language": return this.isChineseUiLanguage() ? "\u540c\u76ee\u6807\u8bed\u8a00" : "same target language";
-					case "too_similar": return this.isChineseUiLanguage() ? "\u4e0e\u539f\u6587\u8fc7\u4e8e\u76f8\u4f3c" : "too similar to source";
-					case "wrong_target_language": return this.isChineseUiLanguage() ? "\u8fd4\u56de\u8bed\u8a00\u4e0d\u5bf9" : "wrong target language";
-					case "ai_skip_signal": return this.isChineseUiLanguage() ? "AI\u5224\u5b9a\u65e0\u9700\u7ffb\u8bd1" : "AI skipped translation";
-					case "source_filter": return this.isChineseUiLanguage() ? "\u4e0d\u5728\u6e90\u8bed\u8a00\u7b5b\u9009\u5185" : "outside source-language filter";
-					case "local_guard": return this.isChineseUiLanguage() ? "\u672c\u5730\u4fdd\u62a4\u5140\u5e95\u4e22\u5f03" : "dropped by local safeguard";
-					case "out_of_range": return this.isChineseUiLanguage() ? "\u8d85\u51fa\u5f53\u524d\u5df2\u52a0\u8f7d\u8303\u56f4" : "outside loaded range";
-					default: return reason || (this.isChineseUiLanguage() ? "\u5df2\u8df3\u8fc7" : "skipped");
-				}
+				return this.ensureLoadedStatusCapsuleController().getSkipReasonText(reason);
 			}
 
 			getLoadedAutoTranslationPreviewText (text) {
@@ -1414,12 +1269,7 @@ module.exports = (_ => {
 			}
 
 			getLoadedAutoTranslationStatusTitleText (status) {
-				if (!status) return "";
-				const baseText = this.getLoadedAutoTranslationStatusDetailText(status);
-				const detailParts = [];
-				if (status && status.lastSkipReason) detailParts.push(this.getLoadedAutoTranslationSkipReasonText(status.lastSkipReason));
-				if (status && status.lastSkipPreview) detailParts.push(status.lastSkipPreview);
-				return detailParts.length ? `${baseText} | ${this.isChineseUiLanguage() ? "\u6700\u8fd1\u8df3\u8fc7" : "Last skipped"}: ${detailParts.join(" | ")}` : baseText;
+				return this.ensureLoadedStatusCapsuleController().getTitleText(status);
 			}
 
 			getAutoTranslatedResultRejectReason (translation, channelId) {
@@ -1430,31 +1280,8 @@ module.exports = (_ => {
 				return receivedMessageFilterRuntime.getReceivedAutoTranslateSkipReason(this, originalContentData, channelId);
 			}
 
-			getLoadedAutoTranslationInlineStatusText (channelId = null) {
-				return loadedTranslationStatusStore.getInlineStatusText(channelId || BDFDB.LibraryStores.SelectedChannelStore.getChannelId());
-			}
-
 			updateInlineLoadedAutoTranslationStatusElements () {
-				if (typeof document == "undefined") return;
-				let elements = [];
-				try {elements = Array.from(document.querySelectorAll(".translator-loaded-status-inline"));}
-				catch (err) {elements = [];}
-				for (const element of elements) {
-					if (element && element.remove) element.remove();
-				}
-			}
-
-			isTranslateMasterSwitchVisuallyEnabled (channelId) {
-				if (!channelId || !this.isTranslationEnabled(channelId)) return false;
-				if (typeof document == "undefined") return false;
-				let buttons = [];
-				try {
-					const selector = [BDFDB.dotCN && BDFDB.dotCN._translatortranslatebutton, BDFDB.disCN && "." + BDFDB.disCN._translatortranslatebutton].filter(Boolean).join(",");
-					buttons = selector ? Array.from(document.querySelectorAll(selector)) : [];
-				}
-				catch (err) {buttons = [];}
-				if (!buttons.length) return false;
-				return buttons.some(button => button && button.classList && button.classList.contains(BDFDB.disCN._translatortranslating));
+				this.ensureLoadedStatusCapsuleController().updateInlineElements();
 			}
 
 			positionLoadedAutoTranslationStatusElement (element) {
@@ -1466,43 +1293,11 @@ module.exports = (_ => {
 			}
 
 			ensureLoadedAutoTranslationStatusPositionWatcher () {
-				if (typeof window == "undefined" || this._loadedAutoTranslationStatusPositionWatcherAttached) return;
-				this._loadedAutoTranslationStatusPositionWatcherAttached = true;
-				this._loadedAutoTranslationStatusPositionHandler = _ => {
-					const element = typeof document != "undefined" && document.getElementById("DiscordAITranslator-loaded-status");
-					if (!element) return;
-					if (this._loadedAutoTranslationStatusPositionTimer) clearTimeout(this._loadedAutoTranslationStatusPositionTimer);
-					this._loadedAutoTranslationStatusPositionTimer = setTimeout(_ => {
-						this._loadedAutoTranslationStatusPositionTimer = null;
-						this.positionLoadedAutoTranslationStatusElement(element);
-					}, 80);
-				};
-				window.addEventListener("resize", this._loadedAutoTranslationStatusPositionHandler, {passive: true});
-				window.addEventListener("scroll", this._loadedAutoTranslationStatusPositionHandler, true);
-				try {
-					if (typeof ResizeObserver != "undefined" && document && document.body) {
-						this._loadedAutoTranslationStatusResizeObserver = new ResizeObserver(this._loadedAutoTranslationStatusPositionHandler);
-						this._loadedAutoTranslationStatusResizeObserver.observe(document.body);
-					}
-				}
-				catch (err) {}
+				this.ensureLoadedStatusCapsuleController().ensurePositionWatcher();
 			}
 
 			detachLoadedAutoTranslationStatusPositionWatcher () {
-				if (typeof window == "undefined" || !this._loadedAutoTranslationStatusPositionWatcherAttached) return;
-				this._loadedAutoTranslationStatusPositionWatcherAttached = false;
-				if (this._loadedAutoTranslationStatusPositionHandler) {
-					window.removeEventListener("resize", this._loadedAutoTranslationStatusPositionHandler, {passive: true});
-					window.removeEventListener("scroll", this._loadedAutoTranslationStatusPositionHandler, true);
-				}
-				if (this._loadedAutoTranslationStatusResizeObserver) {
-					try {this._loadedAutoTranslationStatusResizeObserver.disconnect();}
-					catch (err) {}
-				}
-				this._loadedAutoTranslationStatusResizeObserver = null;
-				if (this._loadedAutoTranslationStatusPositionTimer) clearTimeout(this._loadedAutoTranslationStatusPositionTimer);
-				this._loadedAutoTranslationStatusPositionTimer = null;
-				this._loadedAutoTranslationStatusPositionHandler = null;
+				this.ensureLoadedStatusCapsuleController().detachPositionWatcher();
 			}
 
 			isTranslatorSettingsSurfaceOpen () {
@@ -1516,77 +1311,45 @@ module.exports = (_ => {
 			}
 
 			removeLoadedAutoTranslationStatusElement () {
-				const element = typeof document != "undefined" && document.getElementById("DiscordAITranslator-loaded-status");
-				if (element) element.remove();
-				this.detachLoadedAutoTranslationStatusPositionWatcher();
+				this.ensureLoadedStatusCapsuleController().removeElement();
 			}
 
 			shouldShowLoadedAutoTranslationStatus (status) {
-				if (!status || (!status.active && !status.done)) return false;
-				const selectedChannelId = BDFDB.LibraryStores.SelectedChannelStore.getChannelId();
-				const statusChannelId = status.channelId && status.channelId != "__global" ? status.channelId : selectedChannelId;
-				if (!statusChannelId || !selectedChannelId || statusChannelId != selectedChannelId) return false;
-				if (this.getReceivedAutoTranslateScope() != "loaded_messages") return false;
-				return this.isTranslationEnabled(statusChannelId);
+				return this.ensureLoadedStatusCapsuleController().shouldShow(status);
+			}
+
+			// The capsule controller owns the floating status DOM (element, watcher,
+			// timers). The hooks route its collaborator calls back through the plugin
+			// methods below, which is where tests have always placed their stubs.
+			ensureLoadedStatusCapsuleController () {
+				if (!this.loadedStatusCapsuleControllerInstance) this.loadedStatusCapsuleControllerInstance = createLoadedStatusCapsuleController({
+					store: loadedTranslationStatusStore,
+					getSelectedChannelId: () => BDFDB.LibraryStores.SelectedChannelStore.getChannelId(),
+					isTranslationEnabled: channelId => this.isTranslationEnabled(channelId),
+					getReceivedAutoTranslateScope: () => this.getReceivedAutoTranslateScope(),
+					isChineseUiLanguage: () => this.isChineseUiLanguage(),
+					positionElement: element => this.positionLoadedAutoTranslationStatusElement(element),
+					isUserScrolling: () => this.isUserActivelyScrollingMessages(),
+					isRuntimeActive: () => pluginRuntimeActive,
+					clearHistoricalTracker: () => historicalDisplayTracker.clear(),
+					hooks: {
+						attachScrollWatcher: () => this.attachAutoTranslationScrollWatcher(),
+						ensurePositionWatcher: () => this.ensureLoadedAutoTranslationStatusPositionWatcher(),
+						removeElement: () => this.removeLoadedAutoTranslationStatusElement(),
+						updateInlineElements: () => this.updateInlineLoadedAutoTranslationStatusElements(),
+						positionElement: element => this.positionLoadedAutoTranslationStatusElement(element),
+						onRetry: channelId => this.retryFailedHistoricalTranslations(channelId)
+					}
+				});
+				return this.loadedStatusCapsuleControllerInstance;
 			}
 
 			updateLoadedAutoTranslationStatus (updates = {}) {
-				const currentStatus = loadedTranslationStatusStore.update(updates);
-				if (!this.shouldShowLoadedAutoTranslationStatus(currentStatus)) {
-					this.removeLoadedAutoTranslationStatusElement();
-					return;
-				}
-				loadedTranslationStatusStore.cancelTimers();
-				if (typeof document == "undefined" || !document.body) return;
-				this.attachAutoTranslationScrollWatcher();
-				this.ensureLoadedAutoTranslationStatusPositionWatcher();
-				let element = document.getElementById("DiscordAITranslator-loaded-status");
-				if (!element) {
-					element = document.createElement("div");
-					element.id = "DiscordAITranslator-loaded-status";
-					document.body.appendChild(element);
-				}
-				const retryableCount = Math.max(0, currentStatus.retryable || 0);
-				const showRetry = !currentStatus.active && retryableCount > 0;
-				const visualPhase = showRetry ? "failed" : currentStatus.phase || (currentStatus.collecting ? "collecting" : currentStatus.done ? "done" : "requesting");
-				// Always normalize the status DOM. This removes legacy progress-line children left by earlier builds.
-				element.className = `translator-loaded-status-floating translator-loaded-status-${visualPhase}${showRetry ? " translator-loaded-status-retryable" : ""}`;
-				if (!element.querySelector(".translator-loaded-status-icon") || !element.querySelector(".translator-loaded-status-text") || element.querySelector(".translator-loaded-status-progress")) {
-					element.innerHTML = '<span class="translator-loaded-status-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M12.9 15.1 10.8 13l.1-.1a14.7 14.7 0 0 0 3.1-5.4h2.4V5.4h-5.2V3.3H9.1v2.1H3.9v2.1H12a12.5 12.5 0 0 1-2.6 4.1 12.4 12.4 0 0 1-1.9-2.7H5.4a14.8 14.8 0 0 0 2.5 4.1l-4.2 4.1 1.5 1.5 4.2-4.2 2.6 2.7.9-2Zm5.9-3.4h-2.1L12 22.2h2.2l1.2-3.1h4.8l1.2 3.1h2.2l-4.8-10.5Zm-2.6 5.3 1.6-4.2 1.6 4.2h-3.2Z"/></svg></span><span class="translator-loaded-status-text"></span>';
-				}
-				const textElement = element.querySelector(".translator-loaded-status-text");
-				if (textElement) textElement.textContent = this.getLoadedAutoTranslationStatusText(currentStatus);
-				let retryButton = element.querySelector(".translator-loaded-status-retry");
-				if (showRetry) {
-					if (!retryButton) {
-						retryButton = document.createElement("button");
-						retryButton.type = "button";
-						retryButton.className = "translator-loaded-status-retry";
-						element.appendChild(retryButton);
-					}
-					retryButton.textContent = this.isChineseUiLanguage() ? "重试" : "Retry";
-					retryButton.title = this.isChineseUiLanguage() ? `重试 ${retryableCount} 条失败消息` : `Retry ${retryableCount} failed messages`;
-					retryButton.onclick = event => {
-						if (event && event.stopPropagation) event.stopPropagation();
-						const retryResult = this.retryFailedHistoricalTranslations(currentStatus.channelId);
-						if (retryResult && typeof retryResult.catch == "function") retryResult.catch(_ => {});
-					};
-				}
-				else if (retryButton) retryButton.remove();
-				element.title = this.getLoadedAutoTranslationStatusTitleText(currentStatus);
-				this.updateInlineLoadedAutoTranslationStatusElements();
-				loadedTranslationStatusStore.schedulePosition(_ => this.positionLoadedAutoTranslationStatusElement(element));
-				loadedTranslationStatusStore.scheduleRefresh(LOADED_STATUS_REFRESH_MS, () => this.updateLoadedAutoTranslationStatus({}));
-				if (!currentStatus.active && currentStatus.done && !Math.max(0, currentStatus.displayPending || 0) && !retryableCount && !Math.max(0, currentStatus.failed || currentStatus.aiDropped || 0)) loadedTranslationStatusStore.scheduleHide(LOADED_STATUS_COMPLETION_HIDE_MS, () => this.removeLoadedAutoTranslationStatusElement());
+				this.ensureLoadedStatusCapsuleController().update(updates);
 			}
 
 			clearLoadedAutoTranslationStatus () {
-				historicalDisplayTracker.clear();
-				loadedTranslationStatusStore.clear();
-				const element = typeof document != "undefined" && document.getElementById("DiscordAITranslator-loaded-status");
-				if (element) element.remove();
-				this.detachLoadedAutoTranslationStatusPositionWatcher();
-				this.updateInlineLoadedAutoTranslationStatusElements();
+				this.ensureLoadedStatusCapsuleController().clear();
 			}
 
 			scheduleTranslationRerender (options = {}) {
@@ -2252,23 +2015,18 @@ module.exports = (_ => {
 				return true;
 			}
 
-			scheduleHistoricalTranslationJobStart (channelId) {
-				const entry = this.getHistoricalTranslationJobQueue(channelId, false);
-				if (!entry || entry.startToken) return;
-				const token = {};
-				entry.startToken = token;
-				const startSnapshot = _ => {
-					if (entry.startToken !== token || !this.ensureHistoricalJobRegistry().isCurrentQueue(channelId, entry)) return;
-					entry.startToken = null;
-					this.finishHistoricalTranslationSnapshot(channelId);
-				};
-				if (typeof queueMicrotask == "function") queueMicrotask(startSnapshot);
-				else Promise.resolve().then(startSnapshot);
+			ensureHistoricalSnapshotCadence () {
+				if (!this.historicalSnapshotCadenceInstance) this.historicalSnapshotCadenceInstance = createHistoricalSnapshotCadence({timeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), clear: timer => BDFDB.TimeUtils.clear(timer), isUserActivelyScrolling: channelId => this.isUserActivelyScrollingMessages(channelId), isCurrentQueue: (channelId, entry) => this.ensureHistoricalJobRegistry().isCurrentQueue(channelId, entry), finishSnapshot: channelId => this.finishHistoricalTranslationSnapshot(channelId)});
+				return this.historicalSnapshotCadenceInstance;
 			}
 
+			scheduleHistoricalTranslationJobStart (channelId) {this.ensureHistoricalSnapshotCadence().armQuietWindowSeal(channelId, this.getHistoricalTranslationJobQueue(channelId, false));}
+			clearHistoricalSnapshotSealTimer (entry) {this.ensureHistoricalSnapshotCadence().clearSealTimer(entry);}
 			finishHistoricalTranslationSnapshot (channelId) {
 				const entry = this.getHistoricalTranslationJobQueue(channelId, false);
 				if (!entry) return false;
+				// An explicit finish owns the seal; a still-armed quiet window must not fire later and prematurely seal what collects next.
+				this.clearHistoricalSnapshotSealTimer(entry);
 				const job = [...entry.jobs].reverse().find(candidate => candidate && candidate.state == "collecting" && !candidate.sealed);
 				if (!job) return false;
 				job.seal();
@@ -2279,11 +2037,14 @@ module.exports = (_ => {
 				const entry = this.getHistoricalTranslationJobQueue(channelId, false);
 				if (!entry) return Promise.resolve(null);
 				const config = Object.assign({sealCurrent: true}, options);
-				entry.startToken = null;
+				this.clearHistoricalSnapshotSealTimer(entry);
 				if (entry.runningPromise || entry.pendingLiveHandoffTicket) return entry.runningPromise || Promise.resolve(null);
 				let job = entry.jobs.find(candidate => candidate && candidate.state == "collecting" && candidate.sealed);
 				if (!job && config.sealCurrent) { job = entry.jobs.find(candidate => candidate && candidate.state == "collecting"); if (job) job.seal(); }
 				if (!job) return Promise.resolve(null);
+				// Batches sealed behind the running job start as ONE job with ONE atomic
+				// commit (cadence audit 2026-08-19; policy in historical-snapshot-cadence).
+				this.ensureHistoricalSnapshotCadence().mergeSealedJobs({channelId, entry, job, loadedLimit: this.getReceivedAutoTranslateLoadedLimit(), markMessageQueued: (messageId, marker) => this.ensureLiveTranslationQueue().markMessageQueued(messageId, marker)});
 				job.lastConsumedLiveRequestTicketAtStart = this.ensureLiveTranslationQueue().getLastConsumedLiveRequestTicket(channelId);
 				const runningPromise = Promise.resolve(job.start()).finally(_ => {
 					for (const record of job.items.values()) {
@@ -2293,6 +2054,7 @@ module.exports = (_ => {
 					}
 					if (entry.runningPromise == runningPromise) entry.runningPromise = null;
 					entry.jobs = entry.jobs.filter(candidate => candidate != job);
+					this.ensureHistoricalSnapshotCadence().sealCollectingAtJobEnd(channelId, entry);
 					if (entry.jobs.some(candidate => candidate && candidate.state == "collecting" && candidate.sealed)) { const liveQueue = this.ensureLiveTranslationQueue(), consumedTicket = liveQueue.getLastConsumedLiveRequestTicket(channelId);
 						if (consumedTicket && consumedTicket != job.lastConsumedLiveRequestTicketAtStart) { entry.pendingLiveHandoffTicket = null; this.startCollectedHistoricalTranslationJobs(channelId, {sealCurrent: false}); } else { const pendingTicket = liveQueue.reserveQueuedLiveRequest(channelId); if (!pendingTicket) { entry.pendingLiveHandoffTicket = null; this.startCollectedHistoricalTranslationJobs(channelId, {sealCurrent: false}); } else entry.pendingLiveHandoffTicket = pendingTicket; } }
 					else if (!entry.jobs.length && !entry.startToken && this.ensureHistoricalJobRegistry().isCurrentQueue(channelId, entry)) this.ensureHistoricalJobRegistry().deleteQueue(channelId);
@@ -2357,7 +2119,7 @@ module.exports = (_ => {
 				const entries = channelId ? [this.getHistoricalTranslationJobQueue(channelId, false)].filter(Boolean) : this.ensureHistoricalJobRegistry().listQueues();
 				for (const entry of entries) {
 					entry.generation++;
-					this.ensureLiveTranslationQueue().clearReservedLiveRequest(entry.channelId, entry.pendingLiveHandoffTicket); entry.startToken = null; entry.pendingLiveHandoffTicket = null;
+					this.ensureLiveTranslationQueue().clearReservedLiveRequest(entry.channelId, entry.pendingLiveHandoffTicket); this.clearHistoricalSnapshotSealTimer(entry); entry.pendingLiveHandoffTicket = null;
 					for (const job of entry.jobs) {
 						job.cancel(reason);
 						for (const record of job.items.values()) if (record.source && record.source.message) this.ensureLiveTranslationQueue().clearQueuedMessage(record.source.message.id);
@@ -2518,7 +2280,7 @@ module.exports = (_ => {
 					const liveView = this.getReceivedDisplayRuntimeView(String(messageId));
 					return liveView && liveView.translated && !displayReadyIds.has(String(messageId));
 				}).length;
-				const displayPending = historicalDisplayTracker.begin({channelId: job.channelId, batchKey: job.id, outcome: batchOutcome, displayed, displayableIds: summary.translated.map(item => item && item.message && String(item.message.id)).filter(Boolean), schedule: (messageId, trackingKey) => this.scheduleReceivedDisplayFlush(job.channelId, messageId, null, trackingKey)});
+				const displayPending = historicalDisplayTracker.begin({channelId: job.channelId, batchKey: job.id, outcome: batchOutcome, displayed, displayableIds: summary.translated.map(item => item && item.message && String(item.message.id)).filter(Boolean), schedule: (messageId, trackingKey) => this.scheduleReceivedDisplayFlush(job.channelId, messageId, null, trackingKey, "historical")});
 				this.updateLoadedAutoTranslationStatus({active: false, collecting: false, done: true, channelId: job.channelId, total: job.items.size, processed: job.items.size, displayed: displayed + liveDisplayed, displayPending, skipped: summary.skipped.length, failed: summary.failed.length, retryable: failedCount, aiDropped: summary.failed.length});
 			}
 
@@ -2598,86 +2360,20 @@ module.exports = (_ => {
 				BDFDB.MessageUtils.rerenderAll();
 			}
 
+			ensureContextMenuWiring () {
+				if (!this.contextMenuWiringInstance) this.contextMenuWiringInstance = createContextMenuWiring({BDFDB, getPlugin: () => this, messageTypes, translateIcon, translateIconUntranslate});
+				return this.contextMenuWiringInstance;
+			}
 			onMessageContextMenu (e) {
-				if (e.instance.props.message && e.instance.props.channel) {
-					let translated = this.isMessageDisplayTranslated(e.instance.props.message, e.instance.props.channel.id);
-					let hint = BDFDB.BDUtils.isPluginEnabled("MessageUtilities") ? BDFDB.BDUtils.getPlugin("MessageUtilities").getActiveShortcutString("__Translate_Message") : null;
-					let [children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, {id: ["copy-text", "pin", "unpin"]});
-					if (index == -1) [children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, {id: ["edit", "add-reaction", "add-reaction-1", "quote"]});
-					children.splice(index > -1 ? index + 1 : 0, 0, BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-						label: translated ? this.labels.context_messageuntranslateoption : this.labels.context_messagetranslateoption,
-						id: BDFDB.ContextMenuUtils.createItemId(this.name, translated ? "untranslate-message" : "translate-message"),
-						icon: _ => BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.MenuItems.MenuIcon, {
-							icon: translated ? translateIconUntranslate : translateIcon
-						}),
-						action: _ => this.translateMessage(e.instance.props.message, e.instance.props.channel, {manual: true, independentOfTextAreaSwitch: true, trackBusy: false})
-					}));
-					this.injectMessageLanguageActions(children, index > -1 ? index + 1 : 0, e.instance.props.message, e.instance.props.channel);
-					this.injectSearchItem(e, false, e.instance.props.channel.id);
-				}
+				this.ensureContextMenuWiring().onMessageContextMenu(e);
 			}
 			onTextAreaContextMenu (e) {
-				this.injectSearchItem(e, true);
+				this.ensureContextMenuWiring().onTextAreaContextMenu(e);
 			}
 			injectSearchItem (e, ownMessage, channelId = null) {
-				let text = document.getSelection().toString();
-				if (text) {
-					let translating, foundTranslation, foundInput, foundOutput, copied;
-					let [children, index] = BDFDB.ContextMenuUtils.findItem(e.returnvalue, {id: ["devmode-copy-id", "search-google"], group: true});
-					children.splice(index > -1 ? index + 1 : 0, 0, BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuGroup, {
-						children: BDFDB.ContextMenuUtils.createItem(BDFDB.LibraryComponents.MenuItems.MenuItem, {
-							id: BDFDB.ContextMenuUtils.createItemId(this.name, "search-translation"),
-							icon: _ => BDFDB.ReactUtils.createElement(BDFDB.LibraryComponents.MenuItems.MenuIcon, {
-								icon: translateIcon
-							}),
-							disabled: this.ensureLiveTranslationQueue().isBusyTranslating(),
-							label: this.labels.context_translator,
-							persisting: true,
-							action: event => {
-								let item = BDFDB.DOMUtils.getParent(BDFDB.dotCN.menuitem, event.target);
-								if (item) {
-									let createTooltip = _ => {
-										BDFDB.TooltipUtils.create(item, !foundTranslation ? this.labels.toast_translating_failed : [
-											`${BDFDB.LanguageUtils.LibraryStrings.from} ${this.getLanguageDisplayName(foundInput)}:`,
-											text,
-											`${BDFDB.LanguageUtils.LibraryStrings.to} ${this.getLanguageDisplayName(foundOutput)}:`,
-											foundTranslation
-										].map(n => BDFDB.ReactUtils.createElement("div", {children: n})), {
-											type: "right",
-											color: foundTranslation ? "primary" : "red",
-											className: "googletranslate-tooltip"
-										});
-									};
-									if (foundTranslation && foundInput && foundOutput) {
-										if (document.querySelector(".googletranslate-tooltip")) {
-											if (!copied) {
-												copied = true;
-												BDFDB.LibraryModules.WindowUtils.copy(foundTranslation);
-												BDFDB.NotificationUtils.toast(BDFDB.LanguageUtils.LibraryStringsFormat("clipboard_success", BDFDB.LanguageUtils.LanguageStrings.TEXT), {type: "success"});
-											}
-											else {
-												BDFDB.ContextMenuUtils.close(e.instance);
-												BDFDB.DiscordUtils.openLink(this.getGoogleTranslatePageURL(foundInput.id, foundOutput.id, text));
-											}
-										}
-										else createTooltip();
-									}
-									else if (!translating) {
-										translating = true;
-										this.translateText(text, ownMessage ? messageTypes.SENT : messageTypes.RECEIVED, (translation, input, output) => {
-											if (translation) {
-												foundTranslation = translation, foundInput = input, foundOutput = output;
-												createTooltip();
-											}
-											else createTooltip();
-										}, null, {channelId: channelId || BDFDB.LibraryStores.SelectedChannelStore.getChannelId()});
-									}
-								}
-							}
-						})
-					}));
-				}
+				this.ensureContextMenuWiring().injectSearchItem(e, ownMessage, channelId);
 			}
+
 			processMessageButtons (e) {
 				if (!e.instance.props.message || !e.instance.props.channel) return;
 				let [children, index] = BDFDB.ReactUtils.findParent(e.returnvalue, {props: [["className", BDFDB.disCN.messagebuttons]]});
@@ -2711,89 +2407,17 @@ module.exports = (_ => {
 					}
 				}));
 			}
-			processChannelTextAreaContainer (e) {
-				if (e.instance.props.type != BDFDB.DiscordConstants.ChannelTextAreaTypes.NORMAL && e.instance.props.type != BDFDB.DiscordConstants.ChannelTextAreaTypes.SIDEBAR) return;
-				BDFDB.PatchUtils.patch(this, e.instance.props, "onSubmit", {instead: e2 => {
-					if (e2.methodArguments[0].value) {
-						const text = e2.methodArguments[0].value;
-						// Check for translation prefixes
-						const prefixMap = {};
-						const prefixData = this.settings.prefixes && this.settings.prefixes.translationPrefixData || [];
-						for (const entry of prefixData) {
-							prefixMap[entry.prefix] = entry.language;
-						}
-						let foundPrefix = null;
-						let targetLanguage = null;
-						// Check for prefixes more efficiently
-						for (const prefix in prefixMap) {
-							if (text.trim().startsWith(prefix)) {
-								foundPrefix = prefix;
-								targetLanguage = prefixMap[prefix];
-								break;
-							}
-						}
-						if (foundPrefix) {
-							e2.stopOriginalMethodCall();
-							// Remove the prefix from the message
-							const cleanText = text.trim().substring(foundPrefix.length).trim();
-							this.shouldAutoTranslateSentMessage(cleanText, e.instance.props.channel.id, shouldTranslate => {
-								if (!shouldTranslate) return e2.originalMethod(Object.assign({}, e2.methodArguments[0], {value: cleanText}));
-								// Translate with the specific target language
-								this.translateText(cleanText, messageTypes.SENT, (translation, input, output) => {
-									// Override the output language with the one from the prefix
-									output = {id: targetLanguage, name: (this.ensureSettingsStore().getLanguage(targetLanguage) || {}).name || targetLanguage};
-									translation = this.buildSentTranslationMessageValue(cleanText, translation, input, output);
-									Promise.resolve(e2.originalMethod(Object.assign({}, e2.methodArguments[0], {value: translation}))).then(_ => {
-										this.trackPendingSentOriginal(e.instance.props.channel.id, cleanText, translation);
-									});
-								}, targetLanguage, {channelId: e.instance.props.channel.id});
-							}, targetLanguage);
-							return Promise.resolve({
-								shouldClear: true,
-								shouldRefocus: true
-							});
-						}
-						else if (this.isTranslationEnabled(e.instance.props.channel.id)) {
-							e2.stopOriginalMethodCall();
-							const originalValue = e2.methodArguments[0].value;
-							const channelId = e.instance.props.channel.id;
-							const sentRequest = this.createSentAutomaticTranslationRequest(channelId, originalValue);
-							const submit = nextValue => e2.originalMethod(Object.assign({}, e2.methodArguments[0], {value: nextValue}));
-							this.shouldAutoTranslateSentMessage(originalValue, e.instance.props.channel.id, shouldTranslate => {
-								if (!shouldTranslate || !this.isSentAutomaticTranslationRequestCurrent(sentRequest)) return this.completeSentAutomaticTranslationRequest(sentRequest, originalValue, submit);
-								this.translateText(originalValue, messageTypes.SENT, (translation, input, output) => {
-									translation = this.buildSentTranslationMessageValue(originalValue, translation, input, output);
-									this.completeSentAutomaticTranslationRequest(sentRequest, translation, submit);
-								}, null, {channelId});
-							});
-							return Promise.resolve({
-								shouldClear: true,
-								shouldRefocus: true
-							});
-						}
-					}
-					return e2.callOriginalMethodAfterwards();
-				}}, {noCache: true});
+			ensureComposerWiring () {
+				if (!this.composerWiringInstance) this.composerWiringInstance = createComposerWiring({BDFDB, getPlugin: () => this, messageTypes, TranslateButtonComponent});
+				return this.composerWiringInstance;
 			}
+			processChannelTextAreaContainer (e) {this.ensureComposerWiring().processChannelTextAreaContainer(e);}
 			processChannelTextAreaEditor (e) {
 				// Do not disable the text area while background/manual message translations are running.
 				// Disabling here interrupts draft typing and can drop unsent text during message list refreshes.
 			}
 			processChannelTextAreaButtons (e) {
-				if (e.instance.props.disabled || ![BDFDB.DiscordConstants.ChannelTextAreaTypes.NORMAL, BDFDB.DiscordConstants.ChannelTextAreaTypes.SIDEBAR, "normal", "sidebar"].includes(typeof e.instance.props.type == "string" ? e.instance.props.type : e.instance.props.type && e.instance.props.type.analyticsName)) return;
-				if (!e.returnvalue || !e.returnvalue.props) return;
-				let children = [].concat(e.returnvalue.props.children || []).filter(child => {
-					if (!child) return false;
-					if (child.key == `${this.name}-translate-textarea-button`) return false;
-					const className = child.props && typeof child.props.className == "string" ? child.props.className : "";
-					return !className.includes("_translatortranslatebutton");
-				});
-				children.unshift(BDFDB.ReactUtils.createElement(TranslateButtonComponent, {
-					key: `${this.name}-translate-textarea-button`,
-					guildId: e.instance.props.channel.guild_id ? e.instance.props.channel.guild_id : "@me",
-					channelId: e.instance.props.channel.id
-				}));
-				e.returnvalue.props.children = children;
+				this.ensureComposerWiring().processChannelTextAreaButtons(e);
 			}
 
 			get modelCatalogState () {
@@ -2829,7 +2453,7 @@ module.exports = (_ => {
 					getDisplayCommitGeneration: channelId => this.getReceivedDisplayCommitGeneration(channelId),
 					markDisplayPending: (record, options) => this.markReceivedDisplayPending(record, options),
 					releaseDisplayPending: record => this.releaseReceivedDisplayPending(record),
-					scheduleDisplayFlush: (channelId, messageId) => this.scheduleReceivedDisplayFlush(channelId, messageId),
+					scheduleDisplayFlush: (channelId, messageId, source) => this.scheduleReceivedDisplayFlush(channelId, messageId, null, null, source || "live"),
 					collectHistoricalMessage: queueItem => this.collectHistoricalTranslationMessage(queueItem),
 					resetLoadedMessageTracking: (channelId = null) => loadedTranslationStatusStore.resetSeen(channelId),
 					clearEligibleReplyPreviewMessages: channelId => this.clearAutoTranslationEligibleReplyPreviewMessages(channelId),
@@ -2994,26 +2618,36 @@ module.exports = (_ => {
 
 			ensureReceivedDisplayRuntime () {
 				if (!this.receivedDisplayRuntimeInstance) this.receivedDisplayRuntimeInstance = createDisplayRuntime({
-					BDFDB: {
-						dotCN: BDFDB.dotCN || {},
-						MessageUtils: BDFDB.MessageUtils
-					},
+					// The atomic rebuild needs the React handles too - wiring only dotCN and
+					// MessageUtils left ReactUtils.flushSync undefined and every transaction
+					// silently fell back to the two-flush rerenderAll (2026-08-19, 0A/56F).
+					BDFDB: {dotCN: BDFDB.dotCN || {}, MessageUtils: BDFDB.MessageUtils, ReactUtils: BDFDB.ReactUtils, ObjectUtils: BDFDB.ObjectUtils, LibraryStores: BDFDB.LibraryStores, DMUtils: BDFDB.DMUtils, ChannelUtils: BDFDB.ChannelUtils},
 					document: {
 						querySelector: selector => typeof document == "undefined" || !document || !selector ? null : document.querySelector(selector)
 					},
 					requestAnimationFrame: callback => typeof requestAnimationFrame == "function" ? requestAnimationFrame(callback) : setTimeout(callback, 0),
 					isRuntimeActive: () => pluginRuntimeActive,
+					// Preview-wave coalescer: managed timer plus the scheduler's repaint gate.
+					setTimeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay),
+					canRepaintNow: () => this.canRepaintReceivedDisplayNow(),
+					// Flux per-row repaint handles (experiment-verified 2026-08-19): the store
+					// dispatcher, the message record, and the guild for the payload envelope.
+					resolveDispatcher: () => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && BDFDB.LibraryStores.SelectedChannelStore._dispatcher || null,
+					getStoreMessage: (channelId, messageId) => {try {return BDFDB.LibraryStores.MessageStore.getMessage(channelId, messageId) || null;} catch (error) {return null;}},
+					getGuildId: channelId => {try {const channel = BDFDB.LibraryStores.ChannelStore.getChannel(channelId); return channel && channel.guild_id || null;} catch (error) {return null;}},
+					onTranslationDisplayed: (channelId, messageId) => this.ensureLoadedStatusCapsuleController().recordTranslationsDisplayed(channelId, [messageId]),
 					getUserScrollIntentSequence: () => this.ensureMessageViewportStore().getUserScrollIntentSequence(),
 					// Scroll preservation is best-effort: a capture or restore failure must never
-					// break an acknowledged display transaction.
-					captureScrollState: () => {
-						try {return this.captureMessageScrollerState();}
+					// break a display transaction. The viewport store owns the anchor-over-offset choice.
+					captureScrollState: context => {
+						try {return this.ensureMessageViewportStore().captureDisplayTransactionScrollState(context);}
 						catch (error) {return null;}
 					},
 					restoreScrollState: scrollerState => {
-						try {this.restoreMessageScrollerState(scrollerState);}
+						try {this.ensureMessageViewportStore().restoreDisplayTransactionScrollState(scrollerState);}
 						catch (error) {}
-					}
+					},
+					restoreScrollStateNow: scrollerState => this.ensureMessageViewportStore().restoreDisplayTransactionScrollStateNow(scrollerState)
 				});
 				return this.receivedDisplayRuntimeInstance;
 			}
@@ -3041,9 +2675,7 @@ module.exports = (_ => {
 				return this.ensureReceivedDisplayRuntime().getDisplayView(messageId);
 			}
 
-			getReceivedDisplayRuntimeView (messageId) {
-				return this.ensureReceivedDisplayRuntime().getDisplayView(messageId);
-			}
+			getReceivedDisplayRuntimeView (messageId) {return this.getReceivedDisplayView(messageId);}
 
 			restoreReceivedDisplayChannel (channelId, options) {
 				return this.ensureReceivedDisplayRuntime().restoreChannel(channelId, options);
@@ -3076,12 +2708,12 @@ module.exports = (_ => {
 			// Repaint cadence lives in the scheduler module; the plugin only supplies the
 			// predicates that depend on Discord state.
 			canRepaintReceivedDisplayNow () {
-				return !this.isTranslatorSettingsSurfaceOpen();
+				return !this.isTranslatorSettingsSurfaceOpen() && !(this.isViewingMessageHistory() && this.isUserActivelyScrollingMessages());
 			}
 
 			ensureReceivedDisplayRepaintScheduler () {
 				if (!this.receivedDisplayRepaintSchedulerInstance) this.receivedDisplayRepaintSchedulerInstance = createDisplayRepaintScheduler({
-					renderMessages: messageIds => this.ensureReceivedDisplayRuntime().renderMessages(messageIds),
+					renderMessages: (messageIds, meta) => this.ensureReceivedDisplayRuntime().renderMessages(messageIds, meta),
 					onRenderOutcome: report => historicalDisplayTracker.handle(report),
 					canRepaintNow: () => this.canRepaintReceivedDisplayNow(),
 					isViewingHistory: () => this.isViewingMessageHistory(),
@@ -3094,7 +2726,7 @@ module.exports = (_ => {
 				return this.receivedDisplayRepaintSchedulerInstance;
 			}
 
-			scheduleReceivedDisplayFlush (channelId, messageId, delay = null, trackingKey = null) {this.ensureReceivedDisplayRepaintScheduler().schedule(channelId, messageId, delay, 1, trackingKey);}
+			scheduleReceivedDisplayFlush (channelId, messageId, delay = null, trackingKey = null, source = null) {this.ensureReceivedDisplayRepaintScheduler().schedule(channelId, messageId, delay, 1, trackingKey, source);}
 
 			clearReceivedDisplayFlushQueue () {
 				this.ensureReceivedDisplayRepaintScheduler().clear();
@@ -3127,33 +2759,11 @@ module.exports = (_ => {
 			getReceivedDisplayViewRenderContent (view) {return translationDisplayLogic.getReceivedDisplayViewRenderContent(this, view);}
 
 			applyReceivedDisplayViewToStream (stream, view) {return translationDisplayLogic.applyReceivedDisplayViewToStream(this, stream, view);}
+			getStreamBodyContent (message) {return translationDisplayLogic.getStreamBodyContent(this, message);} getStreamTranslationRenderContent (message, translation) {return translationDisplayLogic.getStreamTranslationRenderContent(this, message, translation);}
+			paintStreamBody (stream, bodyText) {return translationDisplayLogic.paintStreamBody(this, stream, bodyText);}
 
 			applyReceivedDisplayViewToContent (e, view) {
-				if (!e || !e.returnvalue || !e.returnvalue.props) return;
-				this.cleanupInjectedMessageChildren(this.ensureElementChildrenArray(e.returnvalue));
-				translationDisplayLogic.clearTranslatedRenderDecorations(this, e);
-				if (!view) {
-					delete e.returnvalue.props["data-translator-revision"];
-					return;
-				}
-				e.returnvalue.props["data-translator-revision"] = String(view.revision);
-				if (view.translated && view.translation) {
-					if (this.shouldProtectWrappedTextForPlace(messageTypes.RECEIVED)) e.returnvalue.props.children = this.highlightProtectedWrappedTextInNode(e.returnvalue.props.children, view.messageId);
-					if (this.settings.general.highlightTranslatedMessages) e.returnvalue.props.className = BDFDB.DOMUtils.formatClassName(e.returnvalue.props.className, "translator-translated-message");
-					e.returnvalue.props.style = Object.assign({}, e.returnvalue.props.style, {
-						"--translator-accent-color": this.getTranslatedTextColor(),
-						"--translator-text-color": this.getTranslatedTextColor()
-					});
-					const watermarkNode = translationDisplayLogic.createTranslationWatermarkNode(this, view.translation, "translator-translated-watermark");
-					if (watermarkNode) this.ensureElementChildrenArray(e.returnvalue).push(watermarkNode);
-					if (view.translation.originalContent && this.settings.general.showOriginalMessage && this.settings.general.showOriginalDirectly) this.ensureElementChildrenArray(e.returnvalue).push(this.createOriginalMessageBlock(view.translation.originalContent));
-					return;
-				}
-				if (view.showLoading) this.ensureElementChildrenArray(e.returnvalue).push(BDFDB.ReactUtils.createElement("span", {
-					key: "translator-translation-loading",
-					className: "translator-translation-loading",
-					"aria-label": this.isChineseUiLanguage() ? "正在翻译" : "Translating"
-				}));
+				return translationDisplayLogic.applyReceivedDisplayViewToContent(this, e, view);
 			}
 
 			processMessages (e) {
@@ -3538,95 +3148,18 @@ module.exports = (_ => {
 				return `\n> ${originalText.split("\n").join("\n> ")}`;
 			}
 
+			ensureDiscordMarkupRenderer () {
+				if (!this.discordMarkupRendererInstance) this.discordMarkupRendererInstance = createDiscordMarkupRenderer({BDFDB, getMentionDisplayName: userId => this.getMentionDisplayName(userId)});
+				return this.discordMarkupRendererInstance;
+			}
 			getCustomEmojiAssetUrl (emojiId, animated = false) {
-				if (!emojiId) return "";
-				return `https://cdn.discordapp.com/emojis/${emojiId}.${animated ? "gif" : "webp"}?size=40&quality=lossless`;
+				return this.ensureDiscordMarkupRenderer().getCustomEmojiAssetUrl(emojiId, animated);
 			}
-
 			createDiscordMarkupDisplayNode (token, key) {
-				if (!token) return token;
-				let match = /^<(a?):([A-Za-z0-9_~]+):(\d+)>$/.exec(token);
-				if (match) {
-					const animated = match[1] == "a";
-					const emojiName = match[2];
-					const emojiId = match[3];
-					return BDFDB.ReactUtils.createElement("img", {
-						key,
-						className: "translator-discord-emoji",
-						src: this.getCustomEmojiAssetUrl(emojiId, animated),
-						alt: `:${emojiName}:`,
-						title: `:${emojiName}:`,
-						draggable: false
-					});
-				}
-				match = /^<@!?(\d+)>$/.exec(token);
-				if (match) {
-					const displayName = this.getMentionDisplayName(match[1]) || "user";
-					return BDFDB.ReactUtils.createElement("span", {
-						key,
-						className: "translator-discord-mention",
-						children: `@${displayName}`
-					});
-				}
-				match = /^<@&(\d+)>$/.exec(token);
-				if (match) {
-					let roleName = "role";
-					try {
-						const guildId = BDFDB.LibraryStores.SelectedGuildStore && BDFDB.LibraryStores.SelectedGuildStore.getGuildId && BDFDB.LibraryStores.SelectedGuildStore.getGuildId();
-						const role = guildId && BDFDB.LibraryStores.GuildStore && BDFDB.LibraryStores.GuildStore.getRole && BDFDB.LibraryStores.GuildStore.getRole(guildId, match[1]);
-						if (role && role.name) roleName = role.name;
-					}
-					catch (err) {}
-					return BDFDB.ReactUtils.createElement("span", {
-						key,
-						className: "translator-discord-mention translator-discord-role-mention",
-						children: `@${roleName}`
-					});
-				}
-				match = /^<#(\d+)>$/.exec(token);
-				if (match) {
-					let channelName = "channel";
-					try {
-						const channel = BDFDB.LibraryStores.ChannelStore && BDFDB.LibraryStores.ChannelStore.getChannel && BDFDB.LibraryStores.ChannelStore.getChannel(match[1]);
-						if (channel && channel.name) channelName = channel.name;
-					}
-					catch (err) {}
-					return BDFDB.ReactUtils.createElement("span", {
-						key,
-						className: "translator-discord-mention translator-discord-channel-mention",
-						children: `#${channelName}`
-					});
-				}
-				return token;
+				return this.ensureDiscordMarkupRenderer().createDiscordMarkupDisplayNode(token, key);
 			}
-
 			renderDiscordMarkupText (text, keyPrefix = "discord-markup") {
-				if (text == null) return "";
-				text = String(text);
-				const nodes = [];
-				const tokenRegex = /(<a?:[A-Za-z0-9_~]+:\d+>|<@!?\d+>|<@&\d+>|<#\d+>)/g;
-				let lastIndex = 0;
-				let match;
-				let index = 0;
-				while ((match = tokenRegex.exec(text))) {
-					if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
-					nodes.push(this.createDiscordMarkupDisplayNode(match[0], `${keyPrefix}-${index++}`));
-					lastIndex = match.index + match[0].length;
-				}
-				if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
-				return nodes;
-			}
-
-			createOriginalMessageBlock (originalText) {
-				if (!originalText) return null;
-				return BDFDB.ReactUtils.createElement("div", {
-					key: "translator-original-message",
-					className: "translator-original-message",
-					children: BDFDB.ReactUtils.createElement("span", {
-						className: this.shouldUseSpoilerInReceivedOriginal() ? "translator-original-spoiler" : null,
-						children: this.renderDiscordMarkupText(originalText, "translator-original")
-					})
-				});
+				return this.ensureDiscordMarkupRenderer().renderDiscordMarkupText(text, keyPrefix);
 			}
 
 			getLanguageChoice (direction, place, channelId) {
@@ -3701,309 +3234,16 @@ module.exports = (_ => {
 				return this.ensureSentTranslationStore().getEditableText(messageId, currentText);
 			}
 
+			ensureTranslationPipeline () {
+				if (!this.translationPipelineInstance) this.translationPipelineInstance = createTranslationPipeline({BDFDB, getPlugin: () => this, messageTypes, languageTypes});
+				return this.translationPipelineInstance;
+			}
 			translateMessage (message, channel, options = {}) {
-				return new Promise(callback => {
-					let liveRequest = options.auto ? options.liveRequest || null : null;
-					let manualRequestKey = null;
-					let manualRequest = null;
-					const finish = result => {
-						if (liveRequest) this.finishLiveTranslationRequest(liveRequest);
-						this.ensureSentTranslationStore().releaseManualRequest(manualRequestKey, manualRequest);
-						callback(result);
-					};
-					if (!message) return finish(null);
-					const channelId = channel && channel.id || BDFDB.LibraryStores.SelectedChannelStore.getChannelId();
-					const isManualTranslation = !!options.manual || !options.auto;
-					if (isManualTranslation) manualRequestKey = this.ensureSentTranslationStore().createManualRequestKey(channelId, message.id);
-					const activeTranslation = this.getActiveMessageTranslation(message, channelId);
-					const storeDisplayView = !activeTranslation && this.getReceivedDisplayRuntimeView(message.id);
-					const storeTranslated = !!(storeDisplayView && storeDisplayView.translated && storeDisplayView.origin === "automatic");
-					if (isManualTranslation && !activeTranslation && !storeTranslated && this.ensureSentTranslationStore().hasManualRequest(manualRequestKey)) return finish(false);
-					if (isManualTranslation) this.lockManualTranslationScroll(message.id);
-					if (activeTranslation || storeTranslated) {
-						// Untranslate. The display store owns the translation, so the restore is what
-						// produces the cancelled terminal state with its reason and repaints the
-						// original; clearing first would return the record to idle and leave the
-						// restore with nothing to do.
-						if (options.auto) return finish(false);
-						this.ensureReceivedDisplayRuntime().suppress(message.id);
-						this.restoreReceivedDisplayMessage(message.id).then(_ => {
-							this.ensureReceivedDisplayRuntime().clearPreview(message.id);
-							finish(false);
-						}, _ => finish(false));
-					}
-					else {
-						if (options.auto && !this.isTranslationEnabled(channelId)) return finish(false);
-						const rerenderOptions = {
-							batched: options.auto || options.silent,
-							allowWhileTyping: !!options.auto
-						};
-						const originalContentData = options.originalContentData || this.extractOriginalContentData(message, {ignoreReferencedPreview: isManualTranslation});
-						if (!this.hasTranslatableMessageContent(originalContentData)) return finish(false);
-						if (this.shouldSkipReceivedTranslationBeforeRequest(originalContentData, channelId)) {
-							const skipReason = this.getReceivedAutoTranslateSkipReason(originalContentData, channelId) || "same_language";
-							const skipSignature = this.createReceivedTranslationSignature(message, channelId, originalContentData);
-							this.persistReceivedSkipDecision(message.id, skipSignature, skipReason, this.buildTranslationRequestText(originalContentData));
-							if (options.auto) {
-								this.commitReceivedDisplayResult(this.createReceivedDisplayCommitResult(message, channelId, {
-									sourceSignature: skipSignature,
-									requestIdentity: liveRequest ? String(liveRequest.id) : null,
-									status: "skipped",
-									reason: skipReason
-								}), {refresh: false}).then(_ => finish(false), _ => finish(false));
-								return;
-							}
-							return finish(false);
-						}
-						const signature = this.createReceivedTranslationSignature(message, channelId, originalContentData);
-						if (options.auto && !liveRequest) liveRequest = this.createLiveTranslationRequest(message, channelId, originalContentData, signature);
-						if (options.auto && !this.isLiveTranslationRequestCurrent(liveRequest, message)) return finish(false);
-						const cachedTranslation = this.getCachedReceivedTranslation(message, channelId, originalContentData);
-						if (cachedTranslation) {
-							const storedCachedTranslation = Object.assign({}, cachedTranslation, {
-								channelId,
-								auto: !!options.auto,
-								manual: isManualTranslation,
-								independentOfTextAreaSwitch: !!options.independentOfTextAreaSwitch
-							});
-							if (options.auto) {
-								this.refreshTranslationDisplay(storedCachedTranslation);
-								this.commitReceivedDisplayResult(this.createReceivedDisplayCommitResult(message, channelId, {
-									sourceSignature: storedCachedTranslation.signature != null ? String(storedCachedTranslation.signature) : signature,
-									requestIdentity: liveRequest ? String(liveRequest.id) : null,
-									status: "translated",
-									translation: storedCachedTranslation
-								}), {refresh: false}).then(outcome => {
-									if (outcome && outcome.deferredIds && outcome.deferredIds.length) this.scheduleReceivedDisplayFlush(channelId, message.id);
-									finish(true);
-								}, _ => finish(false));
-								return;
-							}
-							this.applyStoredTranslationToMessage(message, storedCachedTranslation, originalContentData);
-							this.scheduleTranslationRerender(rerenderOptions);
-							return finish(true);
-						}
-						const allTextsToTranslate = this.buildTranslationRequestText(originalContentData);
-						message.embeds.forEach(embed => embed.message_id = message.id);
-						if (isManualTranslation) manualRequest = this.ensureSentTranslationStore().beginManualRequest(manualRequestKey);
-						try {
-							this.translateText(allTextsToTranslate, messageTypes.RECEIVED, (translation, input, output, meta = {}) => {
-								try {
-									if (options.auto && !this.isLiveTranslationRequestCurrent(liveRequest, message)) return finish(false);
-									if (isManualTranslation && !this.ensureSentTranslationStore().isManualRequestCurrent(manualRequestKey, manualRequest)) return finish(false);
-									if (translation) {
-								let strings = translation.split(/\n{0,1}__________________ __________________ __________________\n{0,1}/);
-								let oldContent = (originalContentData.content || "").trim();
-								let translatedContent = (strings.shift() || "").trim();
-								let content = this.buildReceivedDisplayContent(translatedContent, oldContent);
-								const embeds = parseStoredEmbedTranslations({messageEmbeds: message.embeds, originalEmbeds: originalContentData.embeds, segments: strings});
-								const storedTranslation = {
-									signature,
-									channelId,
-									auto: !!options.auto,
-									manual: isManualTranslation,
-									independentOfTextAreaSwitch: !!options.independentOfTextAreaSwitch,
-									content: content,
-									translatedContent,
-									originalContent: oldContent,
-									embeds: embeds,
-									input,
-									output
-								};
-								const rejectReason = this.getAutoTranslatedResultRejectReason(storedTranslation, channelId);
-								if ((options.auto && rejectReason) || this.isTranslationResultTooSimilar(storedTranslation)) {
-									this.persistReceivedSkipDecision(message.id, signature, rejectReason || "too_similar", storedTranslation.originalContent || storedTranslation.translatedContent);
-									if (options.auto) {
-										this.commitReceivedDisplayResult(this.createReceivedDisplayCommitResult(message, channelId, {
-											sourceSignature: signature,
-											requestIdentity: liveRequest ? String(liveRequest.id) : null,
-											status: "skipped",
-											reason: rejectReason || "too_similar"
-										}), {refresh: false}).then(_ => finish(false), _ => finish(false));
-										return;
-									}
-									return finish(false);
-								}
-								if (options.auto) {
-									this.persistTranslationCacheEntry(message.id, signature, storedTranslation);
-									this.commitReceivedDisplayResult(this.createReceivedDisplayCommitResult(message, channelId, {
-										sourceSignature: signature,
-										requestIdentity: liveRequest ? String(liveRequest.id) : null,
-										status: "translated",
-										translation: storedTranslation
-									}), {refresh: false}).then(outcome => {
-										if (outcome && outcome.deferredIds && outcome.deferredIds.length) this.scheduleReceivedDisplayFlush(channelId, message.id);
-										finish(true);
-									}, _ => finish(false));
-									return;
-								}
-								this.applyStoredTranslationToMessage(message, storedTranslation, originalContentData);
-								this.scheduleTranslationRerender(rerenderOptions);
-								this.persistTranslationCacheEntry(message.id, signature, storedTranslation);
-							}
-									else if (meta && meta.skipped && options.auto) {
-										this.persistReceivedSkipDecision(message.id, signature, "ai_skip_signal", allTextsToTranslate);
-										this.commitReceivedDisplayResult(this.createReceivedDisplayCommitResult(message, channelId, {
-											sourceSignature: signature,
-											requestIdentity: liveRequest ? String(liveRequest.id) : null,
-											status: "skipped",
-											reason: "ai_skip_signal"
-										}), {refresh: false}).then(_ => finish(true), _ => finish(true));
-										return;
-									}
-									else if (options.auto && !translation && !(meta && meta.skipped)) {
-										this.commitReceivedDisplayResult(this.createReceivedDisplayCommitResult(message, channelId, {
-											sourceSignature: signature,
-											requestIdentity: liveRequest ? String(liveRequest.id) : null,
-											status: "failed",
-											reason: "provider_failed"
-										}), {refresh: false}).then(_ => finish(false), _ => finish(false));
-										return;
-									}
-									finish(!!translation || !!(meta && meta.skipped));
-								}
-								catch (error) {finish(false);}
-							}, null, {
-								showToast: !options.silent,
-								showFailureToast: !options.silent,
-								trackBusy: options.trackBusy !== false,
-								auto: !!options.auto,
-								forcePlainTranslation: !!options.forcePlainTranslation,
-								channelId
-							});
-						}
-						catch (error) {finish(false);}
-					}
-				});
+				return this.ensureTranslationPipeline().translateMessage(message, channel, options);
 			}
 
 			translateText (text, place, callback, forcedOutputLanguage = null, options = {}) {
-				const showToast = options.showToast !== false;
-				const showFailureToast = options.showFailureToast !== false;
-				const trackBusy = options.trackBusy !== false;
-				let toast = null, toastInterval, finished = false, retriedAfterSkip = false, skipSafetyNetHandler = null, finishTranslation = translation => {
-					// AI-decision safety net: when AI decision mode returns a skip signal OR a wrong-target
-					// result (e.g. it echoes all-caps text unchanged, treating it as an acronym) for a
-					// received auto message, verify the original is actually foreign before honoring the
-					// drop. A real foreign message gets a forced plain re-translation (no skip option) so it
-					// is never dropped to an AI misjudgement. Runs before the cleanup guards so the
-					// translating state stays live.
-					const isSkip = this.isSkipTranslationSignal(translation);
-					if (!isSkip && translation) translation = this.addExceptions(translation, protectedSegments);
-					const wrongTarget = !isSkip && !!translation && !this.isTranslationLikelyInTargetLanguage(translation, output && output.id);
-					if (!finished && !retriedAfterSkip && skipSafetyNetHandler && (isSkip || wrongTarget) && options.auto && place == messageTypes.RECEIVED && this.useLocalLanguagePrecheck() && this.shouldUseAiAutoTranslateDecision(channelId)) {
-						retriedAfterSkip = true;
-						skipSafetyNetHandler(translation);
-						return;
-					}
-					if (trackBusy) this.ensureLiveTranslationQueue().setBusyTranslating(false);
-					if (toast) toast.close();
-					BDFDB.TimeUtils.clear(toastInterval);
-
-					if (finished) return;
-					finished = true;
-					const complete = (...args) => {
-						callback(...args);
-						if (trackBusy) this.processAutoTranslationQueue();
-					};
-					if (isSkip) return complete("", input, output, {skipped: true});
-					if (translation && wrongTarget) return complete("", input, output, {failed: true, wrongTargetLanguage: true});
-					complete(translation == text ? "" : translation, input, output, {failed: !translation});
-				};
-				// Bottom-layer protection is shared by AI and traditional engines: only protected placeholders are sent for mentions/emoji/links/code.
-				let [newText, protectedSegments, translate] = this.removeExceptions(text.trim(), place);
-				let channelId = options.channelId || BDFDB.LibraryStores.SelectedChannelStore.getChannelId();
-				const primaryEngineKey = this.getEffectivePrimaryEngine(channelId);
-				const backupEngineKey = this.getEffectiveBackupEngine(channelId);
-				let input = Object.assign({}, this.ensureSettingsStore().getLanguage(this.getLanguageChoice(languageTypes.INPUT, place, channelId)));
-				let output = forcedOutputLanguage ? 
-					Object.assign({}, this.ensureSettingsStore().getLanguage(forcedOutputLanguage) || {id: forcedOutputLanguage, name: forcedOutputLanguage}) :
-					Object.assign({}, this.ensureSettingsStore().getLanguage(this.getLanguageChoice(languageTypes.OUTPUT, place, channelId)));
-				if (translate && input.id != output.id) {
-					let specialCase = this.checkForSpecialCase(newText, input);
-					if (specialCase) {
-						input.name = specialCase.name;
-						switch (specialCase.id) {
-							case "binary": newText = this.binary2string(newText); break;
-							case "braille": newText = this.braille2string(newText); break;
-							case "morse": newText = this.morse2string(newText); break;
-                            case "hex": newText = this.hex2string(newText); break;
-						}
-					}
-					if (output.special) {
-						switch (output.id) {
-							case "binary": newText = this.string2binary(newText); break;
-							case "braille": newText = this.string2braille(newText); break;
-							case "morse": newText = this.string2morse(newText); break;
-                            case "hex": newText = this.string2hex(newText); break;
-						}
-						finishTranslation(newText);
-					}
-					else {
-						const startTranslating = engine => {
-							if (trackBusy) this.ensureLiveTranslationQueue().setBusyTranslating(true);
-							if (toast) toast.close();
-							BDFDB.TimeUtils.clear(toastInterval);
-							if (showToast) toast = BDFDB.NotificationUtils.toast(`${this.labels.toast_translating} (${translationEngines[engine].name}) - ${BDFDB.LanguageUtils.LibraryStrings.please_wait}`, {
-								timeout: 0,
-								ellipsis: true,
-								position: "center",
-								onClose: _ => BDFDB.TimeUtils.clear(toastInterval)
-							});
-							// The watchdog floor must cover requestWithTimeout's 30s window (60 ticks
-							// at 500ms); a shorter floor discards paid responses arriving after it.
-							const timeoutTicks = Math.max(64, Math.min(120, Math.ceil((newText || "").length / 25)));
-							toastInterval = BDFDB.TimeUtils.interval((_, count) => {
-								if (count < timeoutTicks) return;
-								finishTranslation("");
-								if (showFailureToast) BDFDB.NotificationUtils.toast(`${this.labels.toast_translating_failed} (${translationEngines[engine].name}) - ${this.labels.toast_translating_tryanother}`, {
-									type: "danger",
-									position: "center"
-								});
-							}, 500);
-						};
-						const aiPrompt = this.getAiAutoTranslatePrompt({input, output});
-						const normalizeProviderTranslation = translation => {
-							if (!translation || this.isSkipTranslationSignal(translation)) return translation;
-							return this.hasAllProtectionPlaceholders(translation, protectedSegments) ? translation : "";
-						};
-						const dispatchEngine = useAutoDecision => {
-							const aiDecisionFor = engineKey => !!useAutoDecision && this.supportsAiAutoTranslateDecisionEngine(engineKey);
-							if (this.validTranslator(primaryEngineKey, input, output, specialCase)) {
-								startTranslating(primaryEngineKey);
-								this[translationEngines[primaryEngineKey].funcName].apply(this, [{input, output, text: newText, specialCase, engine: translationEngines[primaryEngineKey], autoDecision: aiDecisionFor(primaryEngineKey), decisionPrompt: aiPrompt}, translation => {
-									translation = normalizeProviderTranslation(translation);
-									if (!translation && this.validTranslator(backupEngineKey, input, output, specialCase)) {
-										startTranslating(backupEngineKey);
-										this[translationEngines[backupEngineKey].funcName].apply(this, [{input, output, text: newText, specialCase, engine: translationEngines[backupEngineKey], autoDecision: aiDecisionFor(backupEngineKey), decisionPrompt: aiPrompt}, backupTranslation => finishTranslation(normalizeProviderTranslation(backupTranslation))]);
-									}
-									else finishTranslation(translation);
-								}]);
-							}
-							else if (this.validTranslator(backupEngineKey, input, output, specialCase)) {
-								startTranslating(backupEngineKey);
-								this[translationEngines[backupEngineKey].funcName].apply(this, [{input, output, text: newText, specialCase, engine: translationEngines[backupEngineKey], autoDecision: aiDecisionFor(backupEngineKey), decisionPrompt: aiPrompt}, backupTranslation => finishTranslation(normalizeProviderTranslation(backupTranslation))]);
-							}
-							else finishTranslation();
-						};
-						// Safety net handler: invoked by finishTranslation on an AI skip signal for a received
-						// auto message. If the message is foreign, force a plain re-translation (autoDecision:false,
-						// no skip option); otherwise honor the original skip.
-						skipSafetyNetHandler = skipTranslation => {
-							this.isReceivedMessageForeignAsync(newText, output && output.id, isForeign => {
-								if (isForeign) dispatchEngine(false);
-								else finishTranslation(skipTranslation);
-							});
-						};
-						// Clearly cross-script foreign messages (e.g. all-caps Latin "HELLO CRYZYYY" -> Chinese)
-						// are always foreign: translate plainly so AI decision mode cannot misjudge all-caps
-						// text as an acronym and echo/skip it. Same-script (latin<->latin) still uses AI decision.
-						const isReceivedAutoAiDecision = options.auto && !options.forcePlainTranslation && place == messageTypes.RECEIVED && this.shouldUseAiAutoTranslateDecision(channelId);
-						const useAutoDecision = isReceivedAutoAiDecision && !this.isClearlyForeignLanguageMessage(newText, output && output.id);
-						dispatchEngine(useAutoDecision);
-					}
-				}
-				else finishTranslation();
+				return this.ensureTranslationPipeline().translateText(text, place, callback, forcedOutputLanguage, options);
 			}
 			validTranslator (key, input, output, specialCase) {
 				let engine = translationEngines[key];
@@ -4112,102 +3352,19 @@ module.exports = (_ => {
 				return this.ensureProviderClient().MD5(e);
 			}
 
-			checkForSpecialCase (text, input) {
-				if (input.special) return input;
-				else if (input.auto) {
-					if (/^[0-1]*$/.test(text.replace(/\s/g, ""))) {
-						return {id: "binary", name: "Binary"};
-					}
-					else if (/^[⠁⠂⠃⠄⠅⠆⠇⠈⠉⠊⠋⠌⠍⠎⠏⠐⠑⠒⠓⠔⠕⠖⠗⠘⠙⠚⠛⠜⠝⠞⠟⠠⠡⠢⠣⠤⠥⠦⠧⠨⠩⠪⠫⠬⠭⠮⠯⠰⠱⠲⠳⠴⠵⠶⠷⠸⠹⠺⠻⠼⠽⠾⠿]*$/.test(text.replace(/\s/g, ""))) {
-						return {id: "braille", name: "Braille 6-dot"};
-					}
-					else if (/^[/|·−._-]*$/.test(text.replace(/\s/g, ""))) {
-						return {id: "morse", name: "Morse"};
-					}
-					else if (/^(0x[0-9a-fA-F]{2}\s*)+$/.test(text.replace(/\s/g, ""))) {
-						return {id: "hex", name: "Hexadecimal"};
-					}
-				}
-				return null;
+			ensureSpecialCaseCodecs () {
+				if (!this.specialCaseCodecsInstance) this.specialCaseCodecsInstance = createSpecialCaseCodecs({onInvalidBinary: message => BDFDB.NotificationUtils.toast(message, {type: "danger", position: "center"})});
+				return this.specialCaseCodecsInstance;
 			}
-
-			string2binary (string) {
-				let binary = "";
-				for (let character of string) binary += parseInt(character.charCodeAt(0).toString(2)).toPrecision(8).split(".").reverse().join("").toString() + " ";
-				return binary;
-			}
-
-			string2braille (string) {
-				let braille = "";
-				for (let character of string) braille += brailleConverter[character.toLowerCase()] ? brailleConverter[character.toLowerCase()] : character;
-				return braille;
-			}
-
-			string2morse (string) {
-				string = string.replace(/ /g, "%%%%%%%%%%");
-				let morse = "";
-				for (let character of string) morse += (morseConverter[character.toLowerCase()] ? morseConverter[character.toLowerCase()] : character) + " ";
-				morse = morse.split("\n");
-				for (let i in morse) morse[i] = morse[i].trim();
-				return morse.join("\n").replace(/% % % % % % % % % % /g, "/ ");
-			}
-			string2hex(string) {
-				let hex = "";
-				for (let character of string) {
-					hex += "0x" + character.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0") + " ";
-				}
-				return hex.trim();
-			}			
-			binary2string (binary) {
-				let string = "";
-				binary = binary.replace(/\n/g, "00001010").replace(/\r/g, "00001101").replace(/\t/g, "00001001").replace(/\s/g, "");
-				if (/^[0-1]*$/.test(binary)) {
-					let eightDigits = "";
-					let counter = 0;
-					for (let digit of binary) {
-						eightDigits += digit;
-						counter++;
-						if (counter > 7) {
-							string += String.fromCharCode(parseInt(eightDigits, 2).toString(10));
-							eightDigits = "";
-							counter = 0;
-						}
-					}
-				}
-				else BDFDB.NotificationUtils.toast("Invalid binary format. Only use 0s and 1s.", {
-					type: "danger",
-					position: "center"
-				});
-				return string;
-			}
-
-			braille2string (braille) {
-				let string = "";
-				for (let character of braille) string += brailleConverter[character.toLowerCase()] ? brailleConverter[character.toLowerCase()] : character;
-				return string;
-			}
-
-			morse2string (morse) {
-				let string = "";
-				for (let word of morse.replace(/[_-]/g, "−").replace(/\./g, "·").replace(/\r|\t/g, "").split(/\/|\||\n/g)) {
-					for (let characterstr of word.trim().split(" ")) string += morseConverter[characterstr] ? morseConverter[characterstr] : characterstr;
-					string += " ";
-				}
-				return string.trim();
-			}
-
-			hex2string(hex) {
-				let string = "";
-				for (let part of hex.trim().split(/\s+/)) {
-					if (part.startsWith("0x") || part.startsWith("0X")) {
-						part = part.slice(2);
-					}
-					if (part.length === 2 && /^[0-9a-fA-F]{2}$/.test(part)) {
-						string += String.fromCharCode(parseInt(part, 16));
-					}
-				}
-				return string;
-			}			
+			checkForSpecialCase (text, input) {return this.ensureSpecialCaseCodecs().checkForSpecialCase(text, input);}
+			string2binary (string) {return this.ensureSpecialCaseCodecs().string2binary(string);}
+			string2braille (string) {return this.ensureSpecialCaseCodecs().string2braille(string);}
+			string2morse (string) {return this.ensureSpecialCaseCodecs().string2morse(string);}
+			string2hex (string) {return this.ensureSpecialCaseCodecs().string2hex(string);}
+			binary2string (binary) {return this.ensureSpecialCaseCodecs().binary2string(binary);}
+			braille2string (braille) {return this.ensureSpecialCaseCodecs().braille2string(braille);}
+			morse2string (morse) {return this.ensureSpecialCaseCodecs().morse2string(morse);}
+			hex2string (hex) {return this.ensureSpecialCaseCodecs().hex2string(hex);}
 
 			escapeRegExp (string) {
 				return protectionLogic.escapeRegExp(this, string);

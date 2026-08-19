@@ -71,3 +71,27 @@ test("a virtualised-only commit never asks for a chat rebuild", async () => {
 		harness.restore();
 	}
 });
+
+test("a flush lane tag travels end to end into the adapter's rebuild attribution", async () => {
+	// Cadence audit 2026-08-19: the settings counters must say which lane rebuilt.
+	// This drives the real runtime wiring: scheduleReceivedDisplayFlush -> scheduler
+	// -> display runtime -> controller -> adapter counters.
+	const harness = createHarness();
+	try {
+		const {plugin} = harness;
+		const channelId = "channel-attribution";
+		plugin.isViewingMessageHistory = () => false;
+		plugin.captureReceivedMessageSource({messageId: "m1", channelId, generation: 1, sourceSignature: "sig-m1", source: {content: "hello", embeds: []}});
+		await plugin.commitReceivedDisplayResult({messageId: "m1", channelId, generation: 1, sourceSignature: "sig-m1", origin: "automatic", status: "translated", translation: {content: "你好"}}, {refresh: false});
+		plugin.scheduleReceivedDisplayFlush(channelId, "m1", null, null, "cached");
+
+		await new Promise(resolve => setTimeout(resolve, 400));
+
+		const stats = plugin.ensureReceivedDisplayRuntime().getRebuildStats();
+		assert.equal(stats.rebuildsBySource.cached, 1, "the lane tag must reach the adapter's counters");
+	}
+	finally {
+		harness.plugin.clearReceivedDisplayFlushQueue();
+		harness.restore();
+	}
+});

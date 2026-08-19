@@ -134,7 +134,12 @@ test("reply preview commit and restore refresh every host in one scoped transact
 			translation: {translatedContent: "translated preview", channelId: "channel-a", auto: true}
 		});
 
-		assert.equal(calls.rerenderAll, beforeCommit + 1, "one preview commit must perform one rebuild");
+		// Preview commits coalesce (repaint "other 69" field reading, 2026-08-19):
+		// the store is committed immediately, but the paint waits for the wave window
+		// and the whole wave costs one rebuild.
+		assert.equal(calls.rerenderAll, beforeCommit, "a preview commit must not rebuild immediately");
+		await new Promise(resolve => setTimeout(resolve, 400));
+		assert.equal(calls.rerenderAll, beforeCommit + 1, "one preview wave must perform one rebuild");
 		const beforeRestore = calls.rerenderAll;
 
 		await plugin.restoreReceivedDisplayChannel("channel-a", {clearPreviews: true});

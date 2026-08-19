@@ -50,6 +50,8 @@ The channel popout does not contain:
 - URLs, mentions, Discord markup, code, commands, IDs, model names, product names, configured glossary terms, and protected placeholders must not be damaged.
 - A professional term should remain untranslated when it has no accepted target-language translation; an official or widely accepted localized name may be used.
 - Translation output must contain translated text only, without explanations or commentary.
+- Google Free splits long input losslessly by encoded request length and transports protected placeholders through a reversible provider-specific wire form. Every chunk and every protected segment must survive before any combined translation is displayed; a partial or protection-damaged response is never painted as complete.
+- A forwarded message uses its visible snapshot body as the translation source. Automatic and manual translation paint inside the forwarded frame, the optional original is composed there exactly once, and untranslate or channel disable restores that same snapshot body without mutating Discord's stored record.
 
 ## Live And Historical Messages
 
@@ -61,14 +63,19 @@ The channel popout does not contain:
 - The configured historical quantity is a maximum. Status uses the actual immutable job size: a job with 50 eligible messages reports `/50`, while a channel with only 20 available eligible messages reports `/20`.
 - Loaded messages form one immutable, channel-scoped, ID-keyed job. A historical job may make several provider or repair requests, but valid terminal results become visible in one atomic display transaction.
 - Historical results that belong to virtualized rows are stored without repainting the chat. Those rows render their final stored state when they later mount.
-- Completed translations become visible even while the user is typing or scrolling; interaction never creates a display delay.
+- Completed translations become visible even while the user is typing. While the user is actively scrolling through history, the committed result is stored immediately but the repaint waits for the scroll gesture to idle (a bounded sub-second deferral) - a rebuild's scroll restore landing mid-gesture is the snap-back users feel (2026-08-19). The live view at the bottom always paints promptly.
+- Enabling automatic translation while reading history preserves the current reading neighbourhood and eye-line message. A recent manual-translation lock belongs only to that message's own transaction and must not redirect the channel-enable repaint; if virtualization temporarily removes the eye-line row during remount, the captured raw history offset is restored first and later settle passes refine it back to the exact row.
 - One historical display transaction refreshes the mounted message rows in that configured batch together while preserving the viewport anchor once; if the user changes scroll intent during paint, the plugin does not pull the viewport back. Virtualized rows render their final stored state when they mount.
 - Automatic translation display repaints the whole message list at most once per translation transaction. Confirmation retries only re-read painted rows, and purely virtualized rows never trigger a repaint; they render their stored state when they mount.
 - The compact loaded-message status is `translation icon completed/total · elapsed`, for example `20/50 · 8s`. It counts valid results stored for visible or virtualized rows, not merely currently painted rows.
+- A backfill scan that finds nothing to translate (every loaded message already translated, skipped, or ineligible) reports a checkmark with "no pending messages", never `0/N` — a zero-over-total reading is reserved for real failures.
+- The pill is ONE cumulative channel ratio (final form, user-specified 2026-08-19): numerator = messages whose translation was displayed so far, denominator = numerator plus the running batch's remaining work. First batch: `0/13 → 13/13`; scrolling queues 20 more: `13/33 → 33/33`. The numerator counts UNIQUE displayed message ids fed by every display transaction - live and historical alike - so retries, echoes, and re-collections never inflate or reset it; it survives batch restarts and channel re-entry and resets only with a global tracking reset (plugin stop or full queue clear). A finished state stays visible (no auto-hide) until the channel's status changes; each channel keeps its own count and shows it when visited. Per-batch detail lives in the hover text. A workless finish keeps the checkmark; failure branches keep their diagnostic batch ratios.
 - The status icon uses the active Discord theme: brand color while translating, positive when complete, warning during repair, and danger for terminal partial failure. Detailed visible, background-ready, and retry counts appear only in the hover explanation.
 - A completed status remains briefly and then collapses. Status updates never repaint the message list.
 - Missing, duplicate, malformed, empty, wrong-language, and placeholder-damaged batch results enter repair instead of disappearing.
 - Each pending message uses a fixed-size CSS loading indicator without timer-driven React rerenders.
+- Translated messages always carry a small inline watermark styled like Discord's edited marker; it identifies the translation and shows source/target details on hover. It is not a user setting.
+- Received messages have one original-text control. When enabled, the original remains alongside the translation using the existing inline quote or spoiler presentation; there is no separate direct-original display mode.
 - Disabling automatic translation restores automatic and manual message displays, reply previews, embeds, and titles through one channel-scoped display transaction without a second broad repaint.
 
 ## Message Lifecycle

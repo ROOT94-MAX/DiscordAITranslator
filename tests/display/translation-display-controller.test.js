@@ -37,7 +37,7 @@ function result(messageId, channelId = "c1", origin = "automatic", requestIdenti
 	};
 }
 
-function createHarness(renderOutcome) {
+function createHarness(renderOutcome, controllerOptions = {}) {
 	const refreshes = [];
 	const store = createMessageStateStore();
 	const renderAdapter = {
@@ -50,7 +50,7 @@ function createHarness(renderOutcome) {
 			};
 		}
 	};
-	return {store, refreshes, controller: createTranslationDisplayController({store, renderAdapter})};
+	return {store, refreshes, controller: createTranslationDisplayController(Object.assign({store, renderAdapter}, controllerOptions))};
 }
 
 function createDeferred() {
@@ -626,4 +626,121 @@ test("commitHistoricalBatch does not capture recordless sources from a mixed-cha
 	assert.deepEqual(outcome.rejectedIds, ["m1", "m2"]);
 	assert.equal(store.getDisplayState("m1"), null);
 	assert.equal(store.getDisplayState("m2"), null);
+});
+
+test("renderMessages threads the transaction's source counts through to the adapter", async () => {
+	// The scheduler knows which lane asked for the paint; the adapter books rebuilds
+	// by that lane. The controller must pass the meta through untouched.
+	const {store, controller, refreshes} = createHarness();
+	capture(store, "m1");
+	store.commitResult(result("m1"));
+
+	await controller.renderMessages(["m1"], {sources: {cached: 1}});
+
+	assert.deepEqual(refreshes[0].sources, {cached: 1});
+});
+
+test("a historical batch commit labels its own refresh as historical", async () => {
+	// commitHistoricalBatch refreshes directly (not through the scheduler), so it
+	// must self-label or the biggest batch lane would read as unattributed.
+	const {store, controller, refreshes} = createHarness();
+	const results = [
+		{...result("m1", "c1"), source: {content: "one", embeds: []}},
+		{...result("m2", "c1"), source: {content: "two", embeds: []}}
+	];
+
+	await controller.commitHistoricalBatch(results);
+
+	assert.equal(refreshes.length, 1);
+	assert.deepEqual(refreshes[0].sources, {historical: 2});
+});
+
+test("preview commits coalesce into one tagged host refresh instead of a rebuild per preview", async () => {
+	// Field reading 2026-08-19 (repaint "other 69" vs "hist 8"): every reply-preview
+	// commit rebuilt the whole layer immediately and untagged. A Midjourney-style
+	// channel commits previews in waves, so the wave must cost ONE transaction.
+	const timers = [];
+	const {store, refreshes, controller} = createHarness(null, {
+		setTimeout: (callback, delay) => {timers.push({callback, delay}); return timers.length;}
+	});
+	store.capturePreviewSource({messageId: "ref1", channelId: "c1", sourceSignature: "s1", source: {content: "a", embeds: []}});
+	store.capturePreviewSource({messageId: "ref2", channelId: "c1", sourceSignature: "s2", source: {content: "b", embeds: []}});
+	store.markPreviewHost("c1", "ref1", "host1");
+	store.markPreviewHost("c1", "ref2", "host2");
+
+	await controller.commitPreviewResult({messageId: "ref1", channelId: "c1", signature: "s1", translation: {translatedContent: "t1"}});
+	await controller.commitPreviewResult({messageId: "ref2", channelId: "c1", signature: "s2", translation: {translatedContent: "t2"}});
+
+	assert.equal(refreshes.length, 0, "a preview commit must not rebuild immediately");
+	assert.equal(timers.length, 1, "the whole wave shares one coalescing window");
+	await timers[0].callback();
+	assert.equal(refreshes.length, 1, "the wave flushes as one transaction");
+	assert.deepEqual([...refreshes[0].ownerMessageIds].sort(), ["host1", "host2"]);
+	assert.deepEqual(refreshes[0].sources, {preview: 2});
+});
+
+test("the preview flush waits out a closed repaint window and lands when it opens", async () => {
+	// A rebuild mid-scroll is what flashes the list to the bottom and yanks it back;
+	// previews are decoration and can always wait for the window to open.
+	const timers = [];
+	let canPaint = false;
+	const {store, refreshes, controller} = createHarness(null, {
+		setTimeout: (callback, delay) => {timers.push({callback, delay}); return timers.length;},
+		canRepaintNow: () => canPaint
+	});
+	store.capturePreviewSource({messageId: "ref1", channelId: "c1", sourceSignature: "s1", source: {content: "a", embeds: []}});
+	store.markPreviewHost("c1", "ref1", "host1");
+
+	await controller.commitPreviewResult({messageId: "ref1", channelId: "c1", signature: "s1", translation: {translatedContent: "t1"}});
+	await timers[0].callback();
+	assert.equal(refreshes.length, 0, "no paint while the window is closed");
+	assert.equal(timers.length, 2, "the flush re-arms instead of dropping the wave");
+
+	canPaint = true;
+	await timers[1].callback();
+	assert.equal(refreshes.length, 1, "the held wave lands once the window opens");
+	assert.deepEqual(refreshes[0].ownerMessageIds, ["host1"]);
+});
+
+test("a preview commit with refresh false stays store-only and joins no wave", async () => {
+	const timers = [];
+	const {store, refreshes, controller} = createHarness(null, {
+		setTimeout: (callback, delay) => {timers.push({callback, delay}); return timers.length;}
+	});
+	store.capturePreviewSource({messageId: "ref1", channelId: "c1", sourceSignature: "s1", source: {content: "a", embeds: []}});
+	store.markPreviewHost("c1", "ref1", "host1");
+
+	await controller.commitPreviewResult({messageId: "ref1", channelId: "c1", signature: "s1", translation: {translatedContent: "t1"}}, {refresh: false});
+
+	assert.equal(refreshes.length, 0);
+	assert.equal(timers.length, 0, "refresh:false arms nothing");
+});
+
+test("a historical batch commit defers its paint while the repaint gate is closed and flushes once when it opens", async () => {
+	// Stranded-at-newest audit (2026-08-19): the batch commit painted ungated, so a
+	// whole-layer rebuild could land mid-scroll - remounting the list at the bottom
+	// under the user's gesture. The store commits immediately; only the paint waits.
+	const timers = [];
+	let canPaint = false;
+	const {store, refreshes, controller} = createHarness(null, {
+		setTimeout: (callback, delay) => {timers.push({callback, delay}); return timers.length;},
+		canRepaintNow: () => canPaint
+	});
+	capture(store, "m1");
+	capture(store, "m2");
+
+	const outcome = await controller.commitHistoricalBatch([result("m1"), result("m2")]);
+
+	assert.equal(refreshes.length, 0, "no rebuild lands over an actively scrolling user");
+	assert.deepEqual([...(outcome.deferredIds || [])].sort(), ["m1", "m2"], "the commit reports the paint as deferred");
+	assert.equal(timers.length, 1);
+	await timers[0].callback();
+	assert.equal(refreshes.length, 0, "the gate is still closed");
+	assert.equal(timers.length, 2, "the flush re-arms instead of dropping the batch");
+
+	canPaint = true;
+	await timers[1].callback();
+	assert.equal(refreshes.length, 1, "one deferred flush paints the whole batch");
+	assert.deepEqual([...refreshes[0].messageIds].sort(), ["m1", "m2"]);
+	assert.deepEqual(refreshes[0].sources, {historical: 2});
 });

@@ -541,19 +541,29 @@ test("a translation arriving while the settings panel is open does not repaint t
 	}
 });
 
-test("a translation repaint is displayed during active scrolling", async () => {
+test("a repaint waits out an active history scroll and lands when the gesture idles", async () => {
+	// Contract updated 2026-08-19: the rebuild's scroll restore mid-gesture was the
+	// snap-back users felt while reading history (screenshot evidence). The commit is
+	// stored immediately; the paint defers only while the user is actively scrolling
+	// in history and lands on the scheduler's next busy-retry once the scroll idles -
+	// a bounded sub-second delay, not the old invisible-until-hover class of bug.
 	const harness = createHarness();
 	try {
 		const {plugin, calls} = harness;
 		const channelId = "channel-active-scroll";
-		plugin.isUserActivelyScrollingMessages = () => true;
+		let scrolling = true;
+		plugin.isUserActivelyScrollingMessages = () => scrolling;
 		plugin.isViewingMessageHistory = () => true;
 		plugin.captureReceivedMessageSource({messageId: "m1", channelId, generation: 1, sourceSignature: "sig-m1", source: {content: "hello", embeds: []}});
 		await plugin.commitReceivedDisplayResult({messageId: "m1", channelId, generation: 1, sourceSignature: "sig-m1", origin: "automatic", status: "translated", translation: {content: "你好"}}, {refresh: false});
 		plugin.scheduleReceivedDisplayFlush(channelId, "m1");
 
 		await new Promise(resolve => setTimeout(resolve, 350));
-		assert.equal(calls.rerenderAll, 1, "targeted display must not wait for scrolling to stop");
+		assert.equal(calls.rerenderAll, 0, "no rebuild may land under the user's scroll gesture");
+		scrolling = false;
+		await new Promise(resolve => setTimeout(resolve, 600));
+		assert.equal(calls.rerenderAll, 1, "the deferred paint lands once the scroll idles, with no new schedule call");
+		assert.equal(plugin.getReceivedDisplayRuntimeView("m1").translated, true);
 	}
 	finally {
 		harness.plugin.clearReceivedDisplayFlushQueue();

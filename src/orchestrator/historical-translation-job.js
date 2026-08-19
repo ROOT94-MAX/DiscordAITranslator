@@ -96,6 +96,29 @@ class HistoricalTranslationJob {
 		return true;
 	}
 
+	// Merges a not-yet-started sibling batch into this one (cadence audit 2026-08-19):
+	// batches sealed behind a running job used to start one-by-one, each with its own
+	// atomic commit and whole-layer rebuild. Returns the moved message ids so the
+	// caller can repoint queue markers, or null when nothing may move.
+	absorb(other) {
+		if (this.state != "collecting" || this.started) return null;
+		if (!other || other === this || other.state != "collecting" || other.started) return null;
+		const movedMessageIds = [];
+		for (const [messageId, record] of other.items) {
+			if (this.items.has(messageId)) continue;
+			this.items.set(messageId, record);
+			movedMessageIds.push(messageId);
+		}
+		// The records now belong to this job; emptying the sibling first keeps its
+		// cancelled state from flipping the moved records to cancelled.
+		other.items = new Map();
+		other.state = "cancelled";
+		other.cancelReason = "merged";
+		other.dependencies.onStateChange(other);
+		if (movedMessageIds.length) this.dependencies.onStateChange(this);
+		return movedMessageIds;
+	}
+
 	cancel(reason = "cancelled") {
 		if (this.state == "committed" || this.state == "cancelled") return false;
 		this.cancelReason = reason;
@@ -298,5 +321,9 @@ module.exports = {
 	normalizeBatchOutcome,
 	HISTORICAL_TERMINAL_ITEM_STATES,
 	HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX,
+	// How long a collecting snapshot waits for more scroll-mounted rows before it
+	// seals (cadence audit 2026-08-19). Historical rows have no 200ms display
+	// contract - that ceiling protects live translations only.
+	HISTORICAL_COLLECT_QUIET_MS: 500,
 	HistoricalTranslationJob
 };

@@ -49,6 +49,8 @@ function legacyStatus(fields) {
 
 test("the primary capsule stays compact across requesting, repair, completion and failure", () => {
 	const harness = createHarness({chinese: true, startTime: 1000});
+	// Displays commit before the status counts them, so the session ids exist first.
+	harness.store.recordSessionDisplayed("c1", ids("m", 20));
 	harness.store.update({active: true, collecting: false, channelId: "c1", batch: 1, total: 50, processed: 20, displayed: 20, phase: "requesting"});
 	harness.advance(8000);
 
@@ -57,7 +59,7 @@ test("the primary capsule stays compact across requesting, repair, completion an
 	assert.equal(harness.store.getStatusText(), "20/50 · 8s", "the primary line does not grow with the UI language");
 	assert.equal(harness.store.getStatusText(legacyStatus({active: true, total: 50, processed: 50, displayed: 48, failed: 2, retryable: 2, phase: "repairing"})), "48/50 · 2↻");
 	assert.equal(harness.store.getStatusText(legacyStatus({active: true, total: 50, processed: 50, displayed: 0, failed: 2, retryable: 2, phase: "repairing"})), "48/50 · 2↻", "atomic paint does not hide how many results are already ready");
-	assert.equal(harness.store.getStatusText(legacyStatus({done: true, total: 50, processed: 50, displayed: 50, phase: "done"})), "50/50");
+	assert.equal(harness.store.getStatusText(legacyStatus({done: true, total: 50, processed: 50, displayed: 50, phase: "done"})), "50/50", "a finished single batch reads as the classic closed ratio");
 	assert.equal(harness.store.getStatusText(legacyStatus({done: true, total: 50, processed: 50, displayed: 48, failed: 2, retryable: 2, phase: "failed"})), "48/50 · 2!");
 });
 
@@ -85,9 +87,11 @@ test("the configured total seals at handoff and final display keeps the exact re
 	store.update({active: true, collecting: true, channelId: "c1", batch: 1, total: 20, processed: 0});
 	store.update({total: 50});
 	store.update({collecting: false, total: 50, processed: 0, phase: "requesting"});
+	store.recordSessionDisplayed("c1", ids("m", 20));
 	store.update({total: 20, processed: 20, displayed: 20});
 
 	assert.equal(store.getStatus().total, 50, "a mounted-window update cannot shrink the sealed configured batch");
+	store.recordSessionDisplayed("c1", ids("m", 30, 21));
 	store.update({active: false, done: true, total: 20, processed: 20, displayed: 50, phase: "done"});
 	assert.equal(store.getStatus().total, 50);
 	assert.equal(store.getStatusText(), "50/50", "confirmed and virtualized-ready results share the exact final count");
@@ -509,4 +513,137 @@ test("a cancelled reposition frame does not strand the guard", () => {
 
 	// The guard must be clear, or a detach would block repositioning forever.
 	assert.equal(store.schedulePosition(() => {repositions++;}), true);
+});
+
+// Capsule-counter product decisions (docs/product.md, 2026-08-19): a no-work scan
+// never reads as 0/N, and completed batches accumulate a session total.
+
+test("a completed scan with nothing to translate shows a checkmark, never zero-over-total", () => {
+	const harness = createHarness();
+	assert.equal(harness.store.getStatusText(legacyStatus({done: true, total: 0})), "✓");
+	assert.equal(harness.store.getStatusDetailText(legacyStatus({done: true, total: 0})), "Loaded translation: on, no pending messages");
+	harness.setChinese(true);
+	assert.equal(harness.store.getStatusDetailText(legacyStatus({done: true, total: 0})), "已加载翻译：开启，暂无待翻译");
+	const failed = legacyStatus({done: true, total: 0, failed: 2, retryable: 2});
+	assert.notEqual(harness.store.getStatusText(failed), "✓", "failures never hide behind the checkmark");
+});
+
+function ids(prefix, count, start = 1) {
+	return Array.from({length: count}, (_, index) => `${prefix}${start + index}`);
+}
+
+test("completed batches accumulate a session total in the pill and the hover detail", () => {
+	const harness = createHarness({chinese: true});
+	harness.store.update({channelId: "c1", batch: 1, active: true, collecting: false, done: false, total: 13, processed: 13});
+	harness.store.recordSessionDisplayed("c1", ids("m", 13));
+	harness.store.update({channelId: "c1", batch: 1, active: false, done: true, displayed: 13});
+	assert.equal(harness.store.getStatusText(), "13/13", "a finished single batch reads as the classic closed ratio");
+	harness.store.update({channelId: "c1", batch: 2, active: true, collecting: false, done: false, total: 20, processed: 20, displayed: 0});
+	// The user-specified cumulative reading: 13 done, 20 more queued = 13/33.
+	assert.equal(harness.store.getStatusText(), "13/33 · 0s");
+	assert.match(harness.store.getStatusDetailText(), /本次累计 13/);
+	harness.store.recordSessionDisplayed("c1", ids("m", 20, 14));
+	harness.store.update({channelId: "c1", batch: 2, active: false, done: true, displayed: 20});
+	assert.equal(harness.store.getStatusText(), "33/33", "the finished cumulative ratio closes");
+	assert.match(harness.store.getStatusDetailText(), /本次累计 33/);
+	harness.setChinese(false);
+	assert.match(harness.store.getStatusDetailText(), /session total 33/);
+});
+
+test("the channel total survives batch restarts and per-channel resets, and only a global reset drops it", () => {
+	const harness = createHarness();
+	harness.store.update({channelId: "c1", batch: 1, active: true, collecting: false, done: false, total: 5, processed: 5});
+	harness.store.recordSessionDisplayed("c1", ids("m", 5));
+	harness.store.update({channelId: "c1", batch: 1, active: false, done: true, displayed: 5});
+	harness.store.update({channelId: "c2", batch: 1, active: true, collecting: false, done: false, total: 4, processed: 4, displayed: 0});
+	harness.store.recordSessionDisplayed("c2", ids("n", 4));
+	harness.store.update({channelId: "c2", batch: 1, active: false, done: true, displayed: 4});
+	assert.equal(harness.store.getStatusText(), "4/4", "another channel never inherits the first channel's total");
+	// A batch-window restart (clear + per-channel reset + a fresh 0/N batch) keeps
+	// counting: this is the 2026-08-19 "0/13 again" report.
+	harness.store.clear();
+	harness.store.resetSeen("c2");
+	harness.store.update({channelId: "c2", batch: 1, active: true, collecting: false, done: false, total: 3, processed: 0, displayed: 0});
+	assert.equal(harness.store.getStatusText(), "4/7 · 0s", "the running restart continues the cumulative ratio instead of starting at zero");
+	harness.store.recordSessionDisplayed("c2", ids("p", 3));
+	harness.store.update({channelId: "c2", batch: 1, active: false, done: true, processed: 3, displayed: 3});
+	assert.equal(harness.store.getStatusText(), "7/7", "the restarted batch closes on the cumulative total");
+	harness.store.resetSeen();
+	harness.store.update({});
+	assert.equal(harness.store.getStatus().sessionDisplayed, 0, "only the global tracking reset drops the totals");
+});
+
+test("the session total counts unique message ids, so re-reports and late batch echoes never inflate it", () => {
+	const harness = createHarness();
+	harness.store.update({channelId: "c1", batch: 1, active: true, collecting: false, done: false, total: 5, processed: 5});
+	harness.store.recordSessionDisplayed("c1", ids("m", 5));
+	// The same rows confirm again on a retry pass and a late batch-1 echo arrives
+	// after batch 2 started; both repeat ids the session already counted.
+	harness.store.recordSessionDisplayed("c1", ids("m", 3));
+	harness.store.update({channelId: "c1", batch: 2, active: true, collecting: false, done: false, total: 4, processed: 4, displayed: 0});
+	harness.store.recordSessionDisplayed("c1", ids("m", 5));
+	assert.equal(harness.store.getStatus().sessionDisplayed, 5, "repeated ids never inflate the session total");
+	harness.store.recordSessionDisplayed("other-channel", ids("x", 7));
+	assert.equal(harness.store.getStatus().sessionDisplayed, 5, "another channel's paints never leak into this session");
+});
+
+test("live translations after the batch bump the session total without touching the batch ratio", () => {
+	const harness = createHarness({chinese: true});
+	harness.store.update({channelId: "c1", batch: 1, active: true, collecting: false, done: false, total: 12, processed: 12});
+	harness.store.recordSessionDisplayed("c1", ids("m", 12));
+	harness.store.update({channelId: "c1", batch: 1, active: false, done: true, displayed: 12});
+	harness.store.recordSessionDisplayed("c1", ["live-1"]);
+	harness.store.recordSessionDisplayed("c1", ["live-2"]);
+	assert.equal(harness.store.getStatusText(), "14/14", "each live translation raises the closed cumulative ratio");
+	assert.match(harness.store.getStatusDetailText(), /本次累计 14/);
+	harness.store.resetSeen();
+	harness.store.recordSessionDisplayed("c1", ids("q", 3));
+	harness.store.update({channelId: "c1", batch: 1, active: false, done: true, total: 3, processed: 3, displayed: 3});
+	assert.equal(harness.store.getStatusText(), "3/3", "after the global reset the count restarts from the fresh commits");
+});
+
+test("a stale-batch report is dropped whole, while equal, newer, and cross-channel reports pass", () => {
+	const harness = createHarness();
+	harness.store.update({channelId: "c1", batch: 2, active: true, collecting: false, done: false, total: 10, processed: 5, displayed: 5});
+	const before = harness.store.getStatus();
+	harness.store.update({channelId: "c1", batch: 1, displayed: 13, displayPending: 4});
+	assert.deepEqual(harness.store.getStatus(), before, "a batch-1 straggler cannot merge into batch 2's counters");
+	harness.store.update({channelId: "c1", batch: 2, displayed: 6});
+	assert.equal(harness.store.getStatus().displayed, 6, "the current batch's own reports still land");
+	harness.store.update({channelId: "c2", batch: 1, active: true, collecting: false, done: false, total: 3, processed: 0, displayed: 0});
+	assert.equal(harness.store.getStatus().channelId, "c2", "another channel restarting at batch 1 is a channel switch, not a stale report");
+});
+
+test("the running denominator releases items already resolved as skipped or failed", () => {
+	// 2026-08-19 report: 86/123 collapsed to 106/106 at completion and the 17 skips
+	// read as lost messages. The denominator only promises work that can still
+	// display: pending items, not resolved skips/failures.
+	const harness = createHarness();
+	harness.store.recordSessionDisplayed("c1", ids("m", 86));
+	harness.store.update({channelId: "c1", batch: 2, active: true, collecting: false, done: false, total: 37, processed: 20, displayed: 0, skipped: 17});
+	assert.equal(harness.store.getStatusText(), "86/106 · 0s", "resolved skips leave the denominator immediately");
+	harness.store.update({displayed: 20, skipped: 17});
+	assert.equal(harness.store.getStatus().sessionDisplayed, 86, "displayed merges do not touch the id set");
+});
+
+test("failure and repair readings stay on the cumulative basis instead of snapping back to the batch", () => {
+	// Field screenshots (2026-08-19): the pill read 113/152 while running, then a
+	// batch finished with ONE retryable failure and the pill snapped to the OLD
+	// per-batch reading (26/39 - 1!) - the numerator went backwards, which the user
+	// read as an old version resurfacing. Every branch keeps the session-cumulative
+	// numerator; recoverable failures join the denominator as work a retry could
+	// still display.
+	const harness = createHarness();
+	harness.store.update({channelId: "c1", batch: 1, active: true, collecting: false, done: false, total: 13, processed: 13});
+	harness.store.recordSessionDisplayed("c1", ids("m", 13));
+	harness.store.update({channelId: "c1", batch: 1, active: false, done: true, displayed: 13});
+	harness.store.update({channelId: "c1", batch: 2, active: true, collecting: false, done: false, total: 39, processed: 39, displayed: 0});
+	harness.store.recordSessionDisplayed("c1", ids("m", 26, 14));
+	harness.store.update({channelId: "c1", batch: 2, active: false, done: true, displayed: 26, skipped: 12, failed: 1, retryable: 1});
+
+	assert.equal(harness.store.getStatusText(), "39/40 · 1!", "the cumulative numerator holds and the retryable failure joins the denominator");
+
+	// Pressing retry moves the same reading into the repair phase without a reset.
+	harness.store.update({channelId: "c1", batch: 2, active: true, done: false, phase: "repairing", total: 39, displayed: 26, skipped: 12, failed: 1, retryable: 1});
+	assert.equal(harness.store.getStatusText(), "39/40 · 1↻", "repair keeps the cumulative reading too");
 });

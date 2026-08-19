@@ -33,15 +33,66 @@ function createEmptyOutcome(additions) {
 	};
 }
 
-function createTranslationDisplayController({store, renderAdapter, journal = null}) {
+// The deferred-wave coalescer. Two producers use it: reply previews always (they are
+// decoration, nothing pins them to the 200ms display contract, and painting one
+// whole-layer rebuild per commit was the dominant unattributed rebuild lane in the
+// field - repaint "other 69" vs "hist 8", 2026-08-19), and historical batch commits
+// whenever the repaint gate is closed (a rebuild landing mid-scroll remounts the
+// list at the bottom under the user's gesture - the stranded-at-newest report).
+// Commits write the store immediately; only the paint waits, collected per channel
+// and flushed as ONE tagged transaction per window once the gate is open.
+const DEFERRED_REFRESH_DELAY_MS = 300;
+
+function createTranslationDisplayController({
+	store,
+	renderAdapter,
+	journal = null,
+	// Wire BDFDB.TimeUtils.timeout here in production so a pending flush dies with
+	// the plugin instance instead of repainting after a reload.
+	setTimeout: scheduleTimer = setTimeout,
+	canRepaintNow = () => true,
+	deferredRefreshDelayMs = DEFERRED_REFRESH_DELAY_MS
+}) {
 	let transactionSequence = 0;
+	const pendingRefreshByChannel = new Map();
+	let deferredFlushTimer = null;
+
+	function getPendingRefresh(channelId) {
+		const key = String(channelId);
+		if (!pendingRefreshByChannel.has(key)) pendingRefreshByChannel.set(key, {messageIds: new Set(), hostMessageIds: new Set()});
+		return pendingRefreshByChannel.get(key);
+	}
+
+	function armDeferredFlush() {
+		if (deferredFlushTimer != null) return;
+		deferredFlushTimer = scheduleTimer(async () => {
+			deferredFlushTimer = null;
+			if (!canRepaintNow()) {
+				// The wave stays pending; state is committed, only the paint waits.
+				armDeferredFlush();
+				return;
+			}
+			const pending = [...pendingRefreshByChannel.entries()];
+			pendingRefreshByChannel.clear();
+			for (const [channelId, wave] of pending) {
+				// A record may have been restored or deleted while the wave waited;
+				// stale ids simply drop out.
+				const records = [...wave.messageIds].map(messageId => store.getDisplayState(messageId)).filter(Boolean);
+				const sources = {};
+				if (records.length) sources.historical = records.length;
+				if (wave.hostMessageIds.size) sources.preview = wave.hostMessageIds.size;
+				try {await refreshRecords(records, {channelId, ownerMessageIds: [...wave.hostMessageIds], sources});}
+				catch (error) {}
+			}
+		}, deferredRefreshDelayMs);
+	}
 
 	function recordRenderTransition(view, transition) {
 		if (!journal || !view) return;
 		journal.append({channelId: view.channelId, messageId: view.messageId, revision: view.revision, transition});
 	}
 
-	async function refreshRecords(records, {channelId = null, ownerMessageIds = []} = {}) {
+	async function refreshRecords(records, {channelId = null, ownerMessageIds = [], sources = null} = {}) {
 		if (!records.length && !ownerMessageIds.length) return createEmptyOutcome();
 		const views = records.map(record => createDisplayView(store.getDisplayState(record.messageId)));
 		if (views.some(view => !view)) throw new Error("A display transaction requires one view per record");
@@ -56,7 +107,10 @@ function createTranslationDisplayController({store, renderAdapter, journal = nul
 			channelId: transactionChannelId,
 			messageIds: views.map(view => view.messageId),
 			ownerMessageIds,
-			views
+			views,
+			// Which lanes asked for this paint (cadence audit 2026-08-19); the adapter
+			// books its rebuild attribution from these counts.
+			sources: sources || null
 		});
 		const rawOutcome = outcome || createEmptyOutcome();
 		const staleIds = [];
@@ -105,9 +159,9 @@ function createTranslationDisplayController({store, renderAdapter, journal = nul
 			const record = store.getDisplayState(messageId);
 			return record ? refreshRecords([record]) : createEmptyOutcome();
 		},
-		async renderMessages(messageIds) {
+		async renderMessages(messageIds, meta = null) {
 			const records = (Array.isArray(messageIds) ? messageIds : []).map(messageId => store.getDisplayState(messageId)).filter(Boolean);
-			return refreshRecords(records);
+			return refreshRecords(records, {sources: meta && meta.sources || null});
 		},
 		async refreshDisplayTransaction({channelId, messageIds = [], ownerMessageIds = []} = {}) {
 			const uniqueMessageIds = [...new Set((Array.isArray(messageIds) ? messageIds : []).map(String))];
@@ -141,7 +195,21 @@ function createTranslationDisplayController({store, renderAdapter, journal = nul
 				if (!outcome.rejected.length) return createEmptyOutcome();
 				return createEmptyOutcome({rejectedIds: outcome.rejected.map(result => String(result.messageId))});
 			}
-			const refreshOutcome = await refreshRecords(outcome.committed);
+			// A closed gate means the user is actively scrolling (or settings are
+			// open): painting now would remount the list at the bottom under their
+			// gesture. The commit is already stored; the paint joins the deferred wave.
+			// The tracker never schedules deferredIds, so the wave owns this paint.
+			if (!canRepaintNow()) {
+				const wave = getPendingRefresh(outcome.committed[0].channelId);
+				for (const record of outcome.committed) wave.messageIds.add(String(record.messageId));
+				armDeferredFlush();
+				const deferred = createEmptyOutcome({deferredIds: outcome.committed.map(record => String(record.messageId))});
+				if (outcome.rejected.length) deferred.rejectedIds = outcome.rejected.map(result => String(result.messageId));
+				return deferred;
+			}
+			// This refresh bypasses the scheduler, so it self-labels: the historical
+			// lane is the biggest batch producer and must not read as unattributed.
+			const refreshOutcome = await refreshRecords(outcome.committed, {sources: {historical: outcome.committed.length}});
 			if (outcome.rejected.length) refreshOutcome.rejectedIds = outcome.rejected.map(result => String(result.messageId));
 			return refreshOutcome;
 		},
@@ -149,9 +217,13 @@ function createTranslationDisplayController({store, renderAdapter, journal = nul
 			const record = store.commitPreviewResult(result);
 			if (!record) return createEmptyOutcome({rejectedIds: [String(result && result.messageId)]});
 			if (!refresh) return createEmptyOutcome();
-			const channelId = record.channelId || result.channelId;
+			const channelId = String(record.channelId || result.channelId);
 			const ownerMessageIds = store.getPreviewHostMessageIds(channelId, [record.messageId]);
-			return refreshRecords([], {channelId, ownerMessageIds});
+			if (!ownerMessageIds.length) return createEmptyOutcome();
+			const wave = getPendingRefresh(channelId);
+			for (const hostMessageId of ownerMessageIds) wave.hostMessageIds.add(String(hostMessageId));
+			armDeferredFlush();
+			return createEmptyOutcome({deferredIds: ownerMessageIds.map(String)});
 		},
 		async restoreMessage(messageId, {refresh = true} = {}) {
 			const records = store.restoreMessage(messageId);

@@ -117,32 +117,57 @@ function getStatusCounters(status) {
 	const failed = Math.max(0, failedValue || 0);
 	const retryable = Math.max(0, status && status.retryable || 0);
 	const batch = Math.max(1, status && status.batch || 1);
-	return {total, processed, displayed, displayPending, skipped, failed, retryable, batch};
+	// The session total counts every batch of the channel session; a status built
+	// by hand (legacy call sites, overrides) has no session field and falls back to
+	// the batch's own displayed count, which renders exactly as before. A REAL status
+	// always carries the field, and it must never be masked by the batch counter:
+	// that mask is what made the numerator collapse to the batch value at every
+	// batch boundary (2026-08-19 audit).
+	const sessionDisplayed = status && status.sessionDisplayed != null ? Math.max(0, status.sessionDisplayed) : displayed;
+	return {total, processed, displayed, displayPending, skipped, failed, retryable, batch, sessionDisplayed};
 }
 
 function renderCompactStatusText(status, currentTime) {
-	const {total, processed, displayed, displayPending, skipped, failed, retryable} = getStatusCounters(status);
-	const ratio = `${status && status.done ? displayed : processed}/${total}`;
-	const repairReady = Math.max(displayed, total - skipped - (retryable || failed));
-	if (status && status.phase === "repairing") return `${repairReady}/${total}${retryable || failed ? ` · ${retryable || failed}↻` : ""}`;
-	if (status && (status.phase === "failed" || status.done && (failed || retryable))) return `${displayed}/${total} · ${failed || retryable}!`;
+	const {total, processed, displayed, displayPending, skipped, failed, retryable, sessionDisplayed} = getStatusCounters(status);
+	// Failure and repair keep the session-cumulative numerator (field 2026-08-19:
+	// 113/152 snapping to a per-batch 26/39·1! read as an old version resurfacing).
+	// max() bridges hand-built legacy statuses, whose session count falls back to the
+	// batch's own numbers; recoverable failures join the denominator as the work a
+	// retry could still display.
+	const repairReady = Math.max(sessionDisplayed, displayed, total - skipped - (retryable || failed));
+	if (status && status.phase === "repairing") return `${repairReady}/${repairReady + (retryable || failed)}${retryable || failed ? ` · ${retryable || failed}↻` : ""}`;
+	if (status && (status.phase === "failed" || status.done && (failed || retryable))) {
+		const shown = Math.max(sessionDisplayed, displayed);
+		return `${shown}/${shown + retryable} · ${failed || retryable}!`;
+	}
 	if (status && status.done && displayPending) return `${displayed}/${total} · ${displayPending}↻`;
-	if (status && status.done) return `${displayed}/${total}`;
+	// One cumulative channel ratio (user-specified 2026-08-19): displayed-so-far over
+	// displayed-so-far plus the running batch's remaining work. 13/13, scroll queues
+	// 20 more: 13/33 climbing to 33/33. For a plain single batch this degenerates to
+	// the classic displayed/total reading. A workless finish stays a checkmark and
+	// zero-over-total is reserved for the failure branches above.
+	if (status && status.done) return sessionDisplayed > 0 ? `${sessionDisplayed}/${sessionDisplayed}` : "✓";
+	// The denominator only promises work that can still display: items already
+	// resolved as skipped or failed leave it immediately, so completion never reads
+	// as messages going missing (2026-08-19: 86/123 snapping to 106/106).
+	const cumulativeRatio = `${sessionDisplayed}/${sessionDisplayed + Math.max(0, total - displayed - skipped - failed)}`;
 	const phaseStartedAt = status && status.phaseStartedAt || 0;
-	return phaseStartedAt ? `${ratio} · ${formatSeconds(currentTime - phaseStartedAt)}` : ratio;
+	return phaseStartedAt ? `${cumulativeRatio} · ${formatSeconds(currentTime - phaseStartedAt)}` : cumulativeRatio;
 }
 
 function renderStatusDetailText(status, chinese, phaseSegment) {
-	const {total, processed, displayed, displayPending, skipped, failed, retryable, batch} = getStatusCounters(status);
+	const {total, processed, displayed, displayPending, skipped, failed, retryable, batch, sessionDisplayed} = getStatusCounters(status);
 	const extraText = `${displayPending ? (chinese ? `，待显示 ${displayPending}` : `, ${displayPending} awaiting display`) : ""}${skipped ? (chinese ? `，跳过 ${skipped}` : `, skipped ${skipped}`) : ""}${failed ? (chinese ? `，失败 ${failed}` : `, failed ${failed}`) : ""}${retryable && retryable != failed ? (chinese ? `，待重试 ${retryable}` : `, retry pending ${retryable}`) : ""}`;
 	if (status && status.done) {
 		if (!total) return failed || retryable ? (chinese ? `已加载翻译：失败 ${failed}，待重试 ${retryable}` : `Loaded translation: ${failed} failed, ${retryable} retry pending`) : (chinese ? "已加载翻译：开启，暂无待翻译" : "Loaded translation: on, no pending messages");
-		return chinese ? `已加载翻译：第 ${batch} 批完成，显示 ${displayed}/${total}${extraText}` : `Loaded translation: batch ${batch} done, shown ${displayed}/${total}${extraText}`;
+		const sessionText = sessionDisplayed > displayed ? (chinese ? `，本次累计 ${sessionDisplayed}` : `, session total ${sessionDisplayed}`) : "";
+		return chinese ? `已加载翻译：第 ${batch} 批完成，显示 ${displayed}/${total}${extraText}${sessionText}` : `Loaded translation: batch ${batch} done, shown ${displayed}/${total}${extraText}${sessionText}`;
 	}
-	if (status && status.collecting) return chinese ? `收集已加载：第 ${batch} 批 ${processed}/${total}${extraText}${phaseSegment}` : `Collecting loaded: batch ${batch} ${processed}/${total}${extraText}${phaseSegment}`;
+	const runningSessionText = sessionDisplayed > displayed ? (chinese ? `，本次累计 ${sessionDisplayed}` : `, session total ${sessionDisplayed}`) : "";
+	if (status && status.collecting) return chinese ? `收集已加载：第 ${batch} 批 ${processed}/${total}${extraText}${runningSessionText}${phaseSegment}` : `Collecting loaded: batch ${batch} ${processed}/${total}${extraText}${runningSessionText}${phaseSegment}`;
 	// Nothing is in flight here, so a growing timer would only look alarming.
 	if (!total) return chinese ? "已加载翻译：开启，等待消息" : "Loaded translation: on, waiting";
-	return chinese ? `翻译已加载：第 ${batch} 批 ${processed}/${total}，显示 ${displayed}${extraText}${phaseSegment}` : `Translating loaded: batch ${batch} ${processed}/${total}, shown ${displayed}${extraText}${phaseSegment}`;
+	return chinese ? `翻译已加载：第 ${batch} 批 ${processed}/${total}，显示 ${displayed}${extraText}${runningSessionText}${phaseSegment}` : `Translating loaded: batch ${batch} ${processed}/${total}, shown ${displayed}${extraText}${runningSessionText}${phaseSegment}`;
 }
 
 function createLoadedTranslationStatusStore({
@@ -164,6 +189,16 @@ function createLoadedTranslationStatusStore({
 	let seenMessages = {};
 	let sealedTotal = null;
 	let sealedJobKey = "";
+	// The session total is a per-channel set of message ids whose translation was
+	// displayed (confirmed on screen or stored for mount). Counting unique ids is
+	// what makes the total immune to double counting and to late batch reports
+	// bleeding across batch boundaries (2026-08-19 report).
+	let sessionDisplayedIds = new Map();
+
+	function getSessionDisplayedCount(channelId) {
+		const channelSet = sessionDisplayedIds.get(normalizeChannelId(channelId));
+		return channelSet ? channelSet.size : 0;
+	}
 
 	// An explicit, known phase always wins. Anything else is derived from the flags the
 	// call site already sets, so a caller that has no opinion still gets a truthful
@@ -216,6 +251,11 @@ function createLoadedTranslationStatusStore({
 			return LOADED_STATUS_PHASE_BY_JOB_STATE[jobState] || null;
 		},
 		update(updates = {}) {
+			// A report stamped with an EARLIER batch of the same channel is a straggler
+			// from a finished job; merging it would paint another batch's counters onto
+			// the running one (2026-08-19 audit). It is dropped before any state moves -
+			// after the seal/jobKey logic it would already have mutated the totals.
+			if (updates && updates.batch != null && normalizeChannelId(updates.channelId != null ? updates.channelId : status.channelId) === normalizeChannelId(status.channelId) && Math.max(0, updates.batch) < Math.max(0, status.batch || 0)) return this.getStatus();
 			const previous = status;
 			const next = Object.assign({}, previous, updates);
 			const nextJobKey = `${normalizeChannelId(next.channelId)}:${Math.max(0, next.batch || 0)}`;
@@ -226,6 +266,7 @@ function createLoadedTranslationStatusStore({
 				// inherit the previous batch's unresolved-row counter through merge semantics.
 				if (!Object.prototype.hasOwnProperty.call(updates, "displayPending")) next.displayPending = 0;
 			}
+			next.sessionDisplayed = getSessionDisplayedCount(next.channelId);
 			next.phase = resolvePhase(previous, next, updates);
 			if (sealedTotal === null && !next.collecting && (next.active || next.done) && next.total > 0) sealedTotal = Math.max(0, next.total || 0);
 			if (sealedTotal !== null && !next.collecting) next.total = sealedTotal;
@@ -243,6 +284,20 @@ function createLoadedTranslationStatusStore({
 			status = next;
 			return this.getStatus();
 		},
+		// Every display transaction reports the ids it confirmed on screen or stored
+		// for mount; live and historical paints share this one entry point.
+		recordSessionDisplayed(channelId, messageIds = []) {
+			const key = normalizeChannelId(channelId);
+			if (!key || !messageIds.length) return this.getStatus();
+			if (!sessionDisplayedIds.has(key)) sessionDisplayedIds.set(key, new Set());
+			const channelSet = sessionDisplayedIds.get(key);
+			for (const messageId of messageIds) if (messageId != null) channelSet.add(String(messageId));
+			if (normalizeChannelId(status.channelId) === key) status = Object.assign({}, status, {sessionDisplayed: channelSet.size});
+			return this.getStatus();
+		},
+		// clear() resets the visible status but keeps the per-channel session ids:
+		// batch restarts and channel re-entry must not zero the user's running total
+		// (2026-08-19 decision). Only the global tracking reset drops the ids.
 		clear() {
 			this.cancelTimers();
 			status = createEmptyStatus();
@@ -371,6 +426,10 @@ function createLoadedTranslationStatusStore({
 			const key = normalizeChannelId(channelId);
 			if (!key) {
 				seenMessages = {};
+				// Only the global reset (plugin stop, full queue clear) drops the
+				// session totals; a per-channel reset is a batch-window event and the
+				// user's running total must survive it (2026-08-19 decision).
+				sessionDisplayedIds = new Map();
 				return;
 			}
 			delete seenMessages[key];

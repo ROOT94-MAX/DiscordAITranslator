@@ -26,6 +26,9 @@ const MANUAL_TRANSLATION_SCROLL_LOCK_MS = 4500;
 // Discord re-lays out the message list several times after a repaint; re-applying the
 // anchor on this ladder is what actually keeps the message visually still.
 const MANUAL_TRANSLATION_ANCHOR_RESTORE_DELAYS = [60, 180, 420, 900];
+// Settle passes after a display-transaction restore: late layout (images, embeds)
+// keeps moving the anchor after the two-frame restore already landed.
+const DISPLAY_TRANSACTION_SETTLE_DELAYS = [180, 600];
 // Keys that scroll the message list. Any other keydown is typing, not scrolling.
 const SCROLL_INTENT_KEYS = ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "];
 const SCROLL_INTENT_EVENTS = ["wheel", "touchmove", "pointerdown", "keydown"];
@@ -117,18 +120,24 @@ function createMessageViewportStore({
 		return null;
 	}
 
-	// The first message whose box actually overlaps the scroller viewport, with an 8px
-	// tolerance so a message peeking in by a hair is not chosen as the anchor.
+	// The visible message nearest the viewport CENTER, with an 8px tolerance so a
+	// message peeking in by a hair is not considered. The center row is the user's
+	// eye line: anchoring the topmost row instead let the rows between it and the
+	// eye line grow when their translations landed, pushing the message being read
+	// out of position (the 4:02->4:10 drift report, 2026-08-19).
 	function findVisibleMessageAnchor(messagesScroller = null) {
 		messagesScroller = messagesScroller || getMessagesScroller();
 		if (!messagesScroller || !getDocument()) return null;
 		const scrollerRect = messagesScroller.getBoundingClientRect();
+		const scrollerCenter = scrollerRect.top + (scrollerRect.bottom - scrollerRect.top) / 2;
 		let candidates = [];
 		try {
 			candidates = Array.from(messagesScroller.querySelectorAll(MESSAGE_ELEMENT_SELECTOR));
 		}
 		catch (err) {candidates = [];}
 		const seen = new Set();
+		let best = null;
+		let bestDistance = Infinity;
 		for (const element of candidates) {
 			if (!element || seen.has(element)) continue;
 			seen.add(element);
@@ -137,9 +146,13 @@ function createMessageViewportStore({
 			const rect = element.getBoundingClientRect();
 			if (!rect || rect.height <= 0) continue;
 			if (rect.bottom <= scrollerRect.top + 8 || rect.top >= scrollerRect.bottom - 8) continue;
-			return {messageId, element};
+			const distance = Math.abs(rect.top + rect.height / 2 - scrollerCenter);
+			if (distance < bestDistance) {
+				bestDistance = distance;
+				best = {messageId, element};
+			}
 		}
-		return null;
+		return best;
 	}
 
 	function captureAnchorState(messageId = null) {
@@ -165,20 +178,21 @@ function createMessageViewportStore({
 	}
 
 	function restoreAnchorPosition(anchorState) {
-		if (!anchorState) return;
+		if (!anchorState) return false;
 		const messagesScroller = getMessagesScroller();
 		const element = findMessageElementById(anchorState.messageId);
-		if (!messagesScroller || !element) return;
+		if (!messagesScroller || !element) return false;
 		const scrollerRect = messagesScroller.getBoundingClientRect();
 		const elementRect = element.getBoundingClientRect();
 		const desiredTop = scrollerRect.top + (typeof anchorState.relativeTop == "number" ? anchorState.relativeTop : elementRect.top - scrollerRect.top);
 		const delta = elementRect.top - desiredTop;
 		// Sub-pixel drift is not worth a scroll write, which would only cost another
 		// grace window and another repaint.
-		if (Math.abs(delta) < 1) return;
+		if (Math.abs(delta) < 1) return true;
 		const maxScrollTop = Math.max(0, messagesScroller.scrollHeight - messagesScroller.clientHeight);
 		programmaticScrollWriteTime = now();
 		messagesScroller.scrollTop = Math.max(0, Math.min(messagesScroller.scrollTop + delta, maxScrollTop));
+		return true;
 	}
 
 	function restoreAnchorState(anchorState) {
@@ -228,28 +242,50 @@ function createMessageViewportStore({
 		};
 	}
 
-	function restoreScrollerState(scrollerState) {
-		if (!scrollerState) return;
-		const restore = () => {
-			// The user gestured after the capture, so the position we saved is no longer
-			// the position they want. Restoring it here would yank the list back.
-			if (scrollerState.userScrollIntentSequence !== userScrollIntentSequence) return;
-			const messagesScroller = getMessagesScroller();
-			if (!messagesScroller) return;
-			if (scrollerState.keepBottom) {
-				programmaticScrollWriteTime = now();
-				messagesScroller.scrollTop = messagesScroller.scrollHeight;
-				return;
-			}
-			if (scrollerState.anchor) {
-				restoreAnchorPosition(scrollerState.anchor);
-				return;
-			}
+	function applyScrollerState(scrollerState, {allowBottomRescue = false} = {}) {
+		const messagesScroller = getMessagesScroller();
+		if (!messagesScroller) return;
+		// The user gestured after the capture, so the position we saved is no longer
+		// the position they want. Restoring it here would yank the list back.
+		if (scrollerState.userScrollIntentSequence !== userScrollIntentSequence) {
+			// ONE exception (2026-08-19 field report, stranded-at-newest): a whole-layer
+			// rebuild remounts the scroller at Discord's default - the bottom. The
+			// capture says the user was up in history, and no gesture in the two-frame
+			// restore window parks the view at the exact bottom from there, so a bottom
+			// position here is the remount's artifact, not the user's choice. Leaving it
+			// strands them at the newest messages; pull back to the captured spot.
+			// Only the immediate restore may rescue: by settle time a deliberate fling
+			// CAN have reached the bottom, and that position belongs to the user.
+			if (!allowBottomRescue) return;
+			if (scrollerState.keepBottom) return;
 			const maxScrollTop = Math.max(0, messagesScroller.scrollHeight - messagesScroller.clientHeight);
+			const distanceToBottom = Math.max(0, maxScrollTop - messagesScroller.scrollTop);
+			if (distanceToBottom > AUTO_TRANSLATION_BOTTOM_LOCK_THRESHOLD) return;
+			if (scrollerState.anchor && restoreAnchorPosition(scrollerState.anchor)) return;
+			// Virtualization may have unmounted the anchor row; the raw captured offset
+			// is approximate but beats the bottom.
 			programmaticScrollWriteTime = now();
 			messagesScroller.scrollTop = Math.max(0, Math.min(scrollerState.scrollTop, maxScrollTop));
-		};
-		requestAnimationFrame(() => requestAnimationFrame(restore));
+			return;
+		}
+		if (scrollerState.keepBottom) {
+			programmaticScrollWriteTime = now();
+			messagesScroller.scrollTop = messagesScroller.scrollHeight;
+			return;
+		}
+		if (scrollerState.anchor && restoreAnchorPosition(scrollerState.anchor)) return;
+		const maxScrollTop = Math.max(0, messagesScroller.scrollHeight - messagesScroller.clientHeight);
+		programmaticScrollWriteTime = now();
+		messagesScroller.scrollTop = Math.max(0, Math.min(scrollerState.scrollTop, maxScrollTop));
+	}
+
+	function restoreScrollerState(scrollerState) {
+		if (!scrollerState) return;
+		requestAnimationFrame(() => requestAnimationFrame(() => applyScrollerState(scrollerState, {allowBottomRescue: true})));
+		// Images, embeds and code blocks keep changing row heights after the paint;
+		// a couple of settle passes re-verify the anchor (a write only happens when
+		// the drift is a pixel or more). Plain veto only - no bottom rescue.
+		for (const delay of DISPLAY_TRANSACTION_SETTLE_DELAYS) setTimeout(() => applyScrollerState(scrollerState), delay);
 	}
 
 	function isViewingMessageHistory() {
@@ -433,6 +469,31 @@ function createMessageViewportStore({
 		clearManualScrollLock,
 		captureScrollerState,
 		restoreScrollerState,
+		// Display transactions preserve scroll exactly as the legacy manual repaint did:
+		// a locked manual anchor wins over the offset capture so the clicked message
+		// stays put when translated text changes row heights above it. The anchor only
+		// rides the anchored message's OWN transaction - an automatic flush during the
+		// lock window must never be pulled back to the manually translated message
+		// (2026-08-19 PTB regression: history scrolling bounced on every backfill flush).
+		captureDisplayTransactionScrollState({messageIds = []} = {}) {
+			const manualAnchor = getActiveManualScrollAnchor();
+			if (manualAnchor && (Array.isArray(messageIds) ? messageIds : []).some(messageId => String(messageId) === String(manualAnchor.messageId))) return {manualAnchor};
+			return captureScrollerState();
+		},
+		restoreDisplayTransactionScrollState(scrollerState) {
+			if (scrollerState && scrollerState.manualAnchor) return restoreAnchorState(scrollerState.manualAnchor);
+			return restoreScrollerState(scrollerState);
+		},
+		// The atomic rebuild commits the new DOM in the same task, so the anchor can be
+		// re-applied synchronously and the FIRST painted frame is already correct.
+		// Waiting two animation frames here let the browser paint Discord's default
+		// position and yank it back later - the per-transaction scroll bounce
+		// (2026-08-19). The deferred variant above remains the late drift corrector.
+		restoreDisplayTransactionScrollStateNow(scrollerState) {
+			if (!scrollerState) return;
+			if (scrollerState.manualAnchor) return restoreAnchorPosition(scrollerState.manualAnchor);
+			return applyScrollerState(scrollerState);
+		},
 		isViewingMessageHistory,
 		attachScrollWatcher,
 		detachScrollWatcher,

@@ -4,13 +4,13 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Discord-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.com)
 [![Loader](https://img.shields.io/badge/Loader-BetterDiscord-4E5D94?style=flat-square)](https://betterdiscord.app)
-[![Version](https://img.shields.io/badge/Version-0.3.38-success?style=flat-square)](https://github.com/ROOT94-MAX/DiscordAITranslator/releases)
+[![Version](https://img.shields.io/badge/Version-0.3.39-success?style=flat-square)](https://github.com/ROOT94-MAX/DiscordAITranslator/releases)
 [![Downloads](https://img.shields.io/github/downloads/ROOT94-MAX/DiscordAITranslator/total?style=flat-square&color=yellow)](https://github.com/ROOT94-MAX/DiscordAITranslator/releases)
 [![License](https://img.shields.io/badge/License-GPL%20v2-blue?style=flat-square)](./LICENSE)
 
 一款专为 Discord 打造的智能翻译插件：发送前双语预审、接收消息自动翻译、历史消息智能补翻，内置文本保护规则与滚动稳定性保障。
 
-**当前版本：v0.3.38** ｜ **运行环境：BetterDiscord + BDFDB Library**
+**当前版本：v0.3.39** ｜ **运行环境：BetterDiscord + BDFDB Library**
 
 </div>
 

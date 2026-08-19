@@ -1,10 +1,19 @@
 # Architecture
 
-## Status
+[简体中文](architecture.zh-CN.md)
 
-This document defines the approved target architecture for the repository. The deterministic `src/` build exists, and v0.3.38 (2026-08-16) shipped the display repair series that restored hover-independent translation display on current clients.
+This document describes the current runtime boundaries and migration rules. User-visible behavior belongs to `product.md`, setting ownership to `settings.md`, provider contracts to `providers.md`, operational incident history to `field-debugging-guide.md`, and unfinished work to `recovery-plan.md`.
 
-The shipped runtime is the generated `DiscordAITranslator.plugin.js` (13,454 lines and 915,364 bytes at v0.3.38, build id `61cbf81a068feabf`). The shipped display strategy supersedes the former parent-transaction refresh design: real-client evidence proved per-message `forceUpdate` is a no-op on current clients, so each display transaction triggers at most one whole-list rebuild (see "DiscordRenderAdapter" below; the full debug evidence is archived outside Git with the pre-compression recovery transcript).
+## Current Status
+
+- Release line: v0.3.39.
+- Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
+- Current build ID: `08e2b0182796eded`.
+- Legacy composition-root ratchet: 3,479 lines and two module-level shared declarators.
+- Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
+- Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
+
+The source is substantially more modular than the v0.3.38 baseline, but `src/legacy/runtime.js` is still the composition root and lifecycle patch shell. The migration is useful and incomplete; module count alone is not evidence of completion.
 
 ## Distribution Contract
 
@@ -14,9 +23,7 @@ BetterDiscord users install exactly one file:
 DiscordAITranslator.plugin.js
 ```
 
-The repository contains readable source modules under `src/`. A deterministic build bundles those modules into the root plugin file. The generated plugin is a distribution artifact and must not be edited manually.
-
-The build contract is:
+The generated file is not edited by hand. Its source path is:
 
 ```text
 src/plugin/index.js
@@ -24,434 +31,147 @@ src/plugin/index.js
         -> DiscordAITranslator.plugin.js
 ```
 
-The build uses esbuild in CommonJS bundle mode with an ES2020 runtime target, preserves the BetterDiscord metadata banner, excludes tests and release-disabled diagnostics, and produces the same bytes from the same source and dependency lockfile.
-
-## Current Architecture
-
-The current single file contains useful logical modules, but they share closure state and one plugin class:
-
-- Provider registry and provider-specific request code
-- Sent and received translation policies
-- Live and historical translation queues
-- Translation cache and skip cache
-- Channel enablement and channel provider overrides
-- Message, reply, embed, and thread-title display patches
-- BetterDiscord settings and channel popout UI
-- Plugin lifecycle and cleanup
-
-The central mutable maps are `translatedMessages`, `oldMessages`, queue records, reply-preview records, channel title records, and several generation counters. They are not owned by one module.
-
-## Confirmed Architectural Failure
-
-Translation data and visible Discord output currently have different owners.
-
-`Messages` can replace message text, while `MessageContent` independently adds translated styling and the watermark. Reply previews, embeds, and thread titles use additional patch paths. A translation can therefore reach any partial state:
-
-- Translation exists in memory but the visible message did not rerender
-- Translated text is visible without the translated watermark
-- The watermark refreshes while the text remains stale
-- Automatic translation is disabled but the old translated React props remain visible
-
-The regression was exposed when a full message-list rerender was replaced with targeted component updates. Unit tests verified the update function call, but not the visible Discord result. Hovering a message causes Discord to rerender that component naturally, which reveals already-stored translation data.
-
-The new architecture must treat a data commit and a visible render commit as separate, observable operations.
-
-### Full Debug Evidence — 2026-08-10
-
-The following findings are confirmed from the repository and the observed hover-dependent UI failure:
-
-1. `Messages` projects translated or restored message text in a before-render path, while `MessageContent` applies translated decoration in an after-render path. Updating only a message-content owner can therefore repaint decoration without rerunning the parent text projection.
-2. The restore path can update message props after React has already built the text children for that render. The style may disappear while translated text remains until a later natural render such as hover.
-3. `discord-render-adapter.js` currently locates exact per-message DOM IDs and requests per-message owners. The viewport module already supports newer suffix and containment selector shapes, so the repository has two incompatible message-element resolvers.
-4. Installed BDFDB owner lookup and force-update behavior require an updateable class instance. Current tests supply synthetic owners and manually acknowledge revisions, so they prove a helper call rather than the parent-to-child render result.
-5. `deferredIds` currently mix truly virtualized rows with mounted rows that failed render confirmation. Historical accounting may therefore report a row as displayed when no matching DOM revision was painted.
-6. Reply previews and embeds inherit the host message-row invalidation boundary. Thread titles use a separate title-component refresh and require independent confirmation.
-7. The former component-scoped owner plan was marked complete in `recovery-plan.md` even though real UI evidence invalidated its central assumption. That plan is retained only as historical evidence and is superseded by the reopened debug work.
-8. `Messages` clones the `channelStream` array but not each stream entry. Translation and restoration then assign `stream.content` or `stream.content.content` on shared entry objects. The code contains source-recapture workarounds specifically because a later pass can observe the plugin's painted text as Discord source data.
-9. Manual translation commits into `MessageStateStore`, but visible refresh still goes through the retained full-list repaint scheduler. Automatic, manual, settings, enable, disable, and stop paths therefore do not yet share one display transaction boundary.
-10. The full-list compatibility scheduler may delay repaint while typing or settings are open and can wait 1.5 seconds while viewing history. It also permits up to three scheduler attempts after the adapter's own targeted retry, so the documented one-repair limit is not the runtime limit.
-11. Adapter and lifecycle tests make `forceUpdate` directly add the requested DOM revision. Integration tests invoke stream projection and content decoration manually in the desired order. Neither test shape proves that the real parent patch reruns or that React produced the acknowledged DOM.
-12. The historical prefetch adapter probes several undocumented Discord action signatures and accepts the first non-null result before proving it contains messages. If the action returns dispatch metadata, a promise with another shape, or populates the store asynchronously, the source can seal at the mounted/cache count instead of the configured maximum. This is a leading unverified explanation for a configured 50 appearing as 20.
-13. Embed translation stores restoration fields on mutable embed props and restores them in a separate before-render branch. It has the same ownership and stale-prop risk as message text and needs host-row revision acknowledgement.
-14. Thread-title refresh uses `forceAllUpdates` across all title surfaces and has no per-title render acknowledgement. Title state cancellation is generation-aware, but visible restoration remains a separate unverified surface.
-15. `processMessageContent` may apply translated class, colour, watermark, and revision from `MessageStateStore` even when the parent `Messages` projection did not replace the text. This is a direct path to an original body with translated decoration. The inverse path also exists: shared message props can retain translated text after the active translation and decoration are cleared.
-16. Several render hooks are stateful. `getActiveMessageTranslation` may clear display state and cache while rendering; loaded-message resolution may queue provider work while rendering; reply and embed hooks mutate render props. A child render can therefore change the revision after the parent selected its text. The replacement projection must be read-only during one React render.
-17. Reply-preview commits, preview clears, suppression changes, and source-archive consumption deliberately do not advance the message display revision. Host-only preview refreshes consequently have no preview-specific revision to acknowledge. Existing tests prove that `forceUpdate` was requested, not that the host preview changed.
-18. `historical-message-source.js` performs at most one prefetch for the number of eligible messages initially missing. Duplicates, off-channel records, or locally ineligible messages in that response can leave the final immutable job below the configured maximum even when older eligible messages exist. A bounded source must continue paging until the eligible maximum, an explicit exhaustion signal, or a request/page ceiling is reached.
-19. The translation cache cancels rather than flushes its debounced save on plugin stop. Translations committed during the last 300 ms can therefore disappear from persisted cache even though display state already reported them complete.
-20. Manual restore archives clone only the top-level message object. Nested embeds and related objects can remain shared with render props, so embed mutation can contaminate the archive that is supposed to restore the immutable original.
-21. The compact status currently derives its completed count from `displayed`, but that value includes deferred virtualized-ready rows. The name and detail text imply visible DOM success while the implementation partly means stored-ready. Stored-valid, mounted-confirmed, deferred-ready, skipped, failed, and stale require separate counters and labels.
-22. A fresh `npm run verify` passed all 1,047 tests while the hover-dependent text/decorations/restoration defects remain observed. This is positive evidence that the current suite is false-green at the Discord render boundary, not evidence that the UI defect is intermittent or already repaired.
-23. `restoreAnchorState` schedules a two-frame restore plus four delayed writes, but those delayed writes are not tracked as a cancellable group. A channel switch, disable, or reload can therefore let an old manual anchor write into the new message list and recreate the scroll-jump class of bug.
-24. Channel toggle versions guard only the final cleanup callback. The restore transaction mutates `MessageStateStore` before its asynchronous render acknowledgement, and re-enable does not advance a display transaction generation. A rapid disable -> enable can therefore let an older restore finish after re-enable and leave the store/UI in the disabled projection.
-25. `historical-source-runtime.js` removes in-flight builds but retains one generation entry for every channel ever visited during the plugin lifetime. This is small but unbounded session state and can be eliminated when a channel session is pruned.
-26. The modular entry point is still only `module.exports = require("../legacy/runtime")`. That 4,428-line runtime directly imports 27 of the 38 source modules and remains the composition root, Discord patch shell, UI coordinator, status DOM owner, repaint compatibility layer, and lifecycle dispatcher. The relative-import graph has no cycles, which is useful, but the fan-out proves that extraction created modules around a retained god object rather than completing the new runtime architecture.
-27. The legacy line-count ratchet prevents further growth but does not require the final shell migration. It can remain green forever with the entire 4,428-line class intact. Several extracted modules also exceed the architecture boundary budget (`provider-client.js` 1,490 lines, `settings-panel.js` 1,286, `labels.js` 1,028, `styles.js` 899, and `message-state-store.js` 766), so moving code out of `legacy/runtime.js` has not by itself produced small, independently reviewable responsibilities.
-28. The generated plugin is currently 13,305 readable lines and 904,357 bytes, above the documented 7,000-8,500-line and 350-450 KB release guardrails. This is not by itself a functional defect, but it is objective evidence that the architectural cleanup and dead compatibility removal are incomplete.
-29. The build banner contains semantic version `0.3.37` but no source commit, build fingerprint, or deterministic artifact identity visible at runtime. Two different bundles built without changing metadata are indistinguishable in BetterDiscord. The repository's current floating status renderer emits compact numeric text such as `0/0`, while the observed client showed the older sentence-style status. Without an embedded build identity, support cannot distinguish a stale loaded bundle, a stale DOM node, or the current source from the UI alone.
-30. Documentation remains noisy enough to misdirect implementation. `recovery-plan.md` has grown beyond 2,100 lines and mixes the active reopened debug with checked historical tasks and code templates. The conflicting extraction plan was archived outside Git on 2026-08-16; the remaining work is to compress the canonical recovery plan to one short active sequence.
-31. `styles.js` contains an exact duplicate `.translator-settings-panel-root` rule and formatting residue around it. The responsive second `.translator-prefix-translation-row` rule is intentional rather than a conflict. This duplicate does not explain the message colour failure, but it confirms that presentation code has accumulated by append-style edits and needs ownership-based cleanup after the render root cause is fixed.
-32. The DOM acknowledgement checks only the revision attribute emitted from `MessageContent`. It does not compare the rendered body text, translated class, computed colours, watermark, embed fields, reply preview, or thread title with the expected revision. A child decoration render can therefore be reported as confirmed while the parent body is still original, and a message-body acknowledgement can hide a stale embed or preview.
-33. Manual, live, and historical results do not share one latest-command identity. A manual commit clears `requestIdentity`; the terminal-result validator treats a current null identity as unconstrained, so an older automatic result can overwrite the newer manual result. Channel disable, message edit, and deletion cancel automatic work but do not invalidate an already running manual callback by channel generation, source signature, or deletion tombstone.
-34. Historical `commitBatch` rejects the entire recorded batch when any one result is stale or invalid. One edited or superseded message in a 50-message result can therefore prevent the other 49 valid translations from committing, while the return value reports only the actually invalid item and leaves the collateral drops unexplained.
-35. Runtime request generations do not cover worker and callback ownership. A live worker's `finally` unconditionally clears the shared busy flag even after stop/start has created a newer worker. Reply-preview tokens restart at `preview-1` with a new display runtime, permitting an old callback to collide with a new token. Historical status/tracker updates also continue after the awaited display transaction without a second current-generation check.
-36. Translation-provider requests are logically invalidated but not physically aborted. The live scheduler uses one global busy flag across channels, so a slow request from a left or disabled channel can continue consuming the provider connection and block a new channel until completion or timeout.
-37. Historical status identity is based on `channelId + batch`, but runtime job creation owns a distinct `job.id` and does not reliably advance the status batch. `sealedTotal` can consequently carry an old job's total into a later job. `HistoricalDisplayTracker` also stores only one pending batch per channel, so beginning a later display acknowledgement replaces an unfinished earlier one.
-38. Live priority is enforced only between historical jobs, not inside a running historical provider request. Worse, historical commit deliberately echoes the currently active request identity so the batch may supersede concurrent live work for the same message. The runtime therefore does not satisfy the documented single coordinator with newest live/manual command ownership.
-39. `receivedAutoTranslateLoadedLimit` remains in defaults and runtime reads, but the extracted settings panel has no control that writes it. Tests assign the value directly. The configured quantity shown in an existing installation may therefore be legacy persisted data rather than a setting the current UI can inspect or change.
-40. A failed history prefetch is swallowed, the channel is marked initialized before the asynchronous snapshot completes, and the smaller snapshot is allowed to finish normally. The status capsule then hides a successful terminal record after three seconds. This creates the observed chain: configured 50 -> roughly mounted 20 -> apparently complete -> status disappears -> later scroll discovers more messages.
-41. The sent-message store validates each request independently but has no per-message latest-edit sequence and no ordered send lane. Two rapid edits can commit in callback order rather than user order, and two translated sends can be submitted in reverse if the second provider call finishes first.
-42. Lifecycle cleanup is incomplete beyond the already identified anchor timers. Status positioning has a cancellable animation frame that `clear()` does not cancel; live channel-state, toggle-version, and historical-generation maps retain visited channel keys; provider promises can retain snapshots after logical cancellation. Cleanup needs one runtime-owned task registry and bounded channel-session release contract.
-43. Reply-preview styling is deliberately stripped: runtime code removes translator classes/styles and CSS forces preview backgrounds transparent. That explains some reports of translated text without a translation block, but the product specification does not currently state this exception. The visual contract must explicitly decide whether previews share translated decoration; implementation and tests must then match that decision.
-44. Focused tests can load the committed root plugin without first rebuilding it. `npm test -- <file>` therefore may execute an older bundle after `src/` changes; only `npm run verify` performs the deterministic build check. RED/GREEN commands must either test source modules directly or build/check the bundle before any test that instantiates the generated plugin.
-45. Release bookkeeping is inconsistent: package metadata and the generated bundle are `0.3.37`, while `CHANGELOG.md` still ends at `0.3.36`. The build contract checks package/metadata/bundle agreement but not changelog or deployed/loaded artifact identity.
-
-The next implementation must first prove the updateable channel-stream render boundary and the real history-fetch return shape with captured runtime evidence. No display owner, prefetch, or acknowledgement strategy is considered complete from mocked helper calls alone.
-
-### Full Debug Coverage Matrix
-
-The release gate covers all boundaries below:
-
-- message acquisition: mounted rows, Discord cache, bounded prefetch, live messages, replies, embeds, short text, and thread titles;
-- transport and parsing: exact request IDs, missing/duplicate/reordered provider results, partial success, backup-provider handoff, timeout, retry, and cancellation;
-- state: immutable source, message signature, channel generation, automatic/manual origin, suppression, cache reuse, and render revision;
-- rendering: parent text projection, child decoration, loading indicator, reply/embed host rows, title refresh, and DOM revision acknowledgement;
-- virtualization and interaction: row reuse, unmount/remount, historical loading, row-height change, user scroll intent, composer input, and channel switching;
-- lifecycle: edit, delete, disable, re-enable, plugin stop, reload, stale result rejection, cleanup, and bounded runtime memory;
-- status and theme: configured historical maximum, translated/ready/visible/failed separation, compact localization, and Discord theme variables;
-- distribution: deterministic source bundle, syntax/tests, artifact hash, installed-file hash, backup, rollback, and explicit real-client smoke evidence.
-
-## Design Principles
-
-1. One module owns the complete display state for every message.
-2. Original Discord content is captured as an immutable snapshot and is never reconstructed from translated props.
-3. Translation policy, provider transport, state commit, and Discord rendering are separate modules.
-4. Message text, translated decoration, loading state, and original restoration are committed through one display transaction.
-5. Runtime state is channel-isolated and generation-bound.
-6. Every item ends as translated, skipped with a reason, failed with a reason, or cancelled.
-7. Discord adapters may read and clone Discord objects, but domain modules never mutate Discord store objects.
-8. Tests exercise module interfaces and rendered output contracts, not only internal function calls.
-9. One migration phase changes one ownership boundary and remains deployable.
-10. Legacy code is deleted only after the replacement passes automated and DiscordPTB verification.
-
-## Target Source Layout
-
-```text
-src/
-  plugin/
-    index.js
-    lifecycle.js
-    discord-patches.js
-
-  display/
-    message-state-store.js
-    translation-display-controller.js
-    discord-render-adapter.js
-    message-display-adapter.js
-    reply-display-adapter.js
-    embed-display-adapter.js
-    thread-title-display-adapter.js
-
-  translation/
-    orchestrator.js
-    received-policy.js
-    sent-policy.js
-    language-detection.js
-    prompt-policy.js
-    result-validator.js
-
-  runtime/
-    live-translation-queue.js
-    historical-translation-job.js
-    translation-cache.js
-    lifecycle-generation.js
-
-  providers/
-    provider-registry.js
-    provider-client.js
-    google-free.js
-    google-cloud.js
-    deepl.js
-    microsoft.js
-    openai.js
-    gemini.js
-    openai-compatible.js
-
-  settings/
-    schema.js
-    migrations.js
-    settings-store.js
-    channel-settings.js
-    global-settings.js
-
-  protection/
-    placeholders.js
-    protected-terms.js
-
-scripts/
-  build-plugin.mjs
-
-tests/
-  display/
-  translation/
-  runtime/
-  providers/
-  settings/
-  integration/
-```
-
-The target is 25-35 production modules. Normal modules should remain under 400 lines, no production module should exceed 500 lines without an explicit architecture review, and `src/plugin/index.js` should remain under 250 lines.
-
-## Core Message State
-
-`MessageStateStore` is the only owner of translated message display state.
-
-```js
-{
-  messageId: "123",
-  channelId: "456",
-  generation: 4,
-  source: {
-    content: "Hello",
-    embeds: []
-  },
-  status: "translated",
-  translation: {
-    content: "你好",
-    inputLanguage: "en",
-    outputLanguage: "zh-CN"
-  },
-  reason: null,
-  origin: "automatic"
-}
-```
-
-Allowed statuses are:
-
-```text
-idle -> pending -> translating -> translated
-                              \-> skipped
-                              \-> failed
-                              \-> cancelled
-```
-
-The `source` snapshot is immutable. A translated result never overwrites it. Disabling automatic translation changes what is rendered; it does not need to recover content from a previously mutated Discord object.
-
-## Deep Module Interfaces
-
-### MessageStateStore
-
-Owns immutable source snapshots and current display state.
-
-```text
-captureSource(snapshot)
-markPending(messageId, requestIdentity)
-commitResult(result)
-commitBatch(results)
-markSkipped(messageId, reason)
-markFailed(messageId, reason)
-cancelChannel(channelId, generation)
-restoreChannel(channelId)
-restoreAll()
-markRenderOutcome(outcome)
-getDisplayState(messageId)
-listChannel(channelId)
-```
-
-Callers do not access internal maps.
-
-### TranslationDisplayController
-
-Converts message states into one display transaction.
-
-```text
-renderMessage(messageId)
-commitMessageResult(result)
-commitHistoricalBatch(results)
-restoreChannel(channelId)
-restoreAll()
-```
-
-A transaction contains message text, watermark, translated style, loading state, original block, and embed/reply updates together.
-
-### DiscordRenderAdapter
-
-Contains all knowledge of Discord and BDFDB rendering internals.
-
-```text
-captureVisibleMessages(channelId)
-applyDisplayTransaction(transaction)
-refreshChannelTransaction({channelId, views, hostMessageIds, transactionId})
-confirmMountedViews({channelId, views})
-refreshThreadTitles(channelId)
-```
-
-No translation policy or provider logic is allowed in this adapter. Real-client evidence (2026-08-13, DiscordPTB app-1.0.1212; archived debug transcript) proved that `forceUpdate` on any node around the channel-stream boundary — per-message owners, the stream owner, or its nearest updateable ancestor — does not repaint the message list on current clients. The shipped contract is therefore: each display transaction triggers at most one whole-list rebuild, message-row lookup uses a tolerant selector ladder that accepts composite `channelId-messageId` shapes, and message DOM nodes and IDs are used only for mounted-state detection and revision confirmation.
-
-The adapter returns separate `confirmedIds`, `deferredIds`, `missingIds`, and `ownerMissing` evidence. `deferredIds` means the row was not mounted. A mounted row without the requested revision is `missing`, never deferred or displayed. Off-screen rows remain state-ready and render from the store when mounted. A whole-list rebuild is budgeted at most once per display transaction; confirmation retries are read-only DOM checks and never rebuild, and purely virtualized rows never trigger a rebuild.
-
-### TranslationOrchestrator
-
-Coordinates policy, queues, providers, validation, cache, and display commits.
-
-```text
-translateLive(snapshot, context)
-translateHistorical(snapshots, context)
-translateManual(snapshot, context)
-cancelChannel(channelId, generation)
-```
-
-It returns structured results and never edits React props.
-
-### HistoricalTranslationJob
-
-Owns one immutable, channel-scoped ID snapshot. Provider requests may be split internally, but terminal results are returned as one batch. The job does not render Discord directly.
-
-### ProviderRegistry
-
-Resolves one provider adapter by provider ID. Every adapter returns the same result type and shares timeout, retry, error normalization, and protected-placeholder validation through `provider-client.js`.
-
-## Received Message Flow
-
-```text
-Discord patch
-  -> MessageSnapshot
-  -> MessageStateStore.captureSource
-  -> TranslationOrchestrator
-  -> live queue or HistoricalTranslationJob
-  -> ProviderRegistry
-  -> validated TranslationResult
-  -> MessageStateStore commit
-  -> TranslationDisplayController transaction
-  -> DiscordRenderAdapter refresh
-  -> render acknowledgement or visible failure
-```
-
-Historical results enter the state store together. One historical display transaction then refreshes the active channel-stream projection and confirms the exact committed message revisions. New live messages use a separate high-priority scheduling lane and request an immediate channel transaction without waiting for historical work.
-
-## Live And Historical Scheduling
-
-The orchestrator owns two independent lanes:
-
-- The live lane is high priority and has no intentional batching timer. A new message starts as soon as a provider slot is available. Messages observed in the same event-loop turn may be coalesced without adding delay.
-- The historical lane is low priority. One immutable job contains up to the configured number of eligible message snapshots and commits its terminal valid results in one display transaction.
-
-When the provider supports two concurrent requests, one slot may serve live work while one serves historical work. With a single slot, a running request is allowed to finish, then live work is selected before the next historical request. Historical repair never starves live translation.
-
-## Historical Message Source
-
-`HistoricalMessageSource` builds a channel-scoped snapshot in this order:
-
-1. Capture rendered message snapshots.
-2. Read compatible snapshots already held by Discord's message store.
-3. Deduplicate by message ID and order newest first.
-4. Apply translation eligibility rules.
-5. If fewer than the configured maximum remain, issue one bounded prefetch sequence for only the missing quantity.
-
-Prefetched records stay in plugin-owned job and translation state. The source does not simulate user scrolling, mutate Discord store objects, or insert records into the virtualized list. Prefetch is cancelled when the channel generation changes or automatic translation is disabled. A failed prefetch seals the job at its actual available size instead of blocking live work.
-
-## Display Transaction And Host Ownership
-
-Translation state and Discord component ownership are related but distinct. A display transaction contains translated message IDs plus any host-row IDs whose reply previews project those translations. The channel-isolated mapping is one referenced message ID to zero or more host reply-row IDs. Clearing a preview retains a non-active restore candidate until the host row confirms the restored revision, so an already-painted preview cannot be mistaken for original text.
-
-The render adapter requests one channel-scoped parent refresh per coalesced transaction. It does not depend on updateability of per-message functional or memoized owners. Parent `Messages` projection selects original or translated content first; child message, reply, and embed render paths then apply matching decoration from the same immutable revision. Thread titles remain a separate surface with a separate acknowledgement.
-
-A mounted row that fails revision acknowledgement is a visible render failure and may receive one repeat of the same channel transaction after evidence is recorded. A row that is not mounted remains virtualized-ready and renders from the state store when it later mounts. Repeated failure reopens root-cause investigation instead of escalating to broader repaint helpers.
-
-Before the update, the adapter captures a visible anchor and offset. It restores that offset once after paint unless user scroll intent changed during the transaction. Composer, channel list, member list, and unrelated channels are not part of the transaction.
+The build uses esbuild in CommonJS mode with an ES2020 target, preserves the BetterDiscord metadata banner, strips release-disabled probes, and embeds a deterministic build ID. `package.json`, `package-lock.json`, `src/plugin/metadata.json`, README, CHANGELOG, and the generated banner must agree on the release version.
+
+## Ownership Map
+
+| Concern | Current owner | Contract |
+| --- | --- | --- |
+| Received message state | `src/display/message-state-store.js` | Immutable source, request identity, automatic/manual origin, suppression, preview state, display revision, and restore archive |
+| Display transactions | `src/display/translation-display-controller.js` | One channel-scoped commit boundary for message IDs and reply-preview host IDs |
+| Row repaint and fallback | `src/display/flux-row-repaint.js`, `src/display/discord-render-adapter.js` | Flux row merge first; DOM revision confirmation; at most one whole-chat fallback per transaction |
+| Historical acquisition and batching | `src/received/historical-source-runtime.js`, `src/orchestrator/historical-snapshot-cadence.js`, `src/orchestrator/historical-translation-job.js` | Immutable channel jobs, 500 ms quiet-window sealing, waiting-job absorption, one atomic batch commit |
+| Live scheduling | `src/orchestrator/live-translation-queue.js` | High-priority channel-aware work that is not delayed behind historical collection |
+| Translation policy and dispatch | `src/orchestrator/translation-pipeline.js`, `src/providers/provider-client.js` | Protection, language policy, primary/backup dispatch, provider integrity, retry, and error reporting |
+| Viewport preservation | `src/viewport/message-viewport-store.js` | Reading-line anchor, user-intent veto, bottom-stranding rescue, raw-offset fallback, and settle checks |
+| Loaded status | `src/status/loaded-translation-status-store.js`, `src/ui/loaded-status-capsule.js`, `src/ui/loaded-status-position.js` | Cumulative channel count, capsule lifecycle, retry affordance, and native-hint-aware geometry |
+| Forwarded content projection | `src/display/translation-display-logic.js`, `src/received/received-translation-runtime.js` | Snapshot-aware source, paint, echo detection, one-original composition, and restore |
+| Composer and menus | `src/ui/composer-wiring.js`, `src/ui/context-menu-wiring.js` | Channel submit interception, input icon, and manual actions |
+| Settings schema | `src/settings/plugin-defaults.js`, `src/ui/settings-panel.js` | One schema and one owner for global versus channel settings |
+| Remaining composition | `src/legacy/runtime.js` | Plugin lifecycle, BDFDB patch shell, and dependency wiring only; it may shrink but not grow |
+
+## Architectural Invariants
+
+1. Channel state, display records, queues, reply hosts, viewport state, status counters, and cleanup are channel-isolated.
+2. Provider credentials, endpoints, models, global primary/backup defaults, and detection strategy remain global.
+3. The input-box translator icon controls automatic translation only for the selected channel.
+4. Translation state commit and visible render confirmation are distinct operations.
+5. Original source content is immutable. Display code works on detached or prototype-preserving clones and never mutates Discord store objects in place.
+6. One user action must not create parallel state maps, repaint owners, or original-display branches.
+7. Historical results commit as a batch. Cumulative status accounting does not imply per-message visual refresh.
+8. User scroll intent outranks delayed restoration work.
+9. Missing, reordered, duplicated, wrong-language, or placeholder-damaged provider output is repaired or reported rather than silently displayed.
+10. Debug evidence is excluded from the release bundle and repository history.
+
+## Received Translation Flows
+
+### Live and Manual Messages
+
+1. Capture the immutable source and channel generation.
+2. Apply eligibility, language, protection, and cache policy.
+3. Register a request identity in `MessageStateStore`.
+4. Dispatch through the channel's effective primary provider, then the global backup when permitted.
+5. Validate the terminal result and commit translation state.
+6. Start one ID-scoped display transaction.
+7. Attempt Flux row repaint and confirm the exact DOM revision. Use the whole-chat fallback only for unresolved mounted rows or host surfaces that require it.
+
+Manual translation uses the same state and display transaction chain. Manual untranslate restores the archived source and suppresses immediate cached automatic repaint for that message.
+
+### Historical Messages
+
+Mounted and cached snapshots are collected without simulating scroll. Scroll-back arrivals wait for a 500 ms quiet window, then form an immutable channel job. Compatible waiting jobs merge before provider work starts. Valid terminal results enter the store together and one display transaction reveals the batch.
+
+Reply-preview state may commit immediately, but host-row repaint requests collect into a 300 ms channel wave and remain behind the active-scroll gate. Live work remains higher priority than the next historical request.
+
+### Forwarded Messages
+
+A forwarded message's parent `content` may be empty. Its visible source is normally `messageSnapshots[0].message.content`. Every source read, provider input, echo check, paint, original-display decision, cancel, and restore uses the same snapshot-aware helpers.
+
+The snapshot is cloned with its prototype and forward-reference fields preserved. With received-original display off, one translated body is shown. With it on, the translation and exactly one inline quote/spoiler original are shown. Unknown marker properties are not used because Discord normalization may remove them.
+
+## Display Transactions
+
+A display transaction contains a channel ID, translated message IDs, host reply-row IDs, expected revisions, trigger lanes, and viewport intent captured for that transaction. The controller commits state before paint and records whether each row is mounted, confirmed, virtualized-ready, skipped, failed, or unresolved.
+
+For mounted ordinary rows, `flux-row-repaint.js` dispatches the experiment-verified no-op `MESSAGE_UPDATE` merge through Discord's store dispatcher. Confirmation runs after the asynchronous store render. Rows already carrying the expected revision require no repaint.
+
+`discord-render-adapter.js` performs one whole-chat rebuild only when row-level confirmation or a host surface still requires it. Function-component registry handles remain opportunistic because the current client exposes synthetic `{props}` objects without a class updater. The retired synchronous blank/remount path is retained only as tested historical code and is not the active rebuild primitive.
+
+## Viewport Ownership
+
+`MessageViewportStore` is the only writer of translation-related scroll restoration.
+
+- The reading anchor is the visible message nearest the viewport center, not the topmost row.
+- Historical paint waits while the user is actively scrolling.
+- A newer wheel/touch/drag gesture vetoes every delayed correction.
+- Immediate restore can rescue a fallback remount that stranded an in-history reader at newest.
+- Missing virtualized anchors fall back to the captured raw offset.
+- Layout settling is checked at 180 and 600 ms without overriding newer user intent.
+
+Scrollbar thumb geometry may still change when translated rows increase total content height. The protected contract is the reader's content position, not a motionless thumb.
 
 ## Loaded Translation Status
 
-`TranslationStatusStore` derives its total from the sealed historical job snapshot and its completed count from valid results committed to translation state, including virtualized-ready rows. It does not use the number of currently mounted rows and does not overwrite the exact final count with later generic job progress.
+The capsule displays one cumulative ratio per channel. Unique translated message IDs are recorded at the message-state-store transition point, while the capsule DOM updates only on batch/status heartbeat. A later batch extends the same ratio, for example `13/13 -> 13/33 -> 33/33`.
 
-The primary capsule is language-neutral: translation icon, `completed/total`, and elapsed seconds while active. Retry, visible-row, background-ready, and provider detail stay in the hover explanation. The component consumes Discord theme variables and updates independently from message rendering.
+Configured capacity and inspected rows are not the denominator. Resolved skips leave pending work, stale batch reports are rejected, and retry/failure status uses the same cumulative basis. Channel switch hides the unrelated capsule without discarding its channel state.
 
-## Disable And Stop Flow
+Positioning uses the smallest valid native slow-mode/cooldown hint near the composer. With a hint, the capsule sits 8 px above it with right edges aligned; without one, it sits 8 px above the composer. Message-row text matches, zero-size rectangles, stale nodes, and temporary composer unmounts cannot move it to an unrelated location.
 
-Disabling one channel:
+## Providers, Persistence, and Settings
 
-1. Start a versioned channel-toggle transaction and increment the channel display generation. A stale disable completion cannot clear a newer re-enabled session.
-2. Cancel pending automatic work for that channel.
-3. Restore automatic and manual message display states and clear channel-scoped manual suppression while retaining immutable source snapshots and valid translation-cache entries.
-4. Clear reply-preview and embed projections and restore the thread title as part of the same disable flow.
-5. Request one parent channel-stream transaction so all mounted messages and reply/embed hosts read restored state in the same React cycle; virtualized rows read restored state when they mount.
-6. Keep manual translation available after disable so a newer per-message action can display a cached or newly translated result.
+Provider contracts live in `providers.md`. Google Free is keyless, uses encoded query length for chunking, maps protected terms to reversible transport-safe tokens, and returns through the same strict placeholder validator as other providers. Exact duplicate provider errors are coalesced for 10 seconds; different failures remain visible.
 
-Stopping the plugin performs the same operation for every channel before unregistering patches.
-
-## Edit Flow
-
-An edited Discord message creates a new immutable source snapshot and a new signature. Previous pending work and display results for that message are cancelled. Sent-message editing obtains original text from the state store, never from translated React props.
-
-## Settings And Persistence
-
-Persistent data is split by responsibility:
+Persistent responsibilities are separated:
 
 ```text
 settings              Global behavior and display preferences
 channelSettings       Channel enablement, languages, and provider override
 providerCredentials   API keys, endpoints, and models
-translationCache      Bounded successful translation cache
+translationCache      Bounded successful translation and paid-skip cache
 ```
 
-The global primary default, global backup provider, detection strategy, and every provider credential remain global. A channel may override only the channel-owned primary provider and language choices defined in `docs/settings.md`.
+Runtime queues, display state, viewport state, counters, probes, and generations are in memory only. `showOriginalMessage` is the sole received-original setting; the removed `showOriginalDirectly` value is ignored if it remains in old persisted data.
 
-Runtime queues, message display state, scroll state, and active generations remain in memory and are never stored in the settings document.
+## Disable, Stop, Edit, and Cleanup
 
-When the user leaves a channel, `MessageStateStore` prunes records that can be reconstructed from the bounded translation cache. It retains active requests, active manual translations, manual-untranslate suppression, unconfirmed restore records, and source archives until their owning workflow finishes; a confirmed manual restore becomes prunable after its archive is consumed. If no records remain, the channel index, display generation, and reply-preview eligibility are released too. Revisiting the channel captures the source again and commits a matching cached translation without another provider request.
+Disabling a channel advances its generation, cancels pending automatic work, restores automatic and manual message/preview/embed/title display for that channel, and starts one channel-scoped display transaction. Manual translation remains available afterward. A late result from an older generation cannot repaint the channel.
 
-Every persistent document has an explicit schema version and one migration entry point. Compatibility reads are removed after the corresponding migration has shipped and been verified.
+Stopping applies the same restoration to every channel before patches and managed tasks are released. Editing a message captures a new source signature and invalidates old pending/display results. Channel-session pruning keeps only state still needed for an active request, unconfirmed restore, manual suppression, or source archive.
 
-## Build And Verification
+## Diagnostics and Privacy
 
-Required commands after the build migration:
+Debug builds may enable bounded transition journals and one-shot probes for message-update, forwarded-snapshot, row-owner, or positioning evidence. Release builds exclude probe activation and debug journals.
+
+Raw evidence, provider configuration, API keys, account/channel identifiers, installed-plugin backups, and debug bundles stay outside Git. Repository fixtures use synthetic IDs, reserved example domains, and descriptive non-token-shaped credential placeholders.
+
+## Build and Verification
+
+Required commands:
 
 ```text
+npm ci
 npm run build
-npm run check
-npm test
 npm run verify
 ```
 
-`npm run verify` must:
+`npm run verify` checks deterministic source/artifact parity, JavaScript syntax, architecture ratchets, release metadata, bilingual document entry points, and all unit/contract/integration tests. A display change also requires PTB observation because a mocked refresh call alone does not prove visible Discord output.
 
-1. Build the plugin from `src/`.
-2. Verify the committed plugin file matches a fresh deterministic build.
-3. Syntax-check the generated plugin.
-4. Run unit, contract, integration, migration, and build tests.
+## Known Debt
 
-The generated readable release target is 7,000-8,500 lines and 350-450 KB. Size is a guardrail, not a reason to remove required behavior.
-
-## Testing Strategy
-
-Tests are divided by confidence level:
-
-- Domain tests verify state transitions, policy, provider parsing, and cancellation.
-- Display contract tests assert complete display transactions, including text, watermark, styling, loading, and restoration.
-- Discord adapter tests use captured component/Fiber shapes, exercise the real `Messages` before -> child after order, and verify both the parent refresh boundary and exact DOM revision acknowledgements.
-- Build tests verify metadata, one-file output, deterministic bytes, and exclusion of test/debug code.
-- DiscordPTB smoke tests verify hover-independent display, disable restoration, atomic historical reveal, scroll stability, edits, titles, stop, and reload.
-
-A test that only asserts `findOwner`, `forceUpdate`, `forceAllUpdates`, or another refresh helper was called is not sufficient evidence that a visible message changed. Tests may not fabricate confirmation as a side effect of the refresh mock.
-
-## Observability
-
-Debug builds expose a bounded in-memory transition journal keyed by channel ID and message ID:
-
-```text
-captured -> queued -> provider-started -> provider-finished
-         -> state-committed -> render-requested -> render-confirmed
-```
-
-Skipped and failed items include a stable reason code. Diagnostic data is excluded from release output unless an explicit local debug build is requested.
+- `src/legacy/runtime.js` remains a 3,479-line composition root.
+- Whole-chat fallback diagnostics (`R`) can still correspond to occasional composer flicker.
+- History-source completeness, provider abort support, lifecycle task registry cleanup, and the message-delete dispatcher route remain open in `recovery-plan.md`.
+- Discord internal store and snapshot shapes require re-observation after client updates.
+- Some modules remain large and should split only when ownership contracts and regression tests exist.
 
 ## Migration Rules
 
-- Freeze new feature work until the display vertical slice passes DiscordPTB verification.
-- Introduce the build pipeline without changing runtime behavior.
-- Move one deep module at a time and retain a compatibility adapter only while callers migrate.
-- Do not create a second competing state map or queue.
-- Do not delete legacy code in the same commit that introduces its replacement.
-- Delete the legacy implementation in the next small commit after parity verification.
-- Keep every migration commit deployable and reversible.
-- Do not mark a phase complete from mocked tests alone when the phase changes Discord rendering.
+- Add a failing regression test before every runtime behavior change.
+- Move one ownership boundary at a time; do not hide a redesign inside a compatibility patch.
+- Do not create a second state map, repaint owner, queue, counter basis, or original-display mode.
+- Preserve the single generated plugin artifact and channel/global ownership rules.
+- Keep every commit buildable, verifiable, and reversible.
+- Do not mark Discord-render work complete from synthetic tests alone.
+- Lower the legacy runtime ratchet in the same commit that removes runtime ownership; never raise it to accommodate new code.
+- Update both language entry points when architecture or field-debugging contracts change.

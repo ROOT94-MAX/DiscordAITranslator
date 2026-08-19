@@ -5,7 +5,10 @@
 // channel-stream boundary is a measured no-op (caused: false) - the strategy that
 // froze the client when deployed. The mechanism users actually saw working is the one
 // the 2026-06 plugin shipped: BDFDB.MessageUtils.rerenderAll(true) unmounts and
-// rebuilds the chat layer, which crosses every memo boundary.
+// rebuilds the chat layer, which crosses every memo boundary. The live per-row path
+// (live-row-repaint.js) runs first and needs no rebuild at all; the atomic
+// single-task variant of the rebuild was tried and RETIRED by field verdict - see
+// the note inside the factory.
 //
 // What made the old plugin freeze was frequency, not the primitive. This adapter keeps
 // the rebuild affordable with three rules:
@@ -16,7 +19,33 @@
 //   paint from the store when they mount.
 // Scroll safety (bottom lock, anchor restore, user-gesture guard) lives in the
 // injected captureScrollState/restoreScrollState from the viewport store.
-function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, getUserScrollIntentSequence, captureScrollState, restoreScrollState, isRuntimeActive = () => true}) {
+function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, getUserScrollIntentSequence, captureScrollState, restoreScrollState, restoreScrollStateNow = () => {}, isRuntimeActive = () => true, atomicChatRebuild = null, liveRowRepaint = null}) {
+	// atomicChatRebuild is accepted but deliberately unused: the synchronous
+	// double-flush rebuild was RETIRED by field verdict (2026-08-19 evening,
+	// "0L/56A/0F"). It ran once per transaction with no cross-call merging, so
+	// message streams became per-message heavyweight rebuilds - the composer icon
+	// blinked on every message and scrolling stuttered. BDFDB's rerenderAll defers
+	// through a self-clearing timeout and lets React batch the two force updates,
+	// which the field reports as strictly smoother. Do not re-enable without a
+	// mechanism that merges rebuilds across transactions.
+	void atomicChatRebuild;
+	// Which path painted, surfaced in the settings panel so a user screenshot
+	// answers what no non-technical report can: live = per-row self-repaint
+	// (no rebuild), rebuild = BDFDB whole-layer rebuild. rebuildsBySource books each
+	// rebuild once per trigger lane present in the transaction (live, cached,
+	// historical, manual, retry - cadence audit 2026-08-19), and recentRebuilds keeps
+	// a small ring so a debug session can read the exact storm pattern.
+	const rebuildStats = {live: 0, rebuild: 0};
+	const rebuildsBySource = {};
+	const recentRebuilds = [];
+	const RECENT_REBUILD_LIMIT = 40;
+	function bookRebuild(sources, size) {
+		rebuildStats.rebuild++;
+		const sourceKeys = sources && typeof sources == "object" ? Object.keys(sources) : [];
+		for (const source of sourceKeys.length ? sourceKeys : ["other"]) rebuildsBySource[source] = (rebuildsBySource[source] || 0) + 1;
+		recentRebuilds.push({at: Date.now(), size, sources: Object.assign({}, sources || {})});
+		if (recentRebuilds.length > RECENT_REBUILD_LIMIT) recentRebuilds.shift();
+	}
 	function escapeAttributeValue(value) {
 		return String(value).replace(/(["\\])/g, "\\$1");
 	}
@@ -147,7 +176,11 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 	}
 
 	return {
-		async refreshMessages({messageIds = [], ownerMessageIds = [], views = []}) {
+		getRebuildStats: () => Object.assign({}, rebuildStats, {
+			rebuildsBySource: Object.assign({}, rebuildsBySource),
+			recentRebuilds: recentRebuilds.map(entry => Object.assign({}, entry, {sources: Object.assign({}, entry.sources)}))
+		}),
+		async refreshMessages({channelId = null, messageIds = [], ownerMessageIds = [], views = [], sources = null}) {
 			const uniqueMessageIds = getUniqueMessageIds(messageIds);
 			const viewsByMessageId = getViewsByMessageId(views);
 			const presentIds = uniqueMessageIds.filter(messageId => !!findMessageElement(messageId));
@@ -164,10 +197,40 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 			if (!isRuntimeActive()) return {confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], fallbackUsed: false};
 			const intentSequence = getUserScrollIntentSequence();
 			const scroller = document.querySelector(BDFDB.dotCN.messagesscroller);
-			const scrollState = scroller ? captureScrollState() : null;
+			const scrollState = scroller ? captureScrollState({messageIds: uniqueMessageIds}) : null;
 			let renderError;
 			let hasRenderError = false;
 			try {
+				// Live path first (2026-08-19, the fix for one-rebuild-per-translation-wave):
+				// rows repaint themselves through their registered content instances, so the
+				// common case costs no rebuild at all - the composer never remounts and the
+				// scroll anchor barely moves. Preview hosts still need the rebuild, and any
+				// row the DOM confirm cannot verify falls through to it unchanged.
+				if (!hostNeedsPaint && liveRowRepaint && unconfirmedIds.length) {
+					const attemptedIds = liveRowRepaint.repaintRows(unconfirmedIds, {channelId});
+					if (attemptedIds.length) {
+						if (scrollState && intentSequence === getUserScrollIntentSequence()) {
+							try {restoreScrollStateNow(scrollState);}
+							catch (err) {}
+						}
+						await waitForPaint();
+						confirmedIds = confirmViews(presentIds, viewsByMessageId);
+						unconfirmedIds = presentIds.filter(messageId => !confirmedIds.includes(messageId));
+						// The flux route re-renders asynchronously through the store; give
+						// React one more frame to commit before concluding the row needs
+						// the whole-layer rebuild.
+						if (unconfirmedIds.length) {
+							await waitForPaint();
+							confirmedIds = confirmViews(presentIds, viewsByMessageId);
+							unconfirmedIds = presentIds.filter(messageId => !confirmedIds.includes(messageId));
+						}
+						if (!unconfirmedIds.length) {
+							rebuildStats.live++;
+							return {confirmedIds, missingIds: [], deferredIds, retryIds: [], fallbackUsed: false};
+						}
+					}
+				}
+				bookRebuild(sources, uniqueMessageIds.length);
 				BDFDB.MessageUtils.rerenderAll(true);
 				await waitForPaint();
 				confirmedIds = confirmViews(presentIds, viewsByMessageId);

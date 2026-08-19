@@ -83,7 +83,7 @@ function createHarness(overrides = {}) {
 			return null;
 		},
 		releaseDisplayPending: record => log.released.push(record),
-		scheduleDisplayFlush: (channelId, messageId) => log.flushes.push({channelId, messageId}),
+		scheduleDisplayFlush: (channelId, messageId, source) => log.flushes.push({channelId, messageId, source}),
 		collectHistoricalMessage: queueItem => {
 			log.historical.push(queueItem);
 			return true;
@@ -601,7 +601,27 @@ test("a commit carries the live request identity and a deferred commit schedules
 
 	assert.deepEqual(harness.log.burstCommits.map(entry => entry.result.requestIdentity), [String(second.liveRequest.id), String(first.liveRequest.id)], "each commit carries its own request identity");
 	assert.deepEqual(harness.log.flushes.map(entry => entry.messageId).sort(), ["m1", "m2"], "a deferred commit is painted by an explicit flush");
+	assert.ok(harness.log.flushes.every(entry => entry.source === "live"), "a provider commit tags its flush as the live lane");
 	assert.deepEqual(harness.log.released.map(record => record.messageId).sort(), ["m1", "m2"], "the request is finished either way");
+});
+
+test("a cached commit tags its flush as the cached lane", async () => {
+	// Cadence audit 2026-08-19: cached replays are one of the per-message rebuild
+	// suspects; without their own tag they would masquerade as live translations.
+	const harness = createHarness({
+		commitCachedResult: (queueItem, channelId) => {
+			harness.log.cachedCommits.push({messageId: String(queueItem.message.id), channelId});
+			return Promise.resolve({deferredIds: [String(queueItem.message.id)]});
+		}
+	});
+	harness.queue.setBusyTranslating(true);
+	harness.addLiveItem("m1", "c1", {cachedTranslation: {content: "cached"}});
+	harness.queue.setBusyTranslating(false);
+
+	harness.queue.processQueue();
+	await settle();
+
+	assert.deepEqual(harness.log.flushes, [{channelId: "c1", messageId: "m1", source: "cached"}]);
 });
 
 test("a cached item commits through the injected callback and finishes its request", async () => {

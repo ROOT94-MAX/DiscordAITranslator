@@ -560,6 +560,24 @@ test("a restore waits for a double animation frame and tolerates a missing scrol
 	detached.flushFrames();
 });
 
+test("a history restore falls back to its captured offset when remount virtualizes the anchor", () => {
+	// Enabling auto-translation rebuilds the layer. Discord first remounts at the
+	// newest messages, where the old eye-line row is not mounted; returning early on
+	// the missing anchor stranded an August 3 reader at August 20 permanently.
+	const harness = createHarness({scrollTop: 500, scrollHeight: 2000, clientHeight: 800});
+	const state = harness.store.captureScrollerState();
+	assert.ok(state.anchor, "history capture carries the eye-line message");
+	harness.messageElements.length = 0;
+	harness.replaceScroller();
+	harness.scroller.scrollTop = 1200;
+	harness.scroller.writes.length = 0;
+
+	harness.store.restoreScrollerState(state);
+	harness.flushFrames();
+
+	assert.deepEqual(harness.scroller.writes, [500], "raw offset gets the virtual list back into the historical neighbourhood so a later settle can find the anchor");
+});
+
 test("restoring nothing is a no-op", () => {
 	const harness = createHarness();
 	harness.store.restoreScrollerState(null);
@@ -848,4 +866,170 @@ test("capturing an anchor falls back to the visible message when the id is gone"
 test("the store surface is frozen so nothing can reach past the API", () => {
 	const harness = createHarness();
 	assert.equal(Object.isFrozen(harness.store), true);
+});
+
+test("the manual anchor only rides transactions that contain the anchored message", () => {
+	// Regression (2026-08-19, reported on PTB): after 5a wired the manual anchor into
+	// every display transaction, automatic history backfill during the 4.5s lock window
+	// restored to the anchored message on each flush and bounced the user's scrolling.
+	// The anchor is manual-translation UX; it may only ride the anchored message's own
+	// transaction, never an unrelated automatic one.
+	const harness = createHarness();
+	harness.store.lockManualScroll(MESSAGE_ID);
+	const own = harness.store.captureDisplayTransactionScrollState({messageIds: [MESSAGE_ID, OTHER_MESSAGE_ID]});
+	assert.ok(own && own.manualAnchor, "the manual message's own transaction rides the anchor");
+	const unrelated = harness.store.captureDisplayTransactionScrollState({messageIds: [OTHER_MESSAGE_ID]});
+	assert.ok(unrelated && !unrelated.manualAnchor, "an automatic transaction for other messages is never hijacked by the anchor");
+	assert.equal(typeof unrelated.scrollTop, "number", "the unrelated transaction falls back to the offset capture");
+	const contextless = harness.store.captureDisplayTransactionScrollState();
+	assert.ok(contextless && !contextless.manualAnchor, "a contextless capture defaults to the offset state");
+});
+
+test("the immediate restore writes synchronously so the first painted frame is already correct", () => {
+	// Scroll-bounce audit (2026-08-19): the atomic rebuild commits the new DOM in the
+	// same task, so waiting two animation frames before re-applying the anchor let the
+	// browser paint Discord's default position first and yank it back later - once
+	// per transaction. The immediate variant runs in the same task as the rebuild.
+	const harness = createHarness({scrollTop: 1180});
+	harness.store.restoreDisplayTransactionScrollStateNow({keepBottom: true, userScrollIntentSequence: 0});
+	assert.deepEqual(harness.scroller.writes, [2000], "the bottom pin lands synchronously");
+	assert.equal(harness.pendingFrames(), 0, "the immediate path schedules no animation frames");
+});
+
+test("the immediate restore still refuses to override a newer user gesture", () => {
+	const harness = createHarness({scrollTop: 300});
+	harness.store.attachScrollWatcher();
+	scrollAsUser(harness);
+	harness.store.restoreDisplayTransactionScrollStateNow({scrollTop: 300, keepBottom: false, anchor: null, userScrollIntentSequence: 0});
+	assert.deepEqual(harness.scroller.writes, [], "a stale capture must never yank the list away from the user");
+});
+
+test("a gesture-vetoed restore still rescues the anchor when the remount stranded the view at the bottom", () => {
+	// 2026-08-19 field report: scrolling up through history, a whole-layer rebuild
+	// remounts the list at Discord's default - the newest messages. The user's wheel
+	// mid-rebuild advances the intent sequence, the never-pull-back veto skips the
+	// restore, and the user is stranded at the bottom - a position an upward gesture
+	// cannot have produced. In exactly that case the anchor must still restore.
+	const harness = createHarness();
+	harness.store.attachScrollWatcher();
+	const state = harness.store.captureScrollerState();
+	assert.equal(state.keepBottom, false, "the capture was made while viewing history");
+	assert.ok(state.anchor, "the capture carries a message anchor");
+
+	harness.scroller.dispatch("wheel");
+	// The rebuild remounts the scroller at the bottom; the anchor row sits far above.
+	harness.scroller.scrollTop = 1200;
+	harness.messageElements[0].top = -880;
+	const writesBefore = harness.scroller.writes.length;
+
+	harness.store.restoreScrollerState(state);
+	harness.flushFrames();
+
+	assert.deepEqual(harness.scroller.writes.slice(writesBefore), [200], "the anchor pulls the view back to the captured row");
+});
+
+test("a gesture-vetoed restore keeps hands off when the view is not at the bottom", () => {
+	// The never-pull-back contract survives: a mid-list position is plausibly the
+	// user's own scrolling, so the veto stands and nothing is written.
+	const harness = createHarness();
+	harness.store.attachScrollWatcher();
+	const state = harness.store.captureScrollerState();
+
+	harness.scroller.dispatch("wheel");
+	harness.scroller.scrollTop = 700;
+	harness.messageElements[0].top = -80;
+	const writesBefore = harness.scroller.writes.length;
+
+	harness.store.restoreScrollerState(state);
+	harness.flushFrames();
+
+	assert.deepEqual(harness.scroller.writes.slice(writesBefore), [], "a mid-list position belongs to the user");
+});
+
+test("a bottom-stranded rescue without a findable anchor falls back to the captured raw offset", () => {
+	// Virtualization can unmount the anchor row after a remount at the bottom; the
+	// raw captured offset is approximate but beats stranding at the newest messages.
+	const harness = createHarness({messages: [{messageId: MESSAGE_ID, top: 120}]});
+	harness.store.attachScrollWatcher();
+	const state = harness.store.captureScrollerState();
+	assert.ok(state.anchor);
+	state.anchor.messageId = "9999999999";
+
+	harness.scroller.dispatch("wheel");
+	harness.scroller.scrollTop = 1200;
+	const writesBefore = harness.scroller.writes.length;
+
+	harness.store.restoreScrollerState(state);
+	harness.flushFrames();
+
+	assert.deepEqual(harness.scroller.writes.slice(writesBefore), [500], "the captured scrollTop comes back clamped");
+});
+
+test("the anchor is the visible row nearest the viewport center - the reading line", () => {
+	// The 4:02->4:10 drift report (2026-08-19): anchoring the TOPMOST visible row
+	// lets the rows between it and the user's eye line grow when their translations
+	// land, pushing the message being read out of position. The row nearest the
+	// viewport center IS the eye line, so it must be the anchor.
+	const harness = createHarness({messages: [
+		{messageId: MESSAGE_ID, top: 120},
+		{messageId: OTHER_MESSAGE_ID, top: 470},
+		{messageId: "333333333333333333", top: 840}
+	]});
+
+	const state = harness.store.captureScrollerState();
+
+	assert.equal(state.anchor.messageId, OTHER_MESSAGE_ID, "the mid-viewport row carries the eye line");
+});
+
+test("an explicitly requested anchor message still wins over the reading line", () => {
+	const harness = createHarness({messages: [
+		{messageId: MESSAGE_ID, top: 120},
+		{messageId: OTHER_MESSAGE_ID, top: 470}
+	]});
+
+	const anchor = harness.store.captureAnchorState(MESSAGE_ID);
+
+	assert.equal(anchor.messageId, MESSAGE_ID, "manual translation pins its own message");
+});
+
+test("a display-transaction restore re-verifies the anchor on a settle ladder", () => {
+	// Images, embeds and code blocks keep changing row heights after the paint; a
+	// single restore two frames after the rebuild leaves the late drift standing.
+	const harness = createHarness();
+	harness.store.attachScrollWatcher();
+	const state = harness.store.captureScrollerState();
+
+	harness.store.restoreScrollerState(state);
+	harness.flushFrames();
+	const writesAfterApply = harness.scroller.writes.length;
+
+	// Late layout pushes the anchor row 50px down after the first restore landed.
+	harness.messageElements[0].top = 170;
+	harness.advance(200);
+	assert.deepEqual(harness.scroller.writes.slice(writesAfterApply), [550], "the first settle pass corrects the late drift");
+
+	// The corrective scroll brought the row back to its captured offset, so the
+	// second settle pass finds nothing to do.
+	harness.messageElements[0].top = 120;
+	harness.advance(400);
+	assert.deepEqual(harness.scroller.writes.slice(writesAfterApply), [550], "an already-settled anchor costs no further writes");
+});
+
+test("a settle pass respects the plain veto and never uses the bottom rescue", () => {
+	// By settle time a user gesture can legitimately have reached the bottom, so the
+	// remount rescue must not fire outside the immediate two-frame restore.
+	const harness = createHarness();
+	harness.store.attachScrollWatcher();
+	const state = harness.store.captureScrollerState();
+
+	harness.store.restoreScrollerState(state);
+	harness.flushFrames();
+
+	harness.scroller.dispatch("wheel");
+	harness.scroller.scrollTop = 1200;
+	harness.messageElements[0].top = -880;
+	const writesAfterApply = harness.scroller.writes.length;
+	harness.advance(900);
+
+	assert.deepEqual(harness.scroller.writes.slice(writesAfterApply), [], "the user reached the bottom on their own; the settle pass stays out");
 });

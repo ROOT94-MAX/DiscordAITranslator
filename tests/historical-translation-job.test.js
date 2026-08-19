@@ -846,7 +846,9 @@ test("synchronous fallback historical collections coalesce into one ID snapshot"
 		for (const [id, content] of [["100", "first"], ["200", "second"], ["300", "third"]]) {
 			plugin.queueAutoTranslateMessage(createMessage(id, content), {id: "channel-history-job"}, {content}, {historicalLoad: true});
 		}
-		await new Promise(resolve => setImmediate(resolve));
+		// The quiet-window seal (cadence audit 2026-08-19) replaced the end-of-tick
+		// microtask: the snapshot waits out the collect window before it seals.
+		await new Promise(resolve => setTimeout(resolve, 700));
 
 		assert.deepEqual(requestedIds, [["100", "200", "300"]]);
 		await plugin.waitForHistoricalTranslationJobs("channel-history-job");
@@ -2233,13 +2235,13 @@ test("failed historical status exposes a visible retry action", () => {
 		assert.ok(pendingDelays.includes(1000), "an unpainted row keeps its visibility heartbeat");
 		assert.ok(!pendingDelays.includes(3000), "pending paint rows are never completion-hidden");
 
+		plugin.ensureLoadedStatusCapsuleController().recordTranslationsDisplayed("channel-history-retry-ui", ["retry-a", "retry-b"]);
 		plugin.updateLoadedAutoTranslationStatus({active: false, collecting: false, done: true, total: 2, processed: 2, displayed: 2, displayPending: 0, failed: 0, retryable: 0, phase: "done"});
-		assert.equal(text.textContent, "2/2");
-		const completionEntry = [...timers.entries()].find(([, timer]) => timer.delay === 3000);
-		assert.ok(completionEntry, "successful completion uses the agreed three-second hide alongside the heartbeat");
-		const completionTimer = completionEntry[1];
-		completionTimer.callback();
-		assert.equal(body.children.includes(statusElement), false);
+		assert.equal(text.textContent, "2/2", "the finished pill closes the cumulative ratio");
+		const completionDelays = [...timers.values()].map(timer => timer.delay);
+		assert.ok(completionDelays.includes(1000), "the finished capsule keeps the heartbeat that hides it after a channel switch");
+		assert.ok(!completionDelays.includes(3000), "the finished count stays visible - completion auto-hide was removed (user decision 2026-08-19)");
+		assert.equal(body.children.includes(statusElement), true, "the capsule remains on screen after completion");
 	}
 	finally {
 		global.document = originalDocument;
@@ -2720,4 +2722,94 @@ test("a historical commit does not overwrite a live translation that landed mid-
 	assert.ok(finalStatus, "the job must report a final status");
 	assert.equal(finalStatus.total, 2);
 	assert.equal(finalStatus.displayed, 2, "a live-displayed message must count as displayed, not as a pending failure");
+});
+
+test("rows collected across ticks aggregate into one batch through the quiet-window seal", async () => {
+	// Cadence audit 2026-08-19: the old microtask seal turned every render tick into
+	// its own micro-batch during scroll-back - one atomic commit and one whole-layer
+	// rebuild each, which the user reads as "one-by-one translation is back". Rows
+	// collected within the quiet window must share one job.
+	const plugin = configureHistoricalCoordinatorPlugin({scheduleAutomatically: true});
+	const channelId = "channel-history-quiet-window";
+	const requestedIds = [];
+	plugin.isUserActivelyScrollingMessages = () => false;
+	plugin.requestAiBatchTranslation = (_engineKey, preparedItems) => {
+		requestedIds.push(preparedItems.map(item => String(item.message.id)));
+		return Promise.resolve(Object.fromEntries(preparedItems.map(item => [String(item.message.id), `translated ${item.message.id}`])));
+	};
+
+	const first = createMessage("9001", "scroll row one");
+	plugin.queueAutoTranslateMessage(first, {id: channelId}, {content: first.content}, {historicalLoad: true});
+	// The old seal fired at the end of this tick; the second row lands one tick later.
+	await new Promise(resolve => setImmediate(resolve));
+	const second = createMessage("9002", "scroll row two");
+	plugin.queueAutoTranslateMessage(second, {id: channelId}, {content: second.content}, {historicalLoad: true});
+
+	await new Promise(resolve => setTimeout(resolve, 700));
+	await plugin.waitForHistoricalTranslationJobs(channelId);
+
+	assert.equal(requestedIds.length, 1, "rows mounting across ticks share one provider batch");
+	assert.deepEqual(requestedIds[0].slice().sort(), ["9001", "9002"]);
+});
+
+test("an active scroll defers the seal so the whole scroll session becomes one batch", async () => {
+	const plugin = configureHistoricalCoordinatorPlugin({scheduleAutomatically: true});
+	const channelId = "channel-history-scroll-session";
+	const requestedIds = [];
+	let scrolling = true;
+	plugin.isUserActivelyScrollingMessages = () => scrolling;
+	plugin.requestAiBatchTranslation = (_engineKey, preparedItems) => {
+		requestedIds.push(preparedItems.map(item => String(item.message.id)));
+		return Promise.resolve(Object.fromEntries(preparedItems.map(item => [String(item.message.id), `translated ${item.message.id}`])));
+	};
+
+	const first = createMessage("9101", "session row one");
+	plugin.queueAutoTranslateMessage(first, {id: channelId}, {content: first.content}, {historicalLoad: true});
+	await new Promise(resolve => setTimeout(resolve, 600));
+	const second = createMessage("9102", "session row two");
+	plugin.queueAutoTranslateMessage(second, {id: channelId}, {content: second.content}, {historicalLoad: true});
+	await new Promise(resolve => setTimeout(resolve, 600));
+	assert.equal(requestedIds.length, 0, "nothing seals while the user is still scrolling");
+
+	scrolling = false;
+	await new Promise(resolve => setTimeout(resolve, 700));
+	await plugin.waitForHistoricalTranslationJobs(channelId);
+
+	assert.equal(requestedIds.length, 1, "the scroll session ends as one batch");
+	assert.deepEqual(requestedIds[0].slice().sort(), ["9101", "9102"]);
+});
+
+test("batches sealed while a previous batch runs merge into one before starting", async () => {
+	// Sequential micro-jobs were the second half of the one-by-one symptom: each
+	// waiting job ran alone with its own atomic commit. Everything sealed behind the
+	// running job must start as ONE job with ONE display commit.
+	const plugin = configureHistoricalCoordinatorPlugin();
+	const channelId = "channel-history-merge";
+	const requestedIds = [];
+	let resolveFirst;
+	plugin.requestAiBatchTranslation = (_engineKey, preparedItems) => {
+		requestedIds.push(preparedItems.map(item => String(item.message.id)));
+		if (requestedIds.length === 1) return new Promise(resolve => {resolveFirst = resolve;});
+		return Promise.resolve(Object.fromEntries(preparedItems.map(item => [String(item.message.id), `translated ${item.message.id}`])));
+	};
+
+	const firstMessage = createMessage("9201", "running row");
+	plugin.queueAutoTranslateMessage(firstMessage, {id: channelId}, {content: firstMessage.content}, {historicalLoad: true});
+	const running = plugin.startCollectedHistoricalTranslationJobs(channelId);
+	await new Promise(resolve => setImmediate(resolve));
+
+	const secondMessage = createMessage("9202", "waiting row one");
+	plugin.queueAutoTranslateMessage(secondMessage, {id: channelId}, {content: secondMessage.content}, {historicalLoad: true});
+	plugin.finishHistoricalTranslationSnapshot(channelId);
+	const thirdMessage = createMessage("9203", "waiting row two");
+	plugin.queueAutoTranslateMessage(thirdMessage, {id: channelId}, {content: thirdMessage.content}, {historicalLoad: true});
+	plugin.finishHistoricalTranslationSnapshot(channelId);
+
+	resolveFirst({"9201": "translated 9201"});
+	await running;
+	await plugin.waitForHistoricalTranslationJobs(channelId);
+
+	assert.equal(requestedIds.length, 2, "the two waiting micro-batches must not run separately");
+	assert.deepEqual(requestedIds[1].slice().sort(), ["9202", "9203"], "everything sealed behind the running job starts as one batch");
+	assert.equal(plugin.historicalDisplayBatchCommits.length, 2, "one display commit per started batch, not per micro-batch");
 });

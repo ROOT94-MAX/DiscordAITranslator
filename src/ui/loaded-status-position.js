@@ -15,25 +15,49 @@
 // a cached miss rescans at most every 15 seconds in case slow mode turns on later.
 const hintScanCache = new WeakMap();
 const HINT_MISS_RESCAN_MS = 15000;
+// The no-hint fallback hugs the input (8px above its top edge) - the position the
+// user verified as correct and asked back after a 26px "hint-strip clearance"
+// experiment read as drift (2026-08-19 screenshot). Overlap with a REAL slow-mode
+// strip is owned by DETECTION instead: the walk finds the strip and stacks the
+// capsule above it, and message-text false positives are structurally rejected in
+// the scan below, so the fallback keeps no defensive distance.
 
 function findNativeTextAreaStatusElement({document: documentRef, anchorRect = null, anchorElement = null}) {
 	if (!documentRef) return null;
 	const now = Date.now();
 	const cached = anchorElement && hintScanCache.get(anchorElement) || null;
 	if (cached) {
-		if (cached.hint && (!cached.hint.isConnected || typeof cached.hint.isConnected != "boolean")) hintScanCache.delete(anchorElement);
+		// A cached hint must still be connected AND still have a real box: Discord can
+		// hide the strip while the node stays connected, and aligning to a collapsed
+		// rect flung the capsule to the viewport origin (2026-08-19 audit). Either way
+		// the entry is dropped and this pass rescans.
+		const cachedRect = cached.hint && typeof cached.hint.getBoundingClientRect == "function" ? cached.hint.getBoundingClientRect() : null;
+		const cachedHintAlive = cached.hint && cached.hint.isConnected === true && cachedRect && cachedRect.width && cachedRect.height;
+		if (cached.hint && !cachedHintAlive) hintScanCache.delete(anchorElement);
 		else if (cached.hint || now - cached.scannedAt < HINT_MISS_RESCAN_MS) return cached.hint;
 	}
-	// The ancestor walk was removed (2026-08-16): it never detected the hint on this
-	// client (149 recorded misses), and re-running it per heartbeat tick caused the
-	// flicker regression. Only the composer's own parent is scanned - the one scope the
-	// shipped 0.3.32 plugin proved on older clients - and only once per composer.
+	// Scope history: the 2026-08-16 round restricted the scan to the composer's own
+	// parent after the per-tick ancestor walk caused the flicker regression - but the
+	// cost came from rescanning every heartbeat tick, not from depth, and the cache
+	// below already eliminates per-tick work. Real-client evidence (2026-08-19
+	// screenshot: the capsule covering the slow-mode hint) showed the hint lives
+	// beyond the parent on current clients - the reason for 149 recorded misses. The
+	// walk now climbs three ancestor levels, first hit wins, all under the same
+	// once-per-composer cache with the 15s miss-rescan.
 	const matchIn = scope => {
 		let candidates = [];
 		try {candidates = Array.from(scope.querySelectorAll("div, span"));}
 		catch (err) {return [];}
 		return candidates.map(element => {
 			if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
+			// Translated MESSAGES routinely contain 已开启 / slow mode as ordinary text,
+			// and the last message's lines sit exactly in the proximity band above the
+			// input (2026-08-19 screenshot: the capsule aligned onto a message). Anything
+			// inside a message row or the message scroller is structurally not the hint.
+			try {
+				if (typeof element.closest == "function" && element.closest('[id^="chat-messages-"], [data-list-item-id*="chat-messages"], ol[class*="scrollerInner"], [class*="messagesWrapper"]')) return null;
+			}
+			catch (err) {}
 			const text = (element.textContent || "").trim();
 			if (!text || !(/慢速模式|slow\s*mode|slowmode|已开启/i.test(text))) return null;
 			const rect = element.getBoundingClientRect();
@@ -48,12 +72,18 @@ function findNativeTextAreaStatusElement({document: documentRef, anchorRect = nu
 				const nearInputRight = rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45;
 				if (!nearInputRight || !(nearInputTop && aboveInput || belowInput)) return null;
 			}
-			return {element, rect, score: rect.right + rect.bottom};
-		}).filter(Boolean).sort((a, b) => b.score - a.score);
+			return {element, rect, area: rect.width * rect.height};
+			// Smallest match wins: the wrappers around the slow-mode text also match by
+			// textContent, and their right edges sit past the visible text (2026-08-19
+			// overflow report). The innermost node IS the text the user sees.
+		}).filter(Boolean).sort((a, b) => a.area - b.area);
 	};
-	const parentScope = anchorElement && anchorElement.parentElement || null;
-	const matches = parentScope ? matchIn(parentScope) : [];
-	const found = matches.length && matches[0] && matches[0].element || null;
+	let found = null;
+	let scope = anchorElement && anchorElement.parentElement || null;
+	for (let level = 0; level < 3 && scope && !found; level++, scope = scope.parentElement) {
+		const matches = matchIn(scope);
+		found = matches.length && matches[0] && matches[0].element || null;
+	}
 	if (anchorElement) hintScanCache.set(anchorElement, {hint: found, scannedAt: now});
 	return found;
 }
@@ -80,6 +110,12 @@ function positionLoadedStatusElement({BDFDB, document: documentRef, window: wind
 	}).filter(Boolean).sort((a, b) => b.score - a.score);
 	const anchorData = anchors[0];
 	const anchor = anchorData && anchorData.anchor;
+	// Every display transaction rebuilds the whole chat layer, so for a frame the
+	// composer is unmounted. Teleporting to the legacy bottom-right corner and back is
+	// the "old capsule residue" jump users reported (2026-08-19); a capsule that was
+	// already positioned keeps its spot until an anchor exists again. The corner
+	// fallback below remains for a capsule that has never been positioned.
+	if (!anchor && element.style && element.style.top) return;
 	const viewportPadding = 12;
 	let maxStatusWidth = Math.max(180, Math.min(360, windowRef.innerWidth - viewportPadding * 2));
 	if (anchor && anchor.getBoundingClientRect) {
@@ -88,41 +124,43 @@ function positionLoadedStatusElement({BDFDB, document: documentRef, window: wind
 	}
 	element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
 	const measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null;
-	const statusWidth = Math.max(180, Math.min(measuredRect && measuredRect.width || element.offsetWidth || 260, maxStatusWidth));
 	const statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20);
-	element.style.right = "auto";
+	// The capsule is pinned by its RIGHT edge (2026-08-19 report: positioning the left
+	// edge from a measured width let the pill overflow the border whenever the session
+	// counter made the text longer between repositions). With the right edge pinned,
+	// growth extends leftward and the border alignment can never break; maxWidth above
+	// keeps the leftward growth inside the composer.
+	element.style.left = "auto";
 	element.style.bottom = "auto";
-	let anchorRectOut = null, nativeHintRect = null, left = 0, top = 0;
+	let anchorRectOut = null, nativeHintRect = null, right = 0, top = 0;
 	if (anchor && anchor.getBoundingClientRect) {
 		const rect = anchor.getBoundingClientRect();
 		anchorRectOut = rect;
 		const nativeStatus = findNativeTextAreaStatusElement({document: documentRef, anchorRect: rect, anchorElement: anchor});
-		left = rect.right - statusWidth - viewportPadding;
+		right = windowRef.innerWidth - (rect.right - viewportPadding);
 		top = rect.top - statusHeight - 8;
 		if (nativeStatus && nativeStatus.getBoundingClientRect) {
 			const nativeRect = nativeStatus.getBoundingClientRect();
 			nativeHintRect = nativeRect;
-			// 检测到 Discord 原生“慢速模式已开启”时，放在它的上方并右对齐。对齐以提示自身的右缘
-			// 为准（实测提示可宽于输入框容器，旧代码按输入框右缘截断导致差几个像素）。
-			left = Math.max(rect.left + 8, Math.min(nativeRect.right - statusWidth, windowRef.innerWidth - statusWidth - viewportPadding));
+			// 检测到 Discord 原生“慢速模式已开启”时，放在它的正上方并右对齐。对齐以提示自身的
+			// 右缘为准（实测提示可宽于输入框容器）。
+			right = windowRef.innerWidth - nativeRect.right;
 			top = nativeRect.top - statusHeight - 8;
 		}
-		else {
-			left = Math.max(rect.left + 8, Math.min(left, rect.right - statusWidth - 8));
-		}
+		right = Math.max(viewportPadding, right);
 		top = Math.max(viewportPadding, Math.min(top, windowRef.innerHeight - statusHeight - viewportPadding));
 	}
 	else {
-		left = Math.max(viewportPadding, windowRef.innerWidth - statusWidth - 108);
+		right = 108;
 		top = Math.max(viewportPadding, windowRef.innerHeight - statusHeight - 54);
 	}
-	element.style.left = `${Math.round(left)}px`;
+	element.style.right = `${Math.round(right)}px`;
 	element.style.top = `${Math.round(top)}px`;
 	if (typeof __TRANSLATOR_DISPLAY_DEBUG__ != "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ && windowRef.TranslatorDebug && windowRef.TranslatorDebug.recordPositioning) {
 		windowRef.TranslatorDebug.recordPositioning({
 			anchor: anchorRectOut && {top: Math.round(anchorRectOut.top), bottom: Math.round(anchorRectOut.bottom), right: Math.round(anchorRectOut.right)},
 			hint: nativeHintRect && {top: Math.round(nativeHintRect.top), right: Math.round(nativeHintRect.right)},
-			left: Math.round(left),
+			right: Math.round(right),
 			top: Math.round(top)
 		});
 		// Every hint guess so far failed on the real client (85 positioning runs, zero

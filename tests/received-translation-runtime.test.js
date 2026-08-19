@@ -130,6 +130,7 @@ function createPlugin(overrides = {}) {
 		isClearlyTargetLanguageMessage: (analysis, targetLanguageId) => languageHeuristicsRuntime.isClearlyTargetLanguageMessage(plugin, analysis, targetLanguageId),
 		isMostlyTargetLanguageMessage: (analysis, targetLanguageId) => languageHeuristicsRuntime.isMostlyTargetLanguageMessage(plugin, analysis, targetLanguageId),
 		normalizeStoredTranslationData: translation => translation,
+		normalizeExtractedMessageText: value => value == null ? "" : String(value),
 		normalizeComparisonText: text => textSimilarityRuntime.normalizeComparisonText(plugin, text),
 		getTextSimilarityScore: (a, b) => textSimilarityRuntime.getTextSimilarityScore(plugin, a, b),
 
@@ -181,6 +182,7 @@ function createPlugin(overrides = {}) {
 		},
 		clearCachedTranslation: messageId => calls.clearedCache.push(messageId),
 		refreshTranslationDisplay: translation => translation,
+		buildReceivedDisplayContent: translated => translated,
 		createReceivedDisplayCommitResult: (message, channelId, data) => Object.assign({messageId: message.id, channelId}, data),
 		commitReceivedDisplayResult: (result, options) => {calls.commits.push([result, options]);},
 		getActiveMessageTranslation: () => null,
@@ -188,6 +190,19 @@ function createPlugin(overrides = {}) {
 		markAutoTranslationEligibleReplyPreviewMessage: (channelId, messageId) => calls.replyPreviewEligible.push([channelId, messageId]),
 		getCachedReceivedTranslation: () => null,
 		applyReceivedDisplayViewToStream: (stream, view) => {stream.content.content = view.content;},
+		paintStreamBody: (stream, bodyText) => {
+			const snapshots = stream && stream.content && (stream.content.messageSnapshots || stream.content.message_snapshots);
+			if (Array.isArray(snapshots) && snapshots[0] && snapshots[0].message && !String(stream.content.content || "").trim()) {
+				stream.content = Object.assign({}, stream.content, {messageSnapshots: [{message: Object.assign({}, snapshots[0].message, {content: bodyText})}].concat(snapshots.slice(1))});
+				return;
+			}
+			stream.content.content = bodyText;
+		},
+		getStreamBodyContent: message => {
+			const snapshots = message && (message.messageSnapshots || message.message_snapshots);
+			return Array.isArray(snapshots) && snapshots[0] && snapshots[0].message && !String(message.content || "").trim() ? snapshots[0].message.content : message && message.content;
+		},
+		getStreamTranslationRenderContent: (_message, translation) => translation && translation.content,
 		isLikelyLiveAutoTranslateMessage: () => false,
 		queueAutoTranslateMessage: (...args) => calls.queued.push(args),
 		captureSentOriginalMessage: () => {},
@@ -734,6 +749,40 @@ test("a live translation is painted straight onto the stream entry", () => {
 	assert.equal(outcome.storeCommitted, false);
 });
 
+test("a live or manual translation paints the forwarded snapshot body instead of its empty parent content", () => {
+	const runtime = createRuntime();
+	const plugin = createPlugin({getActiveMessageTranslation: () => ({content: "转发译文"})});
+	const sourceSnapshot = {message: {content: "forwarded original"}};
+	const stream = {content: {id: "500", content: "", messageSnapshots: [sourceSnapshot]}};
+	runtime.resolveCheckMessageDisplay(plugin, stream, stream.content, {channelId: "channel-1", isNewerThanBoundary: true});
+	assert.equal(stream.content.content, "", "the forward parent remains contentless");
+	assert.equal(stream.content.messageSnapshots[0].message.content, "转发译文", "the renderer-visible snapshot receives the translation");
+	assert.equal(sourceSnapshot.message.content, "forwarded original", "the source snapshot is not mutated");
+});
+
+test("a forwarded live translation uses the forward-specific one-copy body composition", () => {
+	const runtime = createRuntime();
+	const plugin = createPlugin({
+		getActiveMessageTranslation: () => ({content: "转发译文", originalContent: "forwarded original"}),
+		getStreamTranslationRenderContent: () => "转发译文\n> forwarded original"
+	});
+	const stream = {content: {id: "500", content: "", messageSnapshots: [{message: {content: "forwarded original"}}]}};
+	runtime.resolveCheckMessageDisplay(plugin, stream, stream.content, {channelId: "channel-1", isNewerThanBoundary: true});
+	assert.equal(stream.content.messageSnapshots[0].message.content, "转发译文\n> forwarded original");
+});
+
+test("the forwarded combined paint is recognised as our own output on the next stream pass", () => {
+	const runtime = createRuntime();
+	const source = {content: "forwarded original", embeds: []};
+	const translation = {content: "转发译文", translatedContent: "转发译文", originalContent: "forwarded original"};
+	const plugin = createPlugin({
+		displayRuntime: {peekSourceArchive: () => null, getDisplayState: () => ({status: "translated", source, translation})},
+		getStreamTranslationRenderContent: () => "转发译文\n> forwarded original"
+	});
+	const message = {id: "500", content: "", messageSnapshots: [{message: {content: "转发译文\n> forwarded original"}}]};
+	assert.equal(runtime.resolveOriginalContentDataAnchor(plugin, message), source, "the combined body is not mistaken for a source edit");
+});
+
 test("a committed store view is applied when there is no live translation", () => {
 	const runtime = createRuntime();
 	const plugin = createPlugin({getReceivedDisplayRuntimeView: () => ({translated: true, content: "stored text"})});
@@ -754,6 +803,21 @@ test("an archived source is restored and counts as a message change", () => {
 	const stream = {content: {content: "stale"}};
 	const outcome = runtime.resolveCheckMessageDisplay(plugin, stream, {id: "500"}, {channelId: "channel-1", isNewerThanBoundary: false});
 	assert.equal(stream.content.content, "archived original");
+	assert.equal(outcome.messageChanged, true);
+});
+
+test("manual untranslate restores a forwarded snapshot from its archived visible body", () => {
+	const runtime = createRuntime();
+	const plugin = createPlugin({
+		displayRuntime: {
+			getDisplayView: () => ({}),
+			hasSourceArchive: () => true,
+			consumeSourceArchive: () => ({message: {content: "", messageSnapshots: [{message: {content: "forwarded original"}}]}})
+		}
+	});
+	const stream = {content: {id: "500", content: "", messageSnapshots: [{message: {content: "转发译文"}}]}};
+	const outcome = runtime.resolveCheckMessageDisplay(plugin, stream, stream.content, {channelId: "channel-1", isNewerThanBoundary: false});
+	assert.equal(stream.content.messageSnapshots[0].message.content, "forwarded original");
 	assert.equal(outcome.messageChanged, true);
 });
 

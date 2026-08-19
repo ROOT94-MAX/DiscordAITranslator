@@ -122,7 +122,7 @@ function createBaseRecord(messageId, channelId) {
 	};
 }
 
-function createMessageStateStore({journal = null} = {}) {
+function createMessageStateStore({journal = null, onTranslationDisplayed = () => {}} = {}) {
 	const records = new Map();
 	const channelMessageIds = new Map();
 	const channelGenerations = new Map();
@@ -136,6 +136,11 @@ function createMessageStateStore({journal = null} = {}) {
 	let previewPendingSequence = 0;
 
 	function recordTransition(record, transition) {
+		// The one exit every display commit passes through - single, batch, and manual
+		// alike - so the session counter hears about every translated record exactly
+		// where it becomes displayable (2026-08-19 audit: counting at the scheduler
+		// tap missed the batch door and the capsule numerator collapsed per batch).
+		if (record && record.status === MESSAGE_STATUSES.TRANSLATED) onTranslationDisplayed(record.channelId, record.messageId);
 		if (!journal || !record) return record;
 		journal.append({channelId: record.channelId, messageId: record.messageId, revision: record.revision, transition});
 		return record;

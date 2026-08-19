@@ -1,6 +1,6 @@
 {
   "name": "discord-ai-translator",
-  "version": "0.3.38",
+  "version": "0.3.39",
   "private": true,
   "description": "BetterDiscord translation plugin with channel-aware automatic translation.",
   "license": "GPL-2.0-only",
