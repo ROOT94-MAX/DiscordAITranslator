@@ -2,7 +2,7 @@
 
 This directory contains the canonical project documentation.
 
-Project overview: [English](../README.md) | [简体中文](../README.zh-CN.md)
+项目概览 / Project overview: [简体中文](../README.md) | [English](../README.en.md)
 
 ## Reading Order
 
@@ -23,7 +23,7 @@ Project overview: [English](../README.md) | [简体中文](../README.zh-CN.md)
 - `providers.md` describes provider capabilities without embedding UI implementation details.
 - `architecture.md` and `architecture.zh-CN.md` describe the current runtime boundaries and migration constraints.
 - `field-debugging-guide.md` and `field-debugging-guide.zh-CN.md` preserve the proven incident timeline, rejected routes, and handoff checks.
-- `recovery-plan.md` is the current stabilization and refactoring sequence. It overrides ad hoc implementation order.
+- `recovery-plan.md` contains only the current executable backlog and implementation order. Completed incident history belongs in the field-debugging handoff; parked detailed plans are archived outside Git.
 - ADRs record durable architectural decisions and are not task trackers.
 
 Historical PRDs, local issue files, and context snapshots are intentionally excluded from the repository. Archived copies live outside the project and are not authoritative.

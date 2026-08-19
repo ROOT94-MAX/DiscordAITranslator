@@ -185,7 +185,7 @@ This section preserves the order in which the failures were reported and correct
 5. The history-preserving auto-enable correction has regression coverage but still needs a focused PTB repeat at an old date; capsule cumulative behavior and native-hint alignment should also be rechecked after Discord UI changes.
 6. Slice 5d is not finished: `src/legacy/runtime.js` is still a 3,479-line composition root with two module-level shared declarators. Continue ownership extraction only behind contract tests; do not call the refactor complete merely because many modules exist.
 7. Oversized modules and generated-bundle size remain architecture debt. Split by ownership after contracts exist; do not split merely to reduce a line count.
-8. History source completeness, provider cancellation, lifecycle task cleanup, and release identity/changelog gates remain in `recovery-plan.md`; they were not solved by this field series.
+8. History source completeness, provider cancellation, lifecycle task cleanup, and the message-delete dispatcher remain in `recovery-plan.md`; they were not solved by this field series.
 
 ## Regression and Evidence Map
 
