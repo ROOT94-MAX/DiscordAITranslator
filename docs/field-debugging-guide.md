@@ -1,15 +1,17 @@
 # Refactor and Field-Debugging Handoff
 
+[简体中文](field-debugging-guide.zh-CN.md)
+
 This is the canonical handoff for the display-unification slices and the 2026-08-18 through 2026-08-20 PTB field-debugging session. It starts at the first slice/recon decision, follows every reported symptom through the latest forwarded-message, history-viewport, and settings fixes, and separates proven causes from hypotheses and remaining observations.
 
 User-visible behavior remains owned by `product.md`; setting ownership by `settings.md`; provider contracts by `providers.md`; code boundaries by `architecture.md`; unfinished implementation order by `recovery-plan.md`.
 
 ## Verified State at Handoff
 
-- Working branch: `codex/capsule-counter`; this guide audit started from `bd299d7`. Integration remains local only, with nothing in this series pushed or remotely merged.
-- Local `master` contains the completed extraction sequence through `6e7a4cd`; backup tags preserve the pre-merge and branch-tip states.
+- The detailed field history is preserved locally on `codex/capsule-counter` and `backup/pre-publication-detailed-20260820`. The public v0.3.39 branch condenses those 45 field commits into one reviewed release commit so intermediate machine-specific evidence does not enter public history.
+- Local `master` contains the completed extraction sequence through `6e7a4cd`; backup tags preserve the pre-publication state.
 - Generated artifact: one installable `DiscordAITranslator.plugin.js`, build ID `08e2b0182796eded`.
-- Verification at this handoff: `npm run verify` passed `1247/1247`; generated and installed plugin hashes matched after the last runtime deployment.
+- Field-handoff verification passed `1247/1247`; the v0.3.39 release gate adds two metadata/bilingual-document contracts and passes `1249/1249`. Generated and installed plugin hashes matched after the last runtime deployment.
 - Legacy-runtime ratchet: the planning recon measured 4,322 lines; after the dead watermark cleanup the enforced Slice-1 baseline was 4,318; the current enforced budget is 3,479. This is meaningful reduction, but `src/legacy/runtime.js` is still the composition root.
 - Latest accepted PTB results: capsule placement is acceptable; duplicate provider-error toasts are fixed; forwarded automatic/manual translation and restore paths work; and the duplicate direct-original setting is successfully removed. Current tests also pin one forwarded original and history-preserving auto-enable, but those two latest presentation/viewport corrections remain explicit PTB observation items rather than being promoted from test evidence to final field proof.
 - Remaining field observations are listed under **Open or Observation Items**. Do not convert an observation into a root cause without new evidence.
