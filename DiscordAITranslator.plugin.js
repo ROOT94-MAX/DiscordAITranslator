@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 530b6d5ac4b47c18
+ * @buildId d8af59cf7ce43f9c
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -9676,8 +9676,10 @@ var require_message_deletion_lifecycle = __commonJS({
       hasCachedTranslation = /* @__PURE__ */ __name(() => !1, "hasCachedTranslation"),
       clearCachedTranslation = /* @__PURE__ */ __name(() => {
       }, "clearCachedTranslation"),
-      deleteDisplayMessage = /* @__PURE__ */ __name(() => !1, "deleteDisplayMessage")
+      deleteDisplayMessage = /* @__PURE__ */ __name(() => !1, "deleteDisplayMessage"),
+      resolveDispatcher = /* @__PURE__ */ __name(() => null, "resolveDispatcher")
     } = {}) {
+      let actionTypes = ["MESSAGE_DELETE", "MESSAGE_DELETE_BULK"], subscribedDispatcher = null, subscribedHandlers = null;
       function removeHistoricalMessage(messageId, channelId) {
         let entry = getHistoricalQueue(channelId), removed = !1;
         for (let job of entry && entry.jobs || [])
@@ -9704,10 +9706,77 @@ var require_message_deletion_lifecycle = __commonJS({
         let channelId = action.channelId || action.channel_id, messageIds = action.type == "MESSAGE_DELETE_BULK" ? action.ids || action.messageIds || action.message_ids || [] : [action.id || action.messageId || action.message_id], uniqueIds = [...new Set([].concat(messageIds || []).filter(Boolean).map(String))];
         return !channelId || !uniqueIds.length ? Promise.resolve(!1) : Promise.all(uniqueIds.map((messageId) => deleteMessage(messageId, channelId)));
       }
-      return __name(handleAction, "handleAction"), Object.freeze({ deleteMessage, handleAction });
+      __name(handleAction, "handleAction");
+      function stop() {
+        if (!subscribedDispatcher || !subscribedHandlers) return !1;
+        let dispatcher = subscribedDispatcher, handlers = subscribedHandlers;
+        subscribedDispatcher = null, subscribedHandlers = null;
+        for (let [type, handler] of handlers)
+          try {
+            dispatcher.unsubscribe(type, handler);
+          } catch {
+          }
+        return !0;
+      }
+      __name(stop, "stop");
+      function start() {
+        if (subscribedDispatcher) return !0;
+        let dispatcher = null;
+        try {
+          dispatcher = resolveDispatcher();
+        } catch {
+          return !1;
+        }
+        if (!dispatcher || typeof dispatcher.subscribe != "function" || typeof dispatcher.unsubscribe != "function") return !1;
+        let handlers = /* @__PURE__ */ new Map();
+        try {
+          for (let type of actionTypes) {
+            let handler = /* @__PURE__ */ __name((action) => {
+              let normalizedAction = action && typeof action == "object" ? action.type ? action : Object.assign({ type }, action) : { type };
+              return handleAction(normalizedAction).catch(() => !1);
+            }, "handler");
+            dispatcher.subscribe(type, handler), handlers.set(type, handler);
+          }
+        } catch {
+          for (let [type, handler] of handlers)
+            try {
+              dispatcher.unsubscribe(type, handler);
+            } catch {
+            }
+          return !1;
+        }
+        return subscribedDispatcher = dispatcher, subscribedHandlers = handlers, !0;
+      }
+      return __name(start, "start"), Object.freeze({ deleteMessage, handleAction, start, stop });
     }
     __name(createMessageDeletionLifecycle, "createMessageDeletionLifecycle");
     module2.exports = { createMessageDeletionLifecycle };
+  }
+});
+
+// src/discord/store-dispatcher.js
+var require_store_dispatcher = __commonJS({
+  "src/discord/store-dispatcher.js"(exports2, module2) {
+    function resolveStoreDispatcher(BDFDB, requiredMethods = ["dispatch"]) {
+      let methods = [...new Set([].concat(requiredMethods || []).filter((method) => typeof method == "string" && method))], stores = null;
+      try {
+        stores = BDFDB && BDFDB.LibraryStores || null;
+      } catch {
+        return null;
+      }
+      for (let storeName of ["SelectedChannelStore", "MessageStore"]) {
+        let dispatcher = null;
+        try {
+          dispatcher = stores && stores[storeName] && stores[storeName]._dispatcher || null;
+        } catch {
+          continue;
+        }
+        if (dispatcher && methods.every((method) => typeof dispatcher[method] == "function")) return dispatcher;
+      }
+      return null;
+    }
+    __name(resolveStoreDispatcher, "resolveStoreDispatcher");
+    module2.exports = { resolveStoreDispatcher };
   }
 });
 
@@ -11654,7 +11723,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
-        } = require_received_translation_runtime(), { createPluginHistoricalSourceRuntime } = require_historical_source_wiring(), { createMessageDeletionLifecycle } = require_message_deletion_lifecycle(), {
+        } = require_received_translation_runtime(), { createPluginHistoricalSourceRuntime } = require_historical_source_wiring(), { createMessageDeletionLifecycle } = require_message_deletion_lifecycle(), { resolveStoreDispatcher } = require_store_dispatcher(), {
           LOADED_AUTO_TRANSLATE_RANGE_MODES,
           loadedAutoTranslatePolicy,
           aiDecisionPolicy,
@@ -11699,7 +11768,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "530b6d5ac4b47c18";
+            return "d8af59cf7ce43f9c";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -11731,13 +11800,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return this.ensureMessageDeletionLifecycle().handleAction(action);
           }
           onStart() {
-            pluginRuntimeActive = !0, messageUpdateProbe && messageUpdateProbe.start(), messageUpdateExperiment && messageUpdateExperiment.start(), this.resetReceivedDisplayRuntime(), this.ensureLiveTranslationQueue().restartRequestGeneration(), this.ensureSentTranslationStore().resetForStart(), this.ensureHistoricalJobRegistry().advanceRuntimeGeneration(), this.attachAutoTranslationInputActivityWatcher();
-            let dispatcher = BDFDB.LibraryModules.Dispatcher || BDFDB.LibraryModules.DispatcherUtils;
-            dispatcher && typeof dispatcher.dispatch == "function" && BDFDB.PatchUtils.patch(this, dispatcher, "dispatch", { before: /* @__PURE__ */ __name((event) => {
-              let action = event.methodArguments && event.methodArguments[0];
-              !action || action.type != "MESSAGE_DELETE" && action.type != "MESSAGE_DELETE_BULK" || this.handleMessageDeletionAction(action).catch((_2) => {
-              });
-            }, "before") }), BDFDB.PatchUtils.patch(this, BDFDB.LibraryModules.MessageUtils, "startEditMessage", { before: /* @__PURE__ */ __name((e) => {
+            pluginRuntimeActive = !0, messageUpdateProbe && messageUpdateProbe.start(), messageUpdateExperiment && messageUpdateExperiment.start(), this.resetReceivedDisplayRuntime(), this.ensureLiveTranslationQueue().restartRequestGeneration(), this.ensureSentTranslationStore().resetForStart(), this.ensureHistoricalJobRegistry().advanceRuntimeGeneration(), this.attachAutoTranslationInputActivityWatcher(), this.ensureMessageDeletionLifecycle().start(), BDFDB.PatchUtils.patch(this, BDFDB.LibraryModules.MessageUtils, "startEditMessage", { before: /* @__PURE__ */ __name((e) => {
               let editArchive = e.methodArguments[1] && this.ensureReceivedDisplayRuntime().peekSourceArchive(e.methodArguments[1]);
               editArchive && editArchive.message.content ? e.methodArguments[2] = editArchive.message.content : e.methodArguments[1] && (e.methodArguments[2] = this.getEditableSentMessageText(e.methodArguments[1], e.methodArguments[2]));
             }, "before") }), BDFDB.PatchUtils.patch(this, BDFDB.LibraryModules.MessageUtils, "editMessage", { instead: /* @__PURE__ */ __name((e) => this.handleEditedMessageSubmit(e.methodArguments, (...args) => e.originalMethod(...args)), "instead") }), BDFDB.PatchUtils.patch(this, BDFDB.LibraryModules.MessageToolbarUtils, "useMessageMenu", { after: /* @__PURE__ */ __name((e) => {
@@ -11755,7 +11818,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             }, "after") }), this.forceUpdateAll();
           }
           onStop() {
-            pluginRuntimeActive = !1, channelToggleOperations.reset(), messageUpdateProbe && messageUpdateProbe.stop(), messageUpdateExperiment && messageUpdateExperiment.stop(), this.invalidateLiveTranslationRequests(), this.invalidateSentAutomaticTranslationRequests(), this.ensureSentTranslationStore().clearPendingOriginals(), this.ensureHistoricalJobRegistry().advanceRuntimeGeneration(), channelTitleStore.invalidateInFlight(), this.cancelHistoricalTranslationJobs(null, "plugin-stopped"), this.clearChannelTitleTranslations(), this.detachAutoTranslationInputActivityWatcher(), this.detachAutoTranslationScrollWatcher(), this.ensureTranslationCacheStore().cancelPendingSave(), this.ensureReceivedDisplayRepaintScheduler().cancelFullRepaintTimers(), this.ensureLiveTranslationQueue().cancelQueueRetry(), this.ensureMessageViewportStore().clearManualScrollLock(), this.clearReceivedDisplayFlushQueue(), this.restoreAllReceivedDisplay({ refresh: !1 }), this.clearDisplayedTranslations(), this.ensureHistoricalJobRegistry().clearFailedSnapshots(), this.ensureSentTranslationStore().clearManualRequests(), this.ensureReceivedDisplayRuntime().clearAllSuppression(), this.ensureLiveTranslationQueue().clearAllQueuedMessages(), this.ensureReceivedDisplayRuntime().clearPreviews(null), this.ensureReceivedDisplayRuntime().clearPreviewEligibility(null), this.ensureLiveTranslationQueue().setBusyTranslating(!1), this.ensureLiveTranslationQueue().setLiveAutoTranslating(!1), this.clearLoadedAutoTranslationStatus(), BDFDB.MessageUtils.rerenderAll(!0);
+            pluginRuntimeActive = !1, channelToggleOperations.reset(), messageUpdateProbe && messageUpdateProbe.stop(), messageUpdateExperiment && messageUpdateExperiment.stop(), this.ensureMessageDeletionLifecycle().stop(), this.invalidateLiveTranslationRequests(), this.invalidateSentAutomaticTranslationRequests(), this.ensureSentTranslationStore().clearPendingOriginals(), this.ensureHistoricalJobRegistry().advanceRuntimeGeneration(), channelTitleStore.invalidateInFlight(), this.cancelHistoricalTranslationJobs(null, "plugin-stopped"), this.clearChannelTitleTranslations(), this.detachAutoTranslationInputActivityWatcher(), this.detachAutoTranslationScrollWatcher(), this.ensureTranslationCacheStore().cancelPendingSave(), this.ensureReceivedDisplayRepaintScheduler().cancelFullRepaintTimers(), this.ensureLiveTranslationQueue().cancelQueueRetry(), this.ensureMessageViewportStore().clearManualScrollLock(), this.clearReceivedDisplayFlushQueue(), this.restoreAllReceivedDisplay({ refresh: !1 }), this.clearDisplayedTranslations(), this.ensureHistoricalJobRegistry().clearFailedSnapshots(), this.ensureSentTranslationStore().clearManualRequests(), this.ensureReceivedDisplayRuntime().clearAllSuppression(), this.ensureLiveTranslationQueue().clearAllQueuedMessages(), this.ensureReceivedDisplayRuntime().clearPreviews(null), this.ensureReceivedDisplayRuntime().clearPreviewEligibility(null), this.ensureLiveTranslationQueue().setBusyTranslating(!1), this.ensureLiveTranslationQueue().setLiveAutoTranslating(!1), this.clearLoadedAutoTranslationStatus(), BDFDB.MessageUtils.rerenderAll(!0);
           }
           getSettingsPanel(collapseStates = {}) {
             return renderSettingsPanel(this, collapseStates, { BDFDB });
@@ -13358,7 +13421,8 @@ __________________ __________________ __________________
               clearHistoricalMarker: /* @__PURE__ */ __name((messageId, jobId) => this.ensureLiveTranslationQueue().clearHistoricalQueuedMessage(messageId, jobId), "clearHistoricalMarker"),
               hasCachedTranslation: /* @__PURE__ */ __name((messageId) => this.hasCachedTranslationEntry(messageId), "hasCachedTranslation"),
               clearCachedTranslation: /* @__PURE__ */ __name((messageId) => this.clearCachedTranslation(messageId), "clearCachedTranslation"),
-              deleteDisplayMessage: /* @__PURE__ */ __name((messageId, channelId) => this.ensureReceivedDisplayRuntime().deleteMessage(messageId, channelId), "deleteDisplayMessage")
+              deleteDisplayMessage: /* @__PURE__ */ __name((messageId, channelId) => this.ensureReceivedDisplayRuntime().deleteMessage(messageId, channelId), "deleteDisplayMessage"),
+              resolveDispatcher: /* @__PURE__ */ __name(() => resolveStoreDispatcher(BDFDB, ["subscribe", "unsubscribe"]), "resolveDispatcher")
             })), this.messageDeletionLifecycleInstance;
           }
           ensureLiveTranslationQueue() {
@@ -13536,7 +13600,7 @@ __________________ __________________ __________________
               canRepaintNow: /* @__PURE__ */ __name(() => this.canRepaintReceivedDisplayNow(), "canRepaintNow"),
               // Flux per-row repaint handles (experiment-verified 2026-08-19): the store
               // dispatcher, the message record, and the guild for the payload envelope.
-              resolveDispatcher: /* @__PURE__ */ __name(() => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && BDFDB.LibraryStores.SelectedChannelStore._dispatcher || null, "resolveDispatcher"),
+              resolveDispatcher: /* @__PURE__ */ __name(() => resolveStoreDispatcher(BDFDB, ["dispatch"]), "resolveDispatcher"),
               getStoreMessage: /* @__PURE__ */ __name((channelId, messageId) => {
                 try {
                   return BDFDB.LibraryStores.MessageStore.getMessage(channelId, messageId) || null;

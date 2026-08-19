@@ -96,6 +96,7 @@ module.exports = (_ => {
 		} = require("../received/received-translation-runtime");
 		const {createPluginHistoricalSourceRuntime} = require("../received/historical-source-wiring");
 		const {createMessageDeletionLifecycle} = require("../lifecycle/message-deletion-lifecycle");
+		const {resolveStoreDispatcher} = require("../discord/store-dispatcher");
 		const {
 			LOADED_AUTO_TRANSLATE_RANGE_MODES,
 			loadedAutoTranslatePolicy,
@@ -167,7 +168,7 @@ module.exports = (_ => {
 
 		// Debug-build-only: ONE guarded synthetic MESSAGE_UPDATE against one already-translated message, answering the merge-vs-replace question the probe cannot (see the module header). Uses the probe-proven store dispatcher handle.
 		const messageUpdateExperiment = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? (experimentModule => experimentModule.createMessageUpdateExperiment({
-			resolveDispatcher: () => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && BDFDB.LibraryStores.SelectedChannelStore._dispatcher || null,
+			resolveDispatcher: () => resolveStoreDispatcher(BDFDB, ["dispatch"]),
 			getSelectedChannelId: () => {try {return BDFDB.LibraryStores.SelectedChannelStore.getChannelId();} catch (error) {return null;}},
 			getStoreMessage: (channelId, messageId) => {try {return BDFDB.LibraryStores.MessageStore.getMessage(channelId, messageId) || null;} catch (error) {return null;}},
 			getGuildId: channelId => {try {const channel = BDFDB.LibraryStores.ChannelStore.getChannel(channelId); return channel && channel.guild_id || null;} catch (error) {return null;}},
@@ -245,12 +246,7 @@ module.exports = (_ => {
 				this.ensureSentTranslationStore().resetForStart();
 				this.ensureHistoricalJobRegistry().advanceRuntimeGeneration();
 				this.attachAutoTranslationInputActivityWatcher();
-				const dispatcher = BDFDB.LibraryModules.Dispatcher || BDFDB.LibraryModules.DispatcherUtils;
-				if (dispatcher && typeof dispatcher.dispatch == "function") BDFDB.PatchUtils.patch(this, dispatcher, "dispatch", {before: event => {
-					const action = event.methodArguments && event.methodArguments[0];
-					if (!action || action.type != "MESSAGE_DELETE" && action.type != "MESSAGE_DELETE_BULK") return;
-					this.handleMessageDeletionAction(action).catch(_ => {});
-				}});
+				this.ensureMessageDeletionLifecycle().start();
 				BDFDB.PatchUtils.patch(this, BDFDB.LibraryModules.MessageUtils, "startEditMessage", {before: e => {
 					const editArchive = e.methodArguments[1] && this.ensureReceivedDisplayRuntime().peekSourceArchive(e.methodArguments[1]);
 						if (editArchive && editArchive.message.content) e.methodArguments[2] = editArchive.message.content;
@@ -280,6 +276,7 @@ module.exports = (_ => {
 				pluginRuntimeActive = false; channelToggleOperations.reset();
 				if (messageUpdateProbe) messageUpdateProbe.stop();
 				if (messageUpdateExperiment) messageUpdateExperiment.stop();
+				this.ensureMessageDeletionLifecycle().stop();
 				this.invalidateLiveTranslationRequests();
 				this.invalidateSentAutomaticTranslationRequests();
 				this.ensureSentTranslationStore().clearPendingOriginals();
@@ -2436,7 +2433,8 @@ module.exports = (_ => {
 					deleteFailedSnapshot: channelId => this.ensureHistoricalJobRegistry().deleteFailedSnapshot(channelId),
 					clearHistoricalMarker: (messageId, jobId) => this.ensureLiveTranslationQueue().clearHistoricalQueuedMessage(messageId, jobId),
 					hasCachedTranslation: messageId => this.hasCachedTranslationEntry(messageId), clearCachedTranslation: messageId => this.clearCachedTranslation(messageId),
-					deleteDisplayMessage: (messageId, channelId) => this.ensureReceivedDisplayRuntime().deleteMessage(messageId, channelId)
+					deleteDisplayMessage: (messageId, channelId) => this.ensureReceivedDisplayRuntime().deleteMessage(messageId, channelId),
+					resolveDispatcher: () => resolveStoreDispatcher(BDFDB, ["subscribe", "unsubscribe"])
 				});
 				return this.messageDeletionLifecycleInstance;
 			}
@@ -2631,7 +2629,7 @@ module.exports = (_ => {
 					canRepaintNow: () => this.canRepaintReceivedDisplayNow(),
 					// Flux per-row repaint handles (experiment-verified 2026-08-19): the store
 					// dispatcher, the message record, and the guild for the payload envelope.
-					resolveDispatcher: () => BDFDB.LibraryStores && BDFDB.LibraryStores.SelectedChannelStore && BDFDB.LibraryStores.SelectedChannelStore._dispatcher || null,
+					resolveDispatcher: () => resolveStoreDispatcher(BDFDB, ["dispatch"]),
 					getStoreMessage: (channelId, messageId) => {try {return BDFDB.LibraryStores.MessageStore.getMessage(channelId, messageId) || null;} catch (error) {return null;}},
 					getGuildId: channelId => {try {const channel = BDFDB.LibraryStores.ChannelStore.getChannel(channelId); return channel && channel.guild_id || null;} catch (error) {return null;}},
 					onTranslationDisplayed: (channelId, messageId) => this.ensureLoadedStatusCapsuleController().recordTranslationsDisplayed(channelId, [messageId]),

@@ -41,15 +41,11 @@ Scrollbar-thumb movement caused only by added row height is expected; reopen whe
 
 ## Priority 1: Message Deletion Dispatcher
 
-**Status: OPEN.** Static audit still shows `onStart` reading `BDFDB.LibraryModules.Dispatcher || DispatcherUtils`, while the current client exposes the working dispatcher through a Store. Existing tests call the handler or a synthetic patched object; they do not prove the live subscription exists.
-The existing MESSAGE_DELETE/MESSAGE_DELETE_BULK cleanup patch was originally pointed at a BDFDB dispatcher surface absent from BDFDB 4.5.4. The Store dispatcher discovered for Flux row repaint is the candidate replacement.
+**Status: IMPLEMENTED LOCALLY — PTB delete/bulk-delete observation pending.** The global `dispatch` patch is gone. `MESSAGE_DELETE` and `MESSAGE_DELETE_BULK` now subscribe directly through the Store resolver already shared with Flux row repaint.
 
-Next slice:
+Automated evidence covers idempotent start, exact stop/unsubscribe, partial-start rollback, absent/throwing Store handles, single/bulk payload normalization, and channel-isolated cleanup of display state, reply hosts, live/history queues, and cache. The capsule's cumulative identity deliberately remains: `product.md` defines it as messages displayed during the channel session and resets it only on a global tracking reset.
 
-1. Add a failing integration test proving a deleted message removes display state, reply-host ownership, queue entries, and status identity only in its channel.
-2. Extract one dispatcher resolver shared with the verified Store path; do not add another global lookup strategy.
-3. Patch delete actions through the resolved handle and verify stop/start unsubscribe behavior.
-4. Run the full suite and one PTB delete/bulk-delete observation before closing the item.
+Close this item after one PTB observation confirms both real delete event shapes reach the subscription and the installed plugin stops without leaving duplicate handlers.
 
 ## Priority 2: Historical Source Completeness
 

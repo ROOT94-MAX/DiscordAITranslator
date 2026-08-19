@@ -26,7 +26,9 @@ const BUDGET = Object.freeze({
 	// the runtime keeps one delegation instead of owning the forwarded-parent branch.
 	// -12 (2026-08-20): removed the dead direct-original React block factory.
 	// -1 (2026-08-20): removed atomic-rebuild-only BDFDB handle wiring.
-	runtimeLines: 3478,
+	// -2 (2026-08-20): direct Store deletion subscriptions replaced the legacy
+	// global dispatch patch while sharing the active Store dispatcher resolver.
+	runtimeLines: 3476,
 	moduleLevelVarDeclarators: 2
 });
 

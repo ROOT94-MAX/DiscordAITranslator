@@ -1,34 +1,42 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const {createPluginInstance} = require("./helpers/createPluginInstance");
 
-test("plugin start routes single and bulk message deletion actions through the lifecycle handler", () => {
-	const dispatcher = {dispatch() {}};
+test("plugin start owns deletion subscription without patching the global dispatch method", () => {
+	const legacyDispatcher = {dispatch() {}};
+	const subscriptions = new Map();
+	const dispatcher = {
+		dispatch() {},
+		subscribe(type, handler) {subscriptions.set(type, handler);},
+		unsubscribe(type, handler) {if (subscriptions.get(type) === handler) subscriptions.delete(type);}
+	};
 	const patches = [];
 	const plugin = createPluginInstance({
 		callSetLanguages: false,
 		bdfdb: {
-			LibraryModules: {Dispatcher: dispatcher, MessageUtils: {}, MessageToolbarUtils: {}},
+			LibraryModules: {Dispatcher: legacyDispatcher, MessageUtils: {}, MessageToolbarUtils: {}},
+			LibraryStores: {SelectedChannelStore: {_dispatcher: dispatcher}},
 			PatchUtils: {
 				patch: (_owner, target, method, options) => patches.push({target, method, options}),
 				forceAllUpdates: () => {}
 			}
 		}
 	});
-	const actions = [];
-	plugin.handleMessageDeletionAction = action => {actions.push(action); return Promise.resolve();};
 	plugin.attachAutoTranslationInputActivityWatcher = () => {};
 	plugin.forceUpdateAll = () => {};
 
 	plugin.onStart();
-	const dispatcherPatch = patches.find(patch => patch.target === dispatcher && patch.method === "dispatch");
-	assert.ok(dispatcherPatch, "the lifecycle owns a dispatcher deletion hook");
-	dispatcherPatch.options.before({methodArguments: [{type: "MESSAGE_DELETE", channelId: "c1", id: "m1"}]});
-	dispatcherPatch.options.before({methodArguments: [{type: "MESSAGE_DELETE_BULK", channelId: "c1", ids: ["m2", "m3"]}]});
-	dispatcherPatch.options.before({methodArguments: [{type: "MESSAGE_CREATE", channelId: "c1", id: "m4"}]});
+	assert.deepEqual([...subscriptions.keys()], ["MESSAGE_DELETE", "MESSAGE_DELETE_BULK"]);
+	assert.equal(patches.some(patch => patch.target === legacyDispatcher && patch.method === "dispatch"), false);
+	assert.equal(plugin.ensureMessageDeletionLifecycle().stop(), true);
+	assert.equal(subscriptions.size, 0);
+});
 
-	assert.deepEqual(actions, [
-		{type: "MESSAGE_DELETE", channelId: "c1", id: "m1"},
-		{type: "MESSAGE_DELETE_BULK", channelId: "c1", ids: ["m2", "m3"]}
-	]);
+test("runtime wiring stops deletion subscriptions and resolves them from Discord Stores", () => {
+	const runtime = fs.readFileSync(path.join(__dirname, "..", "src", "legacy", "runtime.js"), "utf8");
+	assert.match(runtime, /ensureMessageDeletionLifecycle\(\)\.stop\(\)/);
+	assert.match(runtime, /resolveStoreDispatcher\(BDFDB, \["subscribe", "unsubscribe"\]\)/);
+	assert.doesNotMatch(runtime, /PatchUtils\.patch\(this, dispatcher, "dispatch"/);
 });

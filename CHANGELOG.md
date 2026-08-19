@@ -4,6 +4,8 @@
 
 - Refactor: 删除已经退出运行路径的同步原子聊天区重建实现、无效 adapter 参数、多余 BDFDB 句柄接线和对应历史行为测试；活动的 `resolveFlushSync` 迁移到单一职责模块 `react-flush-sync.js`，单行重绘行为保持不变，旧运行时约束从 3,479 行降至 3,478 行
 - Test: 新增 `resolveFlushSync` 注入优先、Webpack 回退、缺失/异常降级以及退役原子路径完全移除的契约测试
+- Fixed: 消息删除和批量删除改为直接订阅已验证的 Discord Store dispatcher；移除对全局 `dispatch` 的旧补丁，插件重复启动不会重复订阅，停止时解除原处理器，部分订阅失败会自动回滚
+- Refactor: 显示层逐行重绘与消息删除订阅共用 `store-dispatcher.js` 解析器；旧运行时约束继续从 3,478 行降至 3,476 行，没有新增事件兼容补丁
 
 ## v0.3.39
 
