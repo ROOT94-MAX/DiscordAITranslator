@@ -119,7 +119,7 @@ test("the recovery plan separates completed baseline from active work and keeps 
 	];
 	for (const heading of headings) assert.match(recovery, new RegExp(`^${escapeRegex(heading)}$`, "m"));
 	for (const status of [
-		"OBSERVATION GATE",
+		"ACTIVE DEBUG",
 		"Status: OPEN.",
 		"PARTIALLY COMPLETE",
 		"OPEN WITH PARTIAL FOUNDATIONS",

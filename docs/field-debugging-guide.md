@@ -187,6 +187,7 @@ This section preserves the order in which the failures were reported and correct
 6. Slice 5d is not finished: `src/legacy/runtime.js` is still a 3,476-line composition root with two module-level shared declarators. Continue ownership extraction only behind contract tests; do not call the refactor complete merely because many modules exist.
 7. Oversized modules and generated-bundle size remain architecture debt. Split by ownership after contracts exist; do not split merely to reduce a line count.
 8. Automatic multi-page history fetching is parked after field rollback. Clean-stop cache flush is complete; provider physical cancellation and broader lifecycle consolidation are observation-gated, while message-delete subscription remains only for bulk-delete PTB closure.
+9. Active automatic-lane debug: on build `92a9cc910670918d`, one visible foreign-language history message stayed original while the capsule read `93/93`. The screenshot was taken before a later manual translation, so the cached manual result does not prove an automatic display failure. The full cache was cleared to distinguish collection, provider, display, and counter ownership on a clean run.
 
 ## Regression and Evidence Map
 

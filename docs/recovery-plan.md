@@ -27,8 +27,10 @@ Working rules:
 
 ## Priority 0: Field Observation
 
-**Status: OBSERVATION GATE — no confirmed active regression.** These are reopen conditions, not implementation tasks.
-Do not change code for mild or ambiguous reports until one of these contracts reproduces with a build ID and trigger lane:
+**Status: ACTIVE DEBUG — automatic collection/count mismatch confirmed.** On installed build `92a9cc910670918d`, one visible foreign-language history message remained original while the capsule reported `93/93`. The screenshot preceded the later manual translation, so the manual cache entry is not evidence about the automatic lane. All translation-cache entries were cleared on 2026-08-20 to reproduce from a clean automatic run.
+
+Do not modify manual display projection or cache-stop flushing for this incident. First capture whether the target message is excluded before collection, enters a historical/live request, receives a provider failure/skip, reaches display state, and is admitted to capsule work identity. The owning transition must be identified before changing code.
+Other observation contracts remain evidence-gated:
 
 | Contract | Reopen when | Evidence to capture |
 | --- | --- | --- |
