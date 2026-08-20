@@ -8,8 +8,8 @@ This document describes the current runtime boundaries and migration rules. User
 
 - Release line: v0.3.39.
 - Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
-- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased master build ID: `776fc74287e3199d`.
-- Legacy composition-root ratchet: 3,476 lines and two module-level shared declarators.
+- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased master build ID: `2c78bb06791a813c`.
+- Legacy composition-root ratchet: 3,448 lines and two module-level shared declarators.
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
 - Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
 
@@ -47,7 +47,7 @@ The build uses esbuild in CommonJS mode with an ES2020 target, preserves the Bet
 | Loaded status | `src/status/loaded-translation-status-store.js`, `src/ui/loaded-status-capsule.js`, `src/ui/loaded-status-position.js` | Cumulative channel count, capsule lifecycle, retry affordance, and native-hint-aware geometry |
 | Forwarded content projection | `src/display/translation-display-logic.js`, `src/received/received-translation-runtime.js` | Snapshot-aware source, paint, echo detection, one-original composition, and restore |
 | Composer and menus | `src/ui/composer-wiring.js`, `src/ui/context-menu-wiring.js` | Channel submit interception, input icon, and manual actions |
-| Settings schema | `src/settings/plugin-defaults.js`, `src/ui/settings-panel.js` | One schema and one owner for global versus channel settings |
+| Settings schema and persistence wiring | `src/settings/plugin-defaults.js`, `src/settings/settings-store.js`, `src/settings/settings-store-wiring.js`, `src/ui/settings-panel.js` | One schema and one owner for global versus channel settings; one BDFDB adapter owns the established persisted keys |
 | Remaining composition | `src/legacy/runtime.js` | Plugin lifecycle, BDFDB patch shell, and dependency wiring only; it may shrink but not grow |
 
 ## Architectural Invariants
@@ -161,7 +161,7 @@ npm run verify
 
 ## Known Debt
 
-- `src/legacy/runtime.js` remains a 3,476-line composition root.
+- `src/legacy/runtime.js` remains a 3,448-line composition root.
 - Whole-chat fallback diagnostics (`R`) can still correspond to occasional composer flicker.
 - Provider abort support and lifecycle task registry cleanup remain observation-gated in `recovery-plan.md`; automatic multi-page history fetching is parked after field rollback, while direct Store message-delete subscriptions are field-closed.
 - Discord internal store and snapshot shapes require re-observation after client updates.

@@ -53,7 +53,7 @@ The unresolved product decision is whether reply previews should carry the same 
 
 ## Next Executable Slice: Architecture
 
-**Status: ACTIVE PLANNING — Slice 5d composition root.** The retired atomic rebuild cleanup is complete, but the composition root and oversized ownership boundaries remain. With the field observation gates above closed, this is the next implementation slice.
+**Status: ACTIVE — Slice 5d composition root.** The retired atomic rebuild cleanup is complete, but the composition root and oversized ownership boundaries remain. The first resumed cut moves plugin/BDFDB settings persistence wiring into `settings-store-wiring.js`; the legacy runtime retains only the lazy singleton boundary and its ratchet drops from 3,476 to 3,448 lines without changing settings behavior.
 Continue bottom-up ownership extraction; do not replace the composition root in one rewrite.
 
 - `src/legacy/runtime.js` remains the lifecycle/patch composition root and may only shrink.
@@ -61,7 +61,7 @@ Continue bottom-up ownership extraction; do not replace the composition root in 
 - Split oversized provider, settings, label, style, and display modules by ownership rather than arbitrary line count.
 - Keep the single readable generated plugin as the distribution contract.
 
-Begin with a fresh inventory of lazy `ensureX` factories and their lifecycle ownership. Select one bounded wiring responsibility, pin its singleton/dependency contract in tests, move that wiring to its owning module, delete the replaced runtime wiring, and lower the architecture ratchet in the same commit. The first slice must preserve render, provider, settings, channel isolation, and installed-plugin behavior.
+Continue from the fresh inventory of lazy `ensureX` factories and their lifecycle ownership. For each cut, select one bounded wiring responsibility, pin its singleton/dependency contract in tests, move that wiring to its owning module, delete the replaced runtime wiring, and lower the architecture ratchet in the same commit. Every cut must preserve render, provider, settings, channel isolation, and installed-plugin behavior.
 
 ## Parked UI Redesign
 

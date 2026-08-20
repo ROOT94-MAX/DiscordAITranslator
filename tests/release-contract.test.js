@@ -119,7 +119,7 @@ test("the recovery plan keeps closed field work out and names the next executabl
 	for (const status of [
 		"PARTIALLY COMPLETE",
 		"OPEN WITH PARTIAL FOUNDATIONS",
-		"ACTIVE PLANNING",
+		"Status: ACTIVE — Slice 5d composition root.",
 		"PARKED",
 		"PROCESS RULES"
 	]) assert.match(recovery, new RegExp(escapeRegex(status)));

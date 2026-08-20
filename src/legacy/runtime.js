@@ -108,7 +108,6 @@ module.exports = (_ => {
 		} = require("../language/language-heuristics");
 		const {languagePolicy, receivedSettingsPolicy, languageDetectionRuntime} = createLanguageHeuristics({BDFDB});
 		const {
-			createSettingsStore,
 			createEmptyChannelEnablementState,
 			normalizeStoredChannelEnablementState,
 			migrateLegacyChannelEnablementState,
@@ -116,6 +115,7 @@ module.exports = (_ => {
 			getChannelEnablementStateValue,
 			channelEnablementStatesEqual
 		} = require("../settings/settings-store");
+		const {createPluginSettingsStore} = require("../settings/settings-store-wiring");
 		const {getGeneralSettingLabels, getLabelsForUiLanguage} = require("../i18n/labels");
 		const {getCustomTextValue} = require("../i18n/text");
 		var _this;
@@ -2522,35 +2522,7 @@ module.exports = (_ => {
 			}
 
 			ensureSettingsStore () {
-				if (!this.settingsStoreInstance) this.settingsStoreInstance = createSettingsStore({
-					isKnownEngine: engineKey => !!translationEngines[engineKey],
-					sortLanguages: table => BDFDB.ObjectUtils.sort(table, "fav"),
-					resolveGuildId: channelId => {
-						const channel = channelId && BDFDB.LibraryStores.ChannelStore.getChannel(channelId);
-						return channel ? (channel.guild_id ? channel.guild_id : "@me") : null;
-					},
-					loadFavorites: () => BDFDB.DataUtils.load(this, "favorites"),
-					persistFavorites: value => BDFDB.DataUtils.save(value, this, "favorites"),
-					loadAuthKeys: () => BDFDB.DataUtils.load(this, "authKeys"),
-					persistAuthKeys: value => BDFDB.DataUtils.save(value, this, "authKeys"),
-					loadChannelLanguages: () => BDFDB.DataUtils.load(this, "channelLanguages"),
-					persistChannelLanguages: value => BDFDB.DataUtils.save(value, this, "channelLanguages"),
-					loadGuildLanguages: () => BDFDB.DataUtils.load(this, "guildLanguages"),
-					persistGuildLanguages: value => BDFDB.DataUtils.save(value, this, "guildLanguages"),
-					loadChannelPrimaryEngineOverrides: () => BDFDB.DataUtils.load(this, "channelPrimaryEngineOverrides"),
-					persistChannelPrimaryEngineOverrides: value => BDFDB.DataUtils.save(value, this, "channelPrimaryEngineOverrides"),
-					loadTranslationEnabledStates: () => BDFDB.DataUtils.load(this, "translationEnabledStates"),
-					loadReceivedAutoTranslationEnabledStates: () => BDFDB.DataUtils.load(this, "receivedAutoTranslationEnabledStates"),
-					persistChannelEnablementState: value => {
-						BDFDB.DataUtils.save(value, this, "translationEnabledStates");
-						BDFDB.DataUtils.save(value, this, "receivedAutoTranslationEnabledStates");
-					},
-					loadGlobalLanguageChoice: (place, direction) => this.settings.choices[place] && this.settings.choices[place][direction],
-					persistGlobalLanguageChoice: (place, direction, choice) => {
-						this.settings.choices[place][direction] = choice;
-						BDFDB.DataUtils.save(this.settings.choices, this, "choices");
-					}
-				});
+				if (!this.settingsStoreInstance) this.settingsStoreInstance = createPluginSettingsStore({plugin: this, BDFDB, translationEngines});
 				return this.settingsStoreInstance;
 			}
 

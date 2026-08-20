@@ -28,7 +28,9 @@ const BUDGET = Object.freeze({
 	// -1 (2026-08-20): removed atomic-rebuild-only BDFDB handle wiring.
 	// -2 (2026-08-20): direct Store deletion subscriptions replaced the legacy
 	// global dispatch patch while sharing the active Store dispatcher resolver.
-	runtimeLines: 3476,
+	// -28 (2026-08-20): plugin/BDFDB settings persistence wiring moved into
+	// settings-store-wiring.js; runtime retains only the lazy singleton boundary.
+	runtimeLines: 3448,
 	moduleLevelVarDeclarators: 2
 });
 
@@ -85,6 +87,15 @@ test("extracted lifecycle responsibilities do not leave dead runtime forwarding 
 		"scheduleAutoTranslationQueueRetry",
 		"flushReceivedDisplayQueues"
 	]) assert.doesNotMatch(source, new RegExp(`\\b${methodName}\\s*\\(`), `${methodName} has no production caller`);
+});
+
+test("plugin-specific settings persistence wiring stays out of the legacy runtime", () => {
+	const source = readRuntimeLines().join("\n");
+	assert.match(source, /createPluginSettingsStore/);
+	assert.doesNotMatch(source, /\bcreateSettingsStore\b/);
+	const ensureMethod = source.match(/\n\t\t\tensureSettingsStore \(\) \{[\s\S]*?\n\t\t\t\}/);
+	assert.ok(ensureMethod, "the lazy settings-store singleton boundary remains explicit");
+	assert.doesNotMatch(ensureMethod[0], /BDFDB\.DataUtils|settings\.choices/, "persistence-key wiring belongs to settings-store-wiring.js");
 });
 
 test("the recorded budget matches the current tree, so drift is visible", () => {

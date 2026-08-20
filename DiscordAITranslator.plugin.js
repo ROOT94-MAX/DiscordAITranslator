@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 776fc74287e3199d
+ * @buildId 2c78bb06791a813c
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -10147,6 +10147,49 @@ var require_settings_store = __commonJS({
   }
 });
 
+// src/settings/settings-store-wiring.js
+var require_settings_store_wiring = __commonJS({
+  "src/settings/settings-store-wiring.js"(exports2, module2) {
+    var { createSettingsStore } = require_settings_store();
+    function createPluginSettingsStore({
+      plugin,
+      BDFDB,
+      translationEngines,
+      createStore = createSettingsStore
+    }) {
+      return createStore({
+        isKnownEngine: /* @__PURE__ */ __name((engineKey) => !!translationEngines[engineKey], "isKnownEngine"),
+        sortLanguages: /* @__PURE__ */ __name((table) => BDFDB.ObjectUtils.sort(table, "fav"), "sortLanguages"),
+        resolveGuildId: /* @__PURE__ */ __name((channelId) => {
+          let channel = channelId && BDFDB.LibraryStores.ChannelStore.getChannel(channelId);
+          return channel ? channel.guild_id ? channel.guild_id : "@me" : null;
+        }, "resolveGuildId"),
+        loadFavorites: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(plugin, "favorites"), "loadFavorites"),
+        persistFavorites: /* @__PURE__ */ __name((value) => BDFDB.DataUtils.save(value, plugin, "favorites"), "persistFavorites"),
+        loadAuthKeys: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(plugin, "authKeys"), "loadAuthKeys"),
+        persistAuthKeys: /* @__PURE__ */ __name((value) => BDFDB.DataUtils.save(value, plugin, "authKeys"), "persistAuthKeys"),
+        loadChannelLanguages: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(plugin, "channelLanguages"), "loadChannelLanguages"),
+        persistChannelLanguages: /* @__PURE__ */ __name((value) => BDFDB.DataUtils.save(value, plugin, "channelLanguages"), "persistChannelLanguages"),
+        loadGuildLanguages: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(plugin, "guildLanguages"), "loadGuildLanguages"),
+        persistGuildLanguages: /* @__PURE__ */ __name((value) => BDFDB.DataUtils.save(value, plugin, "guildLanguages"), "persistGuildLanguages"),
+        loadChannelPrimaryEngineOverrides: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(plugin, "channelPrimaryEngineOverrides"), "loadChannelPrimaryEngineOverrides"),
+        persistChannelPrimaryEngineOverrides: /* @__PURE__ */ __name((value) => BDFDB.DataUtils.save(value, plugin, "channelPrimaryEngineOverrides"), "persistChannelPrimaryEngineOverrides"),
+        loadTranslationEnabledStates: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(plugin, "translationEnabledStates"), "loadTranslationEnabledStates"),
+        loadReceivedAutoTranslationEnabledStates: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(plugin, "receivedAutoTranslationEnabledStates"), "loadReceivedAutoTranslationEnabledStates"),
+        persistChannelEnablementState: /* @__PURE__ */ __name((value) => {
+          BDFDB.DataUtils.save(value, plugin, "translationEnabledStates"), BDFDB.DataUtils.save(value, plugin, "receivedAutoTranslationEnabledStates");
+        }, "persistChannelEnablementState"),
+        loadGlobalLanguageChoice: /* @__PURE__ */ __name((place, direction) => plugin.settings.choices[place] && plugin.settings.choices[place][direction], "loadGlobalLanguageChoice"),
+        persistGlobalLanguageChoice: /* @__PURE__ */ __name((place, direction, choice) => {
+          plugin.settings.choices[place][direction] = choice, BDFDB.DataUtils.save(plugin.settings.choices, plugin, "choices");
+        }, "persistGlobalLanguageChoice")
+      });
+    }
+    __name(createPluginSettingsStore, "createPluginSettingsStore");
+    module2.exports = { createPluginSettingsStore };
+  }
+});
+
 // src/i18n/labels.js
 var require_labels = __commonJS({
   "src/i18n/labels.js"(exports2, module2) {
@@ -11752,14 +11795,13 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
           textSimilarityRuntime,
           createLanguageHeuristics
         } = require_language_heuristics(), { languagePolicy, receivedSettingsPolicy, languageDetectionRuntime } = createLanguageHeuristics({ BDFDB }), {
-          createSettingsStore,
           createEmptyChannelEnablementState,
           normalizeStoredChannelEnablementState,
           migrateLegacyChannelEnablementState,
           loadChannelEnablementState,
           getChannelEnablementStateValue,
           channelEnablementStatesEqual
-        } = require_settings_store(), { getGeneralSettingLabels, getLabelsForUiLanguage } = require_labels(), { getCustomTextValue } = require_text();
+        } = require_settings_store(), { createPluginSettingsStore } = require_settings_store_wiring(), { getGeneralSettingLabels, getLabelsForUiLanguage } = require_labels(), { getCustomTextValue } = require_text();
         var _this;
         let translationProtectionSignatureVersion = TRANSLATION_PROTECTION_SIGNATURE_VERSION, { TranslateButtonComponent } = createTranslateComponents({
           BDFDB,
@@ -11788,7 +11830,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "776fc74287e3199d";
+            return "2c78bb06791a813c";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13523,33 +13565,7 @@ __________________ __________________ __________________
             })), this.sentTranslationStoreInstance;
           }
           ensureSettingsStore() {
-            return this.settingsStoreInstance || (this.settingsStoreInstance = createSettingsStore({
-              isKnownEngine: /* @__PURE__ */ __name((engineKey) => !!translationEngines[engineKey], "isKnownEngine"),
-              sortLanguages: /* @__PURE__ */ __name((table) => BDFDB.ObjectUtils.sort(table, "fav"), "sortLanguages"),
-              resolveGuildId: /* @__PURE__ */ __name((channelId) => {
-                let channel = channelId && BDFDB.LibraryStores.ChannelStore.getChannel(channelId);
-                return channel ? channel.guild_id ? channel.guild_id : "@me" : null;
-              }, "resolveGuildId"),
-              loadFavorites: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(this, "favorites"), "loadFavorites"),
-              persistFavorites: /* @__PURE__ */ __name((value) => BDFDB.DataUtils.save(value, this, "favorites"), "persistFavorites"),
-              loadAuthKeys: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(this, "authKeys"), "loadAuthKeys"),
-              persistAuthKeys: /* @__PURE__ */ __name((value) => BDFDB.DataUtils.save(value, this, "authKeys"), "persistAuthKeys"),
-              loadChannelLanguages: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(this, "channelLanguages"), "loadChannelLanguages"),
-              persistChannelLanguages: /* @__PURE__ */ __name((value) => BDFDB.DataUtils.save(value, this, "channelLanguages"), "persistChannelLanguages"),
-              loadGuildLanguages: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(this, "guildLanguages"), "loadGuildLanguages"),
-              persistGuildLanguages: /* @__PURE__ */ __name((value) => BDFDB.DataUtils.save(value, this, "guildLanguages"), "persistGuildLanguages"),
-              loadChannelPrimaryEngineOverrides: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(this, "channelPrimaryEngineOverrides"), "loadChannelPrimaryEngineOverrides"),
-              persistChannelPrimaryEngineOverrides: /* @__PURE__ */ __name((value) => BDFDB.DataUtils.save(value, this, "channelPrimaryEngineOverrides"), "persistChannelPrimaryEngineOverrides"),
-              loadTranslationEnabledStates: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(this, "translationEnabledStates"), "loadTranslationEnabledStates"),
-              loadReceivedAutoTranslationEnabledStates: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(this, "receivedAutoTranslationEnabledStates"), "loadReceivedAutoTranslationEnabledStates"),
-              persistChannelEnablementState: /* @__PURE__ */ __name((value) => {
-                BDFDB.DataUtils.save(value, this, "translationEnabledStates"), BDFDB.DataUtils.save(value, this, "receivedAutoTranslationEnabledStates");
-              }, "persistChannelEnablementState"),
-              loadGlobalLanguageChoice: /* @__PURE__ */ __name((place, direction) => this.settings.choices[place] && this.settings.choices[place][direction], "loadGlobalLanguageChoice"),
-              persistGlobalLanguageChoice: /* @__PURE__ */ __name((place, direction, choice) => {
-                this.settings.choices[place][direction] = choice, BDFDB.DataUtils.save(this.settings.choices, this, "choices");
-              }, "persistGlobalLanguageChoice")
-            })), this.settingsStoreInstance;
+            return this.settingsStoreInstance || (this.settingsStoreInstance = createPluginSettingsStore({ plugin: this, BDFDB, translationEngines })), this.settingsStoreInstance;
           }
           ensureProviderClient() {
             return this.providerClientInstance || (this.providerClientInstance = createProviderClient({
