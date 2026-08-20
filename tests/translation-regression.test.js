@@ -2337,6 +2337,43 @@ test("changing received configuration retires old cumulative and retry state bef
 	assert.equal(channelState.boundaryMessageId, "888");
 });
 
+test("Discord English resolves as the effective target before received same-language filtering", () => {
+	const plugin = createPluginInstance({
+		settings: {choices: {received: {input: "auto", output: "$discord"}}},
+		defaults: {choices: {received: {value: {input: "auto", output: "$discord"}}}},
+		getLanguageChoice: (direction, place) => place == "received" && direction == "output" ? "$discord" : "auto"
+	});
+	const channel = {id: "channel-discord-english"};
+	const message = {
+		id: "discord-english-1",
+		channel_id: channel.id,
+		content: "What can I create that I can realistically sell to clients? I have already paid for a subscription, and I want to use my remaining time and credits on something that can help me start earning. Please suggest a practical niche and workflow.",
+		embeds: [],
+		author: {id: "other-user"}
+	};
+	const source = {content: message.content, embeds: []};
+
+	assert.equal(plugin._testBdfdb.LanguageUtils.getLanguage().id, "en");
+	assert.equal(plugin.normalizeLanguageId("$discord"), "en", "the dynamic target must resolve to Discord's actual locale");
+	assert.equal(plugin.shouldAutoTranslateReceivedMessage(message, channel, source, true), false, "English must not enter an English-target history job");
+});
+
+test("a failed historical message waits for explicit retry instead of re-entering every render", () => {
+	const plugin = createPluginInstance();
+	const channel = {id: "channel-failed-guard"};
+	const message = {id: "failed-guard-1", channel_id: channel.id, content: "uncertain source", embeds: [], author: {id: "other-user"}};
+	const originalContentData = {content: message.content, embeds: []};
+	const signature = plugin.createReceivedTranslationSignature(message, channel.id, originalContentData);
+	plugin.ensureHistoricalJobRegistry().setFailedSnapshot(channel.id, {
+		channelId: channel.id,
+		items: [{message, channel, originalContentData, signature, reason: "provider_failed"}]
+	});
+	const queueItem = {message, channel, originalContentData, historicalLoad: true, deferHistoricalSnapshotStart: true};
+
+	assert.equal(plugin.collectHistoricalTranslationMessage(queueItem), false, "an automatic rescan must leave the retry ledger parked");
+	assert.equal(plugin.collectHistoricalTranslationMessage({...queueItem, retryFailed: true}), true, "the retry button may explicitly re-admit it");
+});
+
 test("a real edit after an automatic translation is still treated as an edit", () => {
 	// The anchor must recognise our own paint and nothing else, or a genuine edit would be
 	// invisible and the message would keep showing a translation of text that is gone.

@@ -73,6 +73,7 @@ function createFakePlugin(options = {}) {
 	const heuristics = createLanguageHeuristics({
 		BDFDB: {
 			ArrayUtils: {is: Array.isArray},
+			LanguageUtils: {getLanguage: () => ({id: options.discordLanguageId || "en"})},
 			LibraryRequires: {
 				request: (url, requestOptions, callback) => {
 					requestCalls.push({url, options: requestOptions});
@@ -138,6 +139,16 @@ function createFakePlugin(options = {}) {
 	plugin.shouldSendOriginalInsteadOfSentTranslation = (originalText, translation, input, output) => sentTranslationPolicy.shouldSendOriginalInsteadOfSentTranslation(plugin, originalText, translation, input, output);
 	return plugin;
 }
+
+test("the dynamic Discord language normalizes to the client's current locale", () => {
+	const english = createFakePlugin({discordLanguageId: "en"});
+	const chinese = createFakePlugin({discordLanguageId: "zh-CN"});
+
+	assert.equal(english.normalizeLanguageId("$discord"), "en");
+	assert.equal(chinese.normalizeLanguageId("$discord"), "zh-cn");
+	assert.equal(english.isSameLanguageOrVariant("en-US", "$discord"), true);
+	assert.equal(chinese.isSameLanguageOrVariant("zh-TW", "$discord"), true);
+});
 
 // --- Latin stopword identification -----------------------------------------------
 

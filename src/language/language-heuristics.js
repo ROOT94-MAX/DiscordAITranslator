@@ -351,7 +351,14 @@ function createLanguageHeuristics({BDFDB} = {}) {
 			}))];
 		},
 		normalizeLanguageId(_plugin, languageId) {
-			return (languageId || "").toLowerCase();
+			const normalized = (languageId || "").toLowerCase();
+			if (normalized != "$discord") return normalized;
+			try {
+				const currentLanguage = BDFDB && BDFDB.LanguageUtils && typeof BDFDB.LanguageUtils.getLanguage == "function" ? BDFDB.LanguageUtils.getLanguage() : null;
+				const currentLanguageId = currentLanguage && currentLanguage.id ? String(currentLanguage.id).toLowerCase() : "";
+				return currentLanguageId && currentLanguageId != "$discord" ? currentLanguageId : normalized;
+			}
+			catch (error) {return normalized;}
 		},
 		matchesConfiguredSourceLanguage(plugin, languageId, sourceLanguages = null) {
 			if (!languageId) return false;

@@ -64,6 +64,23 @@ test("failed snapshots are channel scoped and independently clearable", () => {
 	assert.equal(registry.getFailedSnapshot("c2"), null);
 });
 
+test("a matching failed message stays parked until its configuration or retry intent changes", () => {
+	const registry = createHistoricalJobRegistry();
+	registry.setFailedSnapshot("c1", {
+		channelId: "c1",
+		items: [
+			{message: {id: "m1"}, signature: "sig-a"},
+			{message: {id: "legacy"}}
+		]
+	});
+
+	assert.equal(registry.hasFailedMessage("c1", "m1", "sig-a"), true);
+	assert.equal(registry.hasFailedMessage("c1", "m1", "sig-b"), false, "an edited or reconfigured message may enter as new work");
+	assert.equal(registry.hasFailedMessage("c1", "legacy", "any"), true, "a legacy snapshot without a signature remains parked");
+	assert.equal(registry.hasFailedMessage("c2", "m1", "sig-a"), false);
+	assert.equal(registry.hasFailedMessage("c1", "missing", "sig-a"), false);
+});
+
 test("listQueues sees every live channel and clearQueues empties them", () => {
 	const registry = createHistoricalJobRegistry();
 	registry.getQueue("c1");

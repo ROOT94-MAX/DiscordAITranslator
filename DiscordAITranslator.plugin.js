@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 91275e9ec8b17a40
+ * @buildId 15b1e18a1d04d3fb
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -8125,6 +8125,12 @@ var require_historical_job_registry = __commonJS({
           let key = normalizeChannelId(channelId);
           return key && failedSnapshots.get(key) || null;
         },
+        hasFailedMessage(channelId, messageId, signature = null) {
+          let entry = failedSnapshots.get(normalizeChannelId(channelId)), id = normalizeChannelId(messageId);
+          if (!entry || !id || !Array.isArray(entry.items)) return !1;
+          let item = entry.items.find((candidate) => candidate && candidate.message && normalizeChannelId(candidate.message.id) === id);
+          return item ? !item.signature || signature == null || String(item.signature) === String(signature) : !1;
+        },
         setFailedSnapshot(channelId, snapshot) {
           let key = normalizeChannelId(channelId);
           return key ? (failedSnapshots.set(key, snapshot), snapshot) : null;
@@ -8924,7 +8930,14 @@ var require_language_heuristics = __commonJS({
           }))];
         },
         normalizeLanguageId(_plugin, languageId) {
-          return (languageId || "").toLowerCase();
+          let normalized = (languageId || "").toLowerCase();
+          if (normalized != "$discord") return normalized;
+          try {
+            let currentLanguage = BDFDB && BDFDB.LanguageUtils && typeof BDFDB.LanguageUtils.getLanguage == "function" ? BDFDB.LanguageUtils.getLanguage() : null, currentLanguageId = currentLanguage && currentLanguage.id ? String(currentLanguage.id).toLowerCase() : "";
+            return currentLanguageId && currentLanguageId != "$discord" ? currentLanguageId : normalized;
+          } catch {
+            return normalized;
+          }
         },
         matchesConfiguredSourceLanguage(plugin, languageId, sourceLanguages = null) {
           if (!languageId) return !1;
@@ -11845,7 +11858,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "91275e9ec8b17a40";
+            return "15b1e18a1d04d3fb";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -12308,8 +12321,8 @@ __________________ __________________ __________________
             return {
               protectionVersion: translationProtectionSignatureVersion,
               channelId: channelId || null,
-              input: this.getLanguageChoice(languageTypes.INPUT, messageTypes.RECEIVED, channelId),
-              output: this.getLanguageChoice(languageTypes.OUTPUT, messageTypes.RECEIVED, channelId),
+              input: this.normalizeLanguageId(this.getLanguageChoice(languageTypes.INPUT, messageTypes.RECEIVED, channelId)),
+              output: this.normalizeLanguageId(this.getLanguageChoice(languageTypes.OUTPUT, messageTypes.RECEIVED, channelId)),
               protectQuotedText: this.settings && this.settings.general && this.settings.general.protectQuotedText !== !1,
               protectedTermsForReceived: this.getExceptionScopeSetting("protectedTermsForReceived", !0),
               wrapperPairsForReceived: this.getExceptionScopeSetting("wrapperPairsForReceived", !0),
@@ -13092,7 +13105,7 @@ __________________ __________________ __________________
             return this.ensureHistoricalSourceRuntime().buildInitialHistoricalTranslationSnapshot({ channelId, generation, renderedMessages, limit });
           }
           createHistoricalTranslationRetrySnapshot(item, channelId) {
-            return !item || !item.message || !item.message.id || !channelId ? null : { message: this.cloneHistoricalSourceMessage(item.message), channel: Object.assign({}, item.channel || {}, { id: channelId }), originalContentData: this.cloneOriginalContentData(item.originalContentData || this.extractOriginalContentData(item.message)), historicalLoad: !0, deferWhileReading: !0, reason: item.reason || "provider_failed" };
+            return !item || !item.message || !item.message.id || !channelId ? null : { message: this.cloneHistoricalSourceMessage(item.message), channel: Object.assign({}, item.channel || {}, { id: channelId }), originalContentData: this.cloneOriginalContentData(item.originalContentData || this.extractOriginalContentData(item.message)), signature: this.createReceivedTranslationSignature(item.message, channelId, item.originalContentData || this.extractOriginalContentData(item.message)), historicalLoad: !0, deferWhileReading: !0, reason: item.reason || "provider_failed" };
           }
           updateFailedHistoricalTranslationSnapshots(summary, channelId) {
             if (!channelId) return 0;
@@ -13132,7 +13145,7 @@ __________________ __________________ __________________
               aiDropped: 0
             });
             let accepted = 0;
-            for (let item of retryItems) this.collectHistoricalTranslationMessage(item) && accepted++;
+            for (let item of retryItems) this.collectHistoricalTranslationMessage(Object.assign({}, item, { retryFailed: !0 })) && accepted++;
             if (!accepted) {
               let failedCount = this.getFailedHistoricalTranslationCount(channelId);
               return this.updateLoadedAutoTranslationStatus({ active: !1, collecting: !1, done: !0, channelId, failed: 0, retryable: failedCount, aiDropped: 0 }), Promise.resolve(!1);
@@ -13168,7 +13181,7 @@ __________________ __________________ __________________
           collectHistoricalTranslationMessage(queueItem) {
             if (!queueItem || !queueItem.message || !queueItem.channel || !queueItem.channel.id) return !1;
             let channelId = queueItem.channel.id;
-            if (!this.isTranslationEnabled(channelId)) return !1;
+            if (!this.isTranslationEnabled(channelId) || !queueItem.retryFailed && this.ensureHistoricalJobRegistry().hasFailedMessage(channelId, queueItem.message.id, queueItem.signature || this.createReceivedTranslationSignature(queueItem.message, channelId, queueItem.originalContentData))) return !1;
             let entry = this.getHistoricalTranslationJobQueue(channelId);
             if (entry.intakeBlocked) return !1;
             let job = entry.jobs[entry.jobs.length - 1];

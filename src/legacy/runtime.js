@@ -871,8 +871,8 @@ module.exports = (_ => {
 				return {
 					protectionVersion: translationProtectionSignatureVersion,
 					channelId: channelId || null,
-					input: this.getLanguageChoice(languageTypes.INPUT, messageTypes.RECEIVED, channelId),
-					output: this.getLanguageChoice(languageTypes.OUTPUT, messageTypes.RECEIVED, channelId),
+					input: this.normalizeLanguageId(this.getLanguageChoice(languageTypes.INPUT, messageTypes.RECEIVED, channelId)),
+					output: this.normalizeLanguageId(this.getLanguageChoice(languageTypes.OUTPUT, messageTypes.RECEIVED, channelId)),
 					protectQuotedText: this.settings && this.settings.general && this.settings.general.protectQuotedText !== false,
 					protectedTermsForReceived: this.getExceptionScopeSetting("protectedTermsForReceived", true),
 					wrapperPairsForReceived: this.getExceptionScopeSetting("wrapperPairsForReceived", true),
@@ -1914,7 +1914,7 @@ module.exports = (_ => {
 
 			buildInitialHistoricalTranslationSnapshot ({channelId, generation, renderedMessages = [], limit = 0} = {}) {return this.ensureHistoricalSourceRuntime().buildInitialHistoricalTranslationSnapshot({channelId, generation, renderedMessages, limit});}
 
-			createHistoricalTranslationRetrySnapshot (item, channelId) {if (!item || !item.message || !item.message.id || !channelId) return null; return {message: this.cloneHistoricalSourceMessage(item.message), channel: Object.assign({}, item.channel || {}, {id: channelId}), originalContentData: this.cloneOriginalContentData(item.originalContentData || this.extractOriginalContentData(item.message)), historicalLoad: true, deferWhileReading: true, reason: item.reason || "provider_failed"};}
+			createHistoricalTranslationRetrySnapshot (item, channelId) {if (!item || !item.message || !item.message.id || !channelId) return null; return {message: this.cloneHistoricalSourceMessage(item.message), channel: Object.assign({}, item.channel || {}, {id: channelId}), originalContentData: this.cloneOriginalContentData(item.originalContentData || this.extractOriginalContentData(item.message)), signature: this.createReceivedTranslationSignature(item.message, channelId, item.originalContentData || this.extractOriginalContentData(item.message)), historicalLoad: true, deferWhileReading: true, reason: item.reason || "provider_failed"};}
 
 			updateFailedHistoricalTranslationSnapshots (summary, channelId) {
 				if (!channelId) return 0;
@@ -1959,7 +1959,7 @@ module.exports = (_ => {
 					aiDropped: 0
 				});
 				let accepted = 0;
-				for (const item of retryItems) if (this.collectHistoricalTranslationMessage(item)) accepted++;
+				for (const item of retryItems) if (this.collectHistoricalTranslationMessage(Object.assign({}, item, {retryFailed: true}))) accepted++;
 				if (!accepted) {
 					const failedCount = this.getFailedHistoricalTranslationCount(channelId);
 					this.updateLoadedAutoTranslationStatus({active: false, collecting: false, done: true, channelId, failed: 0, retryable: failedCount, aiDropped: 0});
@@ -2001,7 +2001,7 @@ module.exports = (_ => {
 			collectHistoricalTranslationMessage (queueItem) {
 				if (!queueItem || !queueItem.message || !queueItem.channel || !queueItem.channel.id) return false;
 				const channelId = queueItem.channel.id;
-				if (!this.isTranslationEnabled(channelId)) return false;
+				if (!this.isTranslationEnabled(channelId) || !queueItem.retryFailed && this.ensureHistoricalJobRegistry().hasFailedMessage(channelId, queueItem.message.id, queueItem.signature || this.createReceivedTranslationSignature(queueItem.message, channelId, queueItem.originalContentData))) return false;
 				const entry = this.getHistoricalTranslationJobQueue(channelId); if (entry.intakeBlocked) return false;
 				let job = entry.jobs[entry.jobs.length - 1];
 				if (job && job.state == "collecting" && !job.sealed && job.items.size >= this.getReceivedAutoTranslateLoadedLimit()) return false;

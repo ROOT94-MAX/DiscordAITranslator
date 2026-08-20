@@ -58,6 +58,14 @@ function createHistoricalJobRegistry() {
 			const key = normalizeChannelId(channelId);
 			return key ? failedSnapshots.get(key) || null : null;
 		},
+		hasFailedMessage(channelId, messageId, signature = null) {
+			const entry = failedSnapshots.get(normalizeChannelId(channelId));
+			const id = normalizeChannelId(messageId);
+			if (!entry || !id || !Array.isArray(entry.items)) return false;
+			const item = entry.items.find(candidate => candidate && candidate.message && normalizeChannelId(candidate.message.id) === id);
+			if (!item) return false;
+			return !item.signature || signature == null || String(item.signature) === String(signature);
+		},
 		setFailedSnapshot(channelId, snapshot) {
 			const key = normalizeChannelId(channelId);
 			if (!key) return null;
