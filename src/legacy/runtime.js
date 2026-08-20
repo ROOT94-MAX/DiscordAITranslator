@@ -86,7 +86,7 @@ module.exports = (_ => {
 		const {createHistoricalJobRegistry} = require("../orchestrator/historical-job-registry");
 		const channelToggleOperations = require("../orchestrator/channel-toggle-operations").createChannelToggleOperations();
 		const {HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX} = require("../orchestrator/historical-translation-job");
-		const {createHistoricalSnapshotCadence} = require("../orchestrator/historical-snapshot-cadence");
+		const {createPluginHistoricalSnapshotCadence} = require("../orchestrator/historical-snapshot-cadence-wiring");
 		const {runChunkedHistoricalBatch} = require("../orchestrator/historical-provider-chunking");
 		const {createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION} = require("../protection/protection-logic");
 		const {parseStoredEmbedTranslations} = require("../received/embed-translation-parser");
@@ -2013,10 +2013,7 @@ module.exports = (_ => {
 				return true;
 			}
 
-			ensureHistoricalSnapshotCadence () {
-				if (!this.historicalSnapshotCadenceInstance) this.historicalSnapshotCadenceInstance = createHistoricalSnapshotCadence({timeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), clear: timer => BDFDB.TimeUtils.clear(timer), isUserActivelyScrolling: channelId => this.isUserActivelyScrollingMessages(channelId), isCurrentQueue: (channelId, entry) => this.ensureHistoricalJobRegistry().isCurrentQueue(channelId, entry), finishSnapshot: channelId => this.finishHistoricalTranslationSnapshot(channelId)});
-				return this.historicalSnapshotCadenceInstance;
-			}
+			ensureHistoricalSnapshotCadence () {return this.historicalSnapshotCadenceInstance || (this.historicalSnapshotCadenceInstance = createPluginHistoricalSnapshotCadence({plugin: this, BDFDB}));}
 
 			scheduleHistoricalTranslationJobStart (channelId) {this.ensureHistoricalSnapshotCadence().armQuietWindowSeal(channelId, this.getHistoricalTranslationJobQueue(channelId, false));}
 			clearHistoricalSnapshotSealTimer (entry) {this.ensureHistoricalSnapshotCadence().clearSealTimer(entry);}

@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId abaa550cd78f3382
+ * @buildId b99e4ae741747bed
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -8514,6 +8514,28 @@ var require_historical_snapshot_cadence = __commonJS({
   }
 });
 
+// src/orchestrator/historical-snapshot-cadence-wiring.js
+var require_historical_snapshot_cadence_wiring = __commonJS({
+  "src/orchestrator/historical-snapshot-cadence-wiring.js"(exports2, module2) {
+    var { createHistoricalSnapshotCadence } = require_historical_snapshot_cadence();
+    function createPluginHistoricalSnapshotCadence({
+      plugin,
+      BDFDB,
+      createCadence = createHistoricalSnapshotCadence
+    }) {
+      return createCadence({
+        timeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "timeout"),
+        clear: /* @__PURE__ */ __name((timer) => BDFDB.TimeUtils.clear(timer), "clear"),
+        isUserActivelyScrolling: /* @__PURE__ */ __name((channelId) => plugin.isUserActivelyScrollingMessages(channelId), "isUserActivelyScrolling"),
+        isCurrentQueue: /* @__PURE__ */ __name((channelId, entry) => plugin.ensureHistoricalJobRegistry().isCurrentQueue(channelId, entry), "isCurrentQueue"),
+        finishSnapshot: /* @__PURE__ */ __name((channelId) => plugin.finishHistoricalTranslationSnapshot(channelId), "finishSnapshot")
+      });
+    }
+    __name(createPluginHistoricalSnapshotCadence, "createPluginHistoricalSnapshotCadence");
+    module2.exports = { createPluginHistoricalSnapshotCadence };
+  }
+});
+
 // src/orchestrator/historical-provider-chunking.js
 var require_historical_provider_chunking = __commonJS({
   "src/orchestrator/historical-provider-chunking.js"(exports2, module2) {
@@ -11951,7 +11973,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createPluginMessageViewportStore } = require_message_viewport_wiring(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createHistoricalSnapshotCadence } = require_historical_snapshot_cadence(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createPluginMessageViewportStore } = require_message_viewport_wiring(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createPluginHistoricalSnapshotCadence } = require_historical_snapshot_cadence_wiring(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -11999,7 +12021,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "abaa550cd78f3382";
+            return "b99e4ae741747bed";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13337,7 +13359,7 @@ __________________ __________________ __________________
             return !0;
           }
           ensureHistoricalSnapshotCadence() {
-            return this.historicalSnapshotCadenceInstance || (this.historicalSnapshotCadenceInstance = createHistoricalSnapshotCadence({ timeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "timeout"), clear: /* @__PURE__ */ __name((timer) => BDFDB.TimeUtils.clear(timer), "clear"), isUserActivelyScrolling: /* @__PURE__ */ __name((channelId) => this.isUserActivelyScrollingMessages(channelId), "isUserActivelyScrolling"), isCurrentQueue: /* @__PURE__ */ __name((channelId, entry) => this.ensureHistoricalJobRegistry().isCurrentQueue(channelId, entry), "isCurrentQueue"), finishSnapshot: /* @__PURE__ */ __name((channelId) => this.finishHistoricalTranslationSnapshot(channelId), "finishSnapshot") })), this.historicalSnapshotCadenceInstance;
+            return this.historicalSnapshotCadenceInstance || (this.historicalSnapshotCadenceInstance = createPluginHistoricalSnapshotCadence({ plugin: this, BDFDB }));
           }
           scheduleHistoricalTranslationJobStart(channelId) {
             this.ensureHistoricalSnapshotCadence().armQuietWindowSeal(channelId, this.getHistoricalTranslationJobQueue(channelId, !1));

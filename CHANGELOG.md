@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refactor: Slice 5d 第五个 composition-root 切片把历史消息安静窗口的 BDFDB 托管计时器、滚动状态、队列身份和封批回调接线迁入 `historical-snapshot-cadence-wiring.js`；`runtime.js` 保留紧凑延迟单例入口，架构约束从 3,404 行降至 3,401 行，500ms 封批、滚动延迟和等待批次合并策略保持不变
+- Test: 新增历史封批接线的完整 5 项依赖、`timeout/clear` 托管端口以及滚动、当前队列、完成封批回调透传契约
 - Refactor: Slice 5d 第四个 composition-root 切片把 Message Viewport 的 document、BDFDB 托管计时器、RAF、当前频道、消息滚动区选择器、CSS 转义和历史封批回调接线迁入 `message-viewport-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,415 行降至 3,404 行，滚动意图、阅读锚点和输入焦点规则保持不变
 - Test: 新增 Message Viewport 接线的完整 9 项依赖、托管计时器、document/RAF/频道/选择器/CSS 委托及滚动停止后历史封批回调契约
 - Refactor: Slice 5d 第三个 composition-root 切片把 provider client 的 BDFDB 网络请求、托管重试计时器、原始退避睡眠、凭证/语言读取和提示词/UI 回调接线迁入 `provider-client-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,431 行降至 3,415 行，所有供应商请求与响应契约保持不变

@@ -11,6 +11,7 @@ const runtime = fs.readFileSync(path.resolve(__dirname, "..", "src", "legacy", "
 const translationCacheWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "cache", "translation-cache-wiring.js"), "utf8");
 const providerClientWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "providers", "provider-client-wiring.js"), "utf8");
 const messageViewportWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "viewport", "message-viewport-wiring.js"), "utf8");
+const historicalSnapshotCadenceWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "orchestrator", "historical-snapshot-cadence-wiring.js"), "utf8");
 
 function dependencyBlock(factoryName) {
 	const start = runtime.indexOf(factoryName + "({");
@@ -41,6 +42,8 @@ test("modules that schedule work are handed BDFDB timers, never the globals", ()
 		assert.match(owner.source, /setTimeout:\s*\(callback, delay\) => BDFDB\.TimeUtils\.timeout\(callback, delay\)/, `${owner.name} must receive the managed timer`);
 		assert.match(owner.source, /clearTimeout:\s*timer => BDFDB\.TimeUtils\.clear\(timer\)/, `${owner.name} must receive the managed clear`);
 	}
+	assert.match(historicalSnapshotCadenceWiring, /timeout:\s*\(callback, delay\) => BDFDB\.TimeUtils\.timeout\(callback, delay\)/, "createPluginHistoricalSnapshotCadence must receive the managed timer through its timeout port");
+	assert.match(historicalSnapshotCadenceWiring, /clear:\s*timer => BDFDB\.TimeUtils\.clear\(timer\)/, "createPluginHistoricalSnapshotCadence must receive the managed clear through its clear port");
 });
 
 test("the repaint scheduler refuses to fall back to a global timer", () => {

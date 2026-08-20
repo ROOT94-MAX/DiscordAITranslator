@@ -36,7 +36,9 @@ const BUDGET = Object.freeze({
 	// moved into provider-client-wiring.js; runtime retains only the lazy singleton.
 	// -11 (2026-08-20): viewport document, selector, timer, animation-frame and
 	// historical-idle callback wiring moved into message-viewport-wiring.js.
-	runtimeLines: 3404,
+	// -3 (2026-08-21): historical quiet-window timer, scrolling, queue-identity and
+	// finish callback wiring moved into historical-snapshot-cadence-wiring.js.
+	runtimeLines: 3401,
 	moduleLevelVarDeclarators: 2
 });
 
@@ -129,6 +131,15 @@ test("plugin-specific message viewport wiring stays out of the legacy runtime", 
 	const ensureMethod = source.match(/\n\t\t\tensureMessageViewportStore \(\) \{[\s\S]*?\n\t\t\t\}/);
 	assert.ok(ensureMethod, "the lazy message-viewport singleton boundary remains explicit");
 	assert.doesNotMatch(ensureMethod[0], /BDFDB\.TimeUtils|SelectedChannelStore|messagesscroller|requestAnimationFrame|finishHistoricalTranslationSnapshot/, "viewport host wiring belongs to message-viewport-wiring.js");
+});
+
+test("plugin-specific historical cadence wiring stays out of the legacy runtime", () => {
+	const source = readRuntimeLines().join("\n");
+	assert.match(source, /createPluginHistoricalSnapshotCadence/);
+	assert.doesNotMatch(source, /\bcreateHistoricalSnapshotCadence\b/);
+	const ensureLine = source.split("\n").find(line => /ensureHistoricalSnapshotCadence \(\)/.test(line));
+	assert.ok(ensureLine, "the lazy historical-cadence singleton boundary remains explicit");
+	assert.doesNotMatch(ensureLine, /BDFDB\.TimeUtils|isUserActivelyScrollingMessages|ensureHistoricalJobRegistry|finishHistoricalTranslationSnapshot/, "historical cadence host wiring belongs to historical-snapshot-cadence-wiring.js");
 });
 
 test("the recorded budget matches the current tree, so drift is visible", () => {
