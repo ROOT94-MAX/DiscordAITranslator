@@ -96,7 +96,7 @@ module.exports = (_ => {
 			createReceivedTranslationRuntime
 		} = require("../received/received-translation-runtime");
 		const {createPluginHistoricalSourceRuntime} = require("../received/historical-source-wiring");
-		const {createMessageDeletionLifecycle} = require("../lifecycle/message-deletion-lifecycle");
+		const {createPluginMessageDeletionLifecycle} = require("../lifecycle/message-deletion-lifecycle-wiring");
 		const {resolveStoreDispatcher} = require("../discord/store-dispatcher");
 		const {
 			LOADED_AUTO_TRANSLATE_RANGE_MODES,
@@ -2423,17 +2423,7 @@ module.exports = (_ => {
 				return this.historicalJobRegistryInstance;
 			}
 			ensureMessageDeletionLifecycle () {
-				if (!this.messageDeletionLifecycleInstance) this.messageDeletionLifecycleInstance = createMessageDeletionLifecycle({
-					removeLiveMessage: (messageId, channelId) => this.ensureLiveTranslationQueue().removeMessage(messageId, channelId),
-					getHistoricalQueue: channelId => this.getHistoricalTranslationJobQueue(channelId, false),
-					getFailedSnapshot: channelId => this.ensureHistoricalJobRegistry().getFailedSnapshot(channelId),
-					setFailedSnapshot: (channelId, snapshot) => this.ensureHistoricalJobRegistry().setFailedSnapshot(channelId, snapshot),
-					deleteFailedSnapshot: channelId => this.ensureHistoricalJobRegistry().deleteFailedSnapshot(channelId),
-					clearHistoricalMarker: (messageId, jobId) => this.ensureLiveTranslationQueue().clearHistoricalQueuedMessage(messageId, jobId),
-					hasCachedTranslation: messageId => this.hasCachedTranslationEntry(messageId), clearCachedTranslation: messageId => this.clearCachedTranslation(messageId),
-					deleteDisplayMessage: (messageId, channelId) => this.ensureReceivedDisplayRuntime().deleteMessage(messageId, channelId),
-					resolveDispatcher: () => resolveStoreDispatcher(BDFDB, ["subscribe", "unsubscribe"])
-				});
+				if (!this.messageDeletionLifecycleInstance) this.messageDeletionLifecycleInstance = createPluginMessageDeletionLifecycle({plugin: this, BDFDB});
 				return this.messageDeletionLifecycleInstance;
 			}
 			ensureLiveTranslationQueue () {

@@ -36,7 +36,9 @@ test("plugin start owns deletion subscription without patching the global dispat
 
 test("runtime wiring stops deletion subscriptions and resolves them from Discord Stores", () => {
 	const runtime = fs.readFileSync(path.join(__dirname, "..", "src", "legacy", "runtime.js"), "utf8");
+	const wiring = fs.readFileSync(path.join(__dirname, "..", "src", "lifecycle", "message-deletion-lifecycle-wiring.js"), "utf8");
 	assert.match(runtime, /ensureMessageDeletionLifecycle\(\)\.stop\(\)/);
-	assert.match(runtime, /resolveStoreDispatcher\(BDFDB, \["subscribe", "unsubscribe"\]\)/);
+	assert.match(wiring, /resolveStoreDispatcher\(BDFDB, \["subscribe", "unsubscribe"\]\)/);
+	assert.doesNotMatch(runtime, /resolveStoreDispatcher\(BDFDB, \["subscribe", "unsubscribe"\]\)/);
 	assert.doesNotMatch(runtime, /PatchUtils\.patch\(this, dispatcher, "dispatch"/);
 });

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refactor: Slice 5d 第六个 composition-root 切片把消息删除的 Store dispatcher、实时队列、历史任务/失败账本、缓存、显示状态清理接线迁入 `message-deletion-lifecycle-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,401 行降至 3,391 行，单条/批量删除订阅和频道隔离行为保持不变
+- Test: 新增消息删除接线的完整 10 项依赖及全部清理 owner 参数透传契约；Store dispatcher 定位契约改由新 wiring 模块持有
 - Refactor: Slice 5d 第五个 composition-root 切片把历史消息安静窗口的 BDFDB 托管计时器、滚动状态、队列身份和封批回调接线迁入 `historical-snapshot-cadence-wiring.js`；`runtime.js` 保留紧凑延迟单例入口，架构约束从 3,404 行降至 3,401 行，500ms 封批、滚动延迟和等待批次合并策略保持不变
 - Test: 新增历史封批接线的完整 5 项依赖、`timeout/clear` 托管端口以及滚动、当前队列、完成封批回调透传契约
 - Refactor: Slice 5d 第四个 composition-root 切片把 Message Viewport 的 document、BDFDB 托管计时器、RAF、当前频道、消息滚动区选择器、CSS 转义和历史封批回调接线迁入 `message-viewport-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,415 行降至 3,404 行，滚动意图、阅读锚点和输入焦点规则保持不变

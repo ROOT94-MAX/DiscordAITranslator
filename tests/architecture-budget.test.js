@@ -38,7 +38,9 @@ const BUDGET = Object.freeze({
 	// historical-idle callback wiring moved into message-viewport-wiring.js.
 	// -3 (2026-08-21): historical quiet-window timer, scrolling, queue-identity and
 	// finish callback wiring moved into historical-snapshot-cadence-wiring.js.
-	runtimeLines: 3401,
+	// -10 (2026-08-21): Store deletion dispatcher plus live/history/cache/display
+	// cleanup wiring moved into message-deletion-lifecycle-wiring.js.
+	runtimeLines: 3391,
 	moduleLevelVarDeclarators: 2
 });
 
@@ -140,6 +142,15 @@ test("plugin-specific historical cadence wiring stays out of the legacy runtime"
 	const ensureLine = source.split("\n").find(line => /ensureHistoricalSnapshotCadence \(\)/.test(line));
 	assert.ok(ensureLine, "the lazy historical-cadence singleton boundary remains explicit");
 	assert.doesNotMatch(ensureLine, /BDFDB\.TimeUtils|isUserActivelyScrollingMessages|ensureHistoricalJobRegistry|finishHistoricalTranslationSnapshot/, "historical cadence host wiring belongs to historical-snapshot-cadence-wiring.js");
+});
+
+test("plugin-specific message deletion wiring stays out of the legacy runtime", () => {
+	const source = readRuntimeLines().join("\n");
+	assert.match(source, /createPluginMessageDeletionLifecycle/);
+	assert.doesNotMatch(source, /\bcreateMessageDeletionLifecycle\b/);
+	const ensureMethod = source.match(/\n\t\t\tensureMessageDeletionLifecycle \(\) \{[\s\S]*?\n\t\t\t\}/);
+	assert.ok(ensureMethod, "the lazy message-deletion singleton boundary remains explicit");
+	assert.doesNotMatch(ensureMethod[0], /resolveStoreDispatcher|ensureLiveTranslationQueue|ensureHistoricalJobRegistry|clearCachedTranslation|ensureReceivedDisplayRuntime/, "deletion cleanup fan-out belongs to message-deletion-lifecycle-wiring.js");
 });
 
 test("the recorded budget matches the current tree, so drift is visible", () => {

@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId b99e4ae741747bed
+ * @buildId aa1a1dd0823abeff
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -9952,6 +9952,34 @@ var require_store_dispatcher = __commonJS({
   }
 });
 
+// src/lifecycle/message-deletion-lifecycle-wiring.js
+var require_message_deletion_lifecycle_wiring = __commonJS({
+  "src/lifecycle/message-deletion-lifecycle-wiring.js"(exports2, module2) {
+    var { createMessageDeletionLifecycle } = require_message_deletion_lifecycle(), { resolveStoreDispatcher } = require_store_dispatcher();
+    function createPluginMessageDeletionLifecycle({
+      plugin,
+      BDFDB,
+      resolveDispatcher: resolveDeletionDispatcher = /* @__PURE__ */ __name(() => resolveStoreDispatcher(BDFDB, ["subscribe", "unsubscribe"]), "resolveDeletionDispatcher"),
+      createLifecycle = createMessageDeletionLifecycle
+    }) {
+      return createLifecycle({
+        removeLiveMessage: /* @__PURE__ */ __name((messageId, channelId) => plugin.ensureLiveTranslationQueue().removeMessage(messageId, channelId), "removeLiveMessage"),
+        getHistoricalQueue: /* @__PURE__ */ __name((channelId) => plugin.getHistoricalTranslationJobQueue(channelId, !1), "getHistoricalQueue"),
+        getFailedSnapshot: /* @__PURE__ */ __name((channelId) => plugin.ensureHistoricalJobRegistry().getFailedSnapshot(channelId), "getFailedSnapshot"),
+        setFailedSnapshot: /* @__PURE__ */ __name((channelId, snapshot) => plugin.ensureHistoricalJobRegistry().setFailedSnapshot(channelId, snapshot), "setFailedSnapshot"),
+        deleteFailedSnapshot: /* @__PURE__ */ __name((channelId) => plugin.ensureHistoricalJobRegistry().deleteFailedSnapshot(channelId), "deleteFailedSnapshot"),
+        clearHistoricalMarker: /* @__PURE__ */ __name((messageId, jobId) => plugin.ensureLiveTranslationQueue().clearHistoricalQueuedMessage(messageId, jobId), "clearHistoricalMarker"),
+        hasCachedTranslation: /* @__PURE__ */ __name((messageId) => plugin.hasCachedTranslationEntry(messageId), "hasCachedTranslation"),
+        clearCachedTranslation: /* @__PURE__ */ __name((messageId) => plugin.clearCachedTranslation(messageId), "clearCachedTranslation"),
+        deleteDisplayMessage: /* @__PURE__ */ __name((messageId, channelId) => plugin.ensureReceivedDisplayRuntime().deleteMessage(messageId, channelId), "deleteDisplayMessage"),
+        resolveDispatcher: resolveDeletionDispatcher
+      });
+    }
+    __name(createPluginMessageDeletionLifecycle, "createPluginMessageDeletionLifecycle");
+    module2.exports = { createPluginMessageDeletionLifecycle };
+  }
+});
+
 // src/settings/settings-store.js
 var require_settings_store = __commonJS({
   "src/settings/settings-store.js"(exports2, module2) {
@@ -11977,7 +12005,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
-        } = require_received_translation_runtime(), { createPluginHistoricalSourceRuntime } = require_historical_source_wiring(), { createMessageDeletionLifecycle } = require_message_deletion_lifecycle(), { resolveStoreDispatcher } = require_store_dispatcher(), {
+        } = require_received_translation_runtime(), { createPluginHistoricalSourceRuntime } = require_historical_source_wiring(), { createPluginMessageDeletionLifecycle } = require_message_deletion_lifecycle_wiring(), { resolveStoreDispatcher } = require_store_dispatcher(), {
           LOADED_AUTO_TRANSLATE_RANGE_MODES,
           loadedAutoTranslatePolicy,
           aiDecisionPolicy,
@@ -12021,7 +12049,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "b99e4ae741747bed";
+            return "aa1a1dd0823abeff";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13665,18 +13693,7 @@ __________________ __________________ __________________
             return this.historicalJobRegistryInstance || (this.historicalJobRegistryInstance = createHistoricalJobRegistry()), this.historicalJobRegistryInstance;
           }
           ensureMessageDeletionLifecycle() {
-            return this.messageDeletionLifecycleInstance || (this.messageDeletionLifecycleInstance = createMessageDeletionLifecycle({
-              removeLiveMessage: /* @__PURE__ */ __name((messageId, channelId) => this.ensureLiveTranslationQueue().removeMessage(messageId, channelId), "removeLiveMessage"),
-              getHistoricalQueue: /* @__PURE__ */ __name((channelId) => this.getHistoricalTranslationJobQueue(channelId, !1), "getHistoricalQueue"),
-              getFailedSnapshot: /* @__PURE__ */ __name((channelId) => this.ensureHistoricalJobRegistry().getFailedSnapshot(channelId), "getFailedSnapshot"),
-              setFailedSnapshot: /* @__PURE__ */ __name((channelId, snapshot) => this.ensureHistoricalJobRegistry().setFailedSnapshot(channelId, snapshot), "setFailedSnapshot"),
-              deleteFailedSnapshot: /* @__PURE__ */ __name((channelId) => this.ensureHistoricalJobRegistry().deleteFailedSnapshot(channelId), "deleteFailedSnapshot"),
-              clearHistoricalMarker: /* @__PURE__ */ __name((messageId, jobId) => this.ensureLiveTranslationQueue().clearHistoricalQueuedMessage(messageId, jobId), "clearHistoricalMarker"),
-              hasCachedTranslation: /* @__PURE__ */ __name((messageId) => this.hasCachedTranslationEntry(messageId), "hasCachedTranslation"),
-              clearCachedTranslation: /* @__PURE__ */ __name((messageId) => this.clearCachedTranslation(messageId), "clearCachedTranslation"),
-              deleteDisplayMessage: /* @__PURE__ */ __name((messageId, channelId) => this.ensureReceivedDisplayRuntime().deleteMessage(messageId, channelId), "deleteDisplayMessage"),
-              resolveDispatcher: /* @__PURE__ */ __name(() => resolveStoreDispatcher(BDFDB, ["subscribe", "unsubscribe"]), "resolveDispatcher")
-            })), this.messageDeletionLifecycleInstance;
+            return this.messageDeletionLifecycleInstance || (this.messageDeletionLifecycleInstance = createPluginMessageDeletionLifecycle({ plugin: this, BDFDB })), this.messageDeletionLifecycleInstance;
           }
           ensureLiveTranslationQueue() {
             return this.liveTranslationQueueInstance || (this.liveTranslationQueueInstance = createLiveTranslationQueue({
