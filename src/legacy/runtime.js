@@ -78,7 +78,8 @@ module.exports = (_ => {
 		const {createMessageViewportStore} = require("../viewport/message-viewport-store");
 		const {createLoadedTranslationStatusStore} = require("../status/loaded-translation-status-store");
 		const {createPluginTranslationCacheStore} = require("../cache/translation-cache-wiring");
-		const {createProviderClient, translationEngines, enginePortals} = require("../providers/provider-client");
+		const {translationEngines, enginePortals} = require("../providers/provider-client");
+		const {createPluginProviderClient} = require("../providers/provider-client-wiring");
 		const {createSentTranslationStore} = require("../sent/sent-translation-store");
 		const {createLiveTranslationQueue} = require("../orchestrator/live-translation-queue");
 		const {resumeHistoricalHandoff} = require("../orchestrator/historical-handoff-runtime");
@@ -2527,24 +2528,7 @@ module.exports = (_ => {
 			}
 
 			ensureProviderClient () {
-				if (!this.providerClientInstance) this.providerClientInstance = createProviderClient({
-					request: (url, options, callback) => BDFDB.LibraryRequires.request(url, options, callback),
-					setTimeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay),
-					clearTimeout: timer => BDFDB.TimeUtils.clear(timer),
-					// A raw global timer on purpose: routing the backoff sleep through BDFDB would
-					// leave the awaiting promise pending forever once the plugin stops.
-					sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
-					now: () => Date.now(),
-					getAuthKeys: () => this.ensureSettingsStore().getAuthKeys(),
-					saveAuthKeys: value => this.ensureSettingsStore().replaceAuthKeys(value),
-					getLanguages: () => this.ensureSettingsStore().getLanguages(),
-					notify: (message, options) => BDFDB.NotificationUtils.toast(message, options),
-					getLabels: () => this.labels,
-					getCustomText: key => this.getCustomText(key),
-					getEngineLabel: engineKey => this.getEngineLabel(engineKey),
-					shouldUseAiAutoTranslateDecision: channelId => this.shouldUseAiAutoTranslateDecision(channelId),
-					getAiAutoTranslatePrompt: translationData => this.getAiAutoTranslatePrompt(translationData)
-				});
+				if (!this.providerClientInstance) this.providerClientInstance = createPluginProviderClient({plugin: this, BDFDB});
 				return this.providerClientInstance;
 			}
 

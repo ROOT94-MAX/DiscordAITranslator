@@ -32,7 +32,9 @@ const BUDGET = Object.freeze({
 	// settings-store-wiring.js; runtime retains only the lazy singleton boundary.
 	// -17 (2026-08-20): translation-cache persistence, timer and policy wiring moved
 	// into translation-cache-wiring.js; runtime retains only the lazy singleton.
-	runtimeLines: 3431,
+	// -16 (2026-08-20): provider request, timer, credential and UI callback wiring
+	// moved into provider-client-wiring.js; runtime retains only the lazy singleton.
+	runtimeLines: 3415,
 	moduleLevelVarDeclarators: 2
 });
 
@@ -107,6 +109,15 @@ test("plugin-specific translation cache wiring stays out of the legacy runtime",
 	const ensureMethod = source.match(/\n\t\t\tensureTranslationCacheStore \(\) \{[\s\S]*?\n\t\t\t\}/);
 	assert.ok(ensureMethod, "the lazy translation-cache singleton boundary remains explicit");
 	assert.doesNotMatch(ensureMethod[0], /BDFDB\.DataUtils|BDFDB\.TimeUtils|["']translationCache["']/, "cache persistence and timer wiring belongs to translation-cache-wiring.js");
+});
+
+test("plugin-specific provider client wiring stays out of the legacy runtime", () => {
+	const source = readRuntimeLines().join("\n");
+	assert.match(source, /createPluginProviderClient/);
+	assert.doesNotMatch(source, /\bcreateProviderClient\b/);
+	const ensureMethod = source.match(/\n\t\t\tensureProviderClient \(\) \{[\s\S]*?\n\t\t\t\}/);
+	assert.ok(ensureMethod, "the lazy provider-client singleton boundary remains explicit");
+	assert.doesNotMatch(ensureMethod[0], /BDFDB\.LibraryRequires|BDFDB\.TimeUtils|BDFDB\.NotificationUtils|ensureSettingsStore|setTimeout/, "provider transport and plugin callback wiring belongs to provider-client-wiring.js");
 });
 
 test("the recorded budget matches the current tree, so drift is visible", () => {

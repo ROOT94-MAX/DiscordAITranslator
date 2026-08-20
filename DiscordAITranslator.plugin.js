@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 64ea246abd086f70
+ * @buildId 27a66a9c04c7b371
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -7334,6 +7334,41 @@ var require_translation_cache_wiring = __commonJS({
   }
 });
 
+// src/providers/provider-client-wiring.js
+var require_provider_client_wiring = __commonJS({
+  "src/providers/provider-client-wiring.js"(exports2, module2) {
+    var { createProviderClient } = require_provider_client();
+    function createPluginProviderClient({
+      plugin,
+      BDFDB,
+      now = Date.now,
+      // Deliberately raw: a BDFDB-managed backoff sleep would be cancelled on stop and
+      // leave the awaiting provider promise pending forever.
+      sleep = /* @__PURE__ */ __name((ms) => new Promise((resolve) => setTimeout(resolve, ms)), "sleep"),
+      createClient = createProviderClient
+    }) {
+      return createClient({
+        request: /* @__PURE__ */ __name((url, options, callback) => BDFDB.LibraryRequires.request(url, options, callback), "request"),
+        setTimeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "setTimeout"),
+        clearTimeout: /* @__PURE__ */ __name((timer) => BDFDB.TimeUtils.clear(timer), "clearTimeout"),
+        sleep,
+        now,
+        getAuthKeys: /* @__PURE__ */ __name(() => plugin.ensureSettingsStore().getAuthKeys(), "getAuthKeys"),
+        saveAuthKeys: /* @__PURE__ */ __name((value) => plugin.ensureSettingsStore().replaceAuthKeys(value), "saveAuthKeys"),
+        getLanguages: /* @__PURE__ */ __name(() => plugin.ensureSettingsStore().getLanguages(), "getLanguages"),
+        notify: /* @__PURE__ */ __name((message, options) => BDFDB.NotificationUtils.toast(message, options), "notify"),
+        getLabels: /* @__PURE__ */ __name(() => plugin.labels, "getLabels"),
+        getCustomText: /* @__PURE__ */ __name((key) => plugin.getCustomText(key), "getCustomText"),
+        getEngineLabel: /* @__PURE__ */ __name((engineKey) => plugin.getEngineLabel(engineKey), "getEngineLabel"),
+        shouldUseAiAutoTranslateDecision: /* @__PURE__ */ __name((channelId) => plugin.shouldUseAiAutoTranslateDecision(channelId), "shouldUseAiAutoTranslateDecision"),
+        getAiAutoTranslatePrompt: /* @__PURE__ */ __name((translationData) => plugin.getAiAutoTranslatePrompt(translationData), "getAiAutoTranslatePrompt")
+      });
+    }
+    __name(createPluginProviderClient, "createPluginProviderClient");
+    module2.exports = { createPluginProviderClient };
+  }
+});
+
 // src/sent/sent-translation-store.js
 var require_sent_translation_store = __commonJS({
   "src/sent/sent-translation-store.js"(exports2, module2) {
@@ -11886,7 +11921,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createHistoricalSnapshotCadence } = require_historical_snapshot_cadence(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createHistoricalSnapshotCadence } = require_historical_snapshot_cadence(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -11934,7 +11969,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "64ea246abd086f70";
+            return "27a66a9c04c7b371";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13672,24 +13707,7 @@ __________________ __________________ __________________
             return this.settingsStoreInstance || (this.settingsStoreInstance = createPluginSettingsStore({ plugin: this, BDFDB, translationEngines })), this.settingsStoreInstance;
           }
           ensureProviderClient() {
-            return this.providerClientInstance || (this.providerClientInstance = createProviderClient({
-              request: /* @__PURE__ */ __name((url, options, callback) => BDFDB.LibraryRequires.request(url, options, callback), "request"),
-              setTimeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "setTimeout"),
-              clearTimeout: /* @__PURE__ */ __name((timer) => BDFDB.TimeUtils.clear(timer), "clearTimeout"),
-              // A raw global timer on purpose: routing the backoff sleep through BDFDB would
-              // leave the awaiting promise pending forever once the plugin stops.
-              sleep: /* @__PURE__ */ __name((ms) => new Promise((resolve) => setTimeout(resolve, ms)), "sleep"),
-              now: /* @__PURE__ */ __name(() => Date.now(), "now"),
-              getAuthKeys: /* @__PURE__ */ __name(() => this.ensureSettingsStore().getAuthKeys(), "getAuthKeys"),
-              saveAuthKeys: /* @__PURE__ */ __name((value) => this.ensureSettingsStore().replaceAuthKeys(value), "saveAuthKeys"),
-              getLanguages: /* @__PURE__ */ __name(() => this.ensureSettingsStore().getLanguages(), "getLanguages"),
-              notify: /* @__PURE__ */ __name((message, options) => BDFDB.NotificationUtils.toast(message, options), "notify"),
-              getLabels: /* @__PURE__ */ __name(() => this.labels, "getLabels"),
-              getCustomText: /* @__PURE__ */ __name((key) => this.getCustomText(key), "getCustomText"),
-              getEngineLabel: /* @__PURE__ */ __name((engineKey) => this.getEngineLabel(engineKey), "getEngineLabel"),
-              shouldUseAiAutoTranslateDecision: /* @__PURE__ */ __name((channelId) => this.shouldUseAiAutoTranslateDecision(channelId), "shouldUseAiAutoTranslateDecision"),
-              getAiAutoTranslatePrompt: /* @__PURE__ */ __name((translationData) => this.getAiAutoTranslatePrompt(translationData), "getAiAutoTranslatePrompt")
-            })), this.providerClientInstance;
+            return this.providerClientInstance || (this.providerClientInstance = createPluginProviderClient({ plugin: this, BDFDB })), this.providerClientInstance;
           }
           ensureTranslationCacheStore() {
             return this.translationCacheStoreInstance || (this.translationCacheStoreInstance = createPluginTranslationCacheStore({ plugin: this, BDFDB })), this.translationCacheStoreInstance;

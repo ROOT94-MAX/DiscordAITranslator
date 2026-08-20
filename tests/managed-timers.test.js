@@ -9,6 +9,7 @@ const path = require("node:path");
 // repaint scheduler each of those firings is a full-list repaint racing the live one.
 const runtime = fs.readFileSync(path.resolve(__dirname, "..", "src", "legacy", "runtime.js"), "utf8");
 const translationCacheWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "cache", "translation-cache-wiring.js"), "utf8");
+const providerClientWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "providers", "provider-client-wiring.js"), "utf8");
 
 function dependencyBlock(factoryName) {
 	const start = runtime.indexOf(factoryName + "({");
@@ -22,14 +23,16 @@ function dependencyBlock(factoryName) {
 // too: its retry timers are managed, and only its backoff sleep is deliberately raw.
 const TIMER_OWNING_FACTORIES = [
 	"createDisplayRepaintScheduler",
-	"createMessageViewportStore",
-	"createProviderClient"
+	"createMessageViewportStore"
 ];
 
 test("modules that schedule work are handed BDFDB timers, never the globals", () => {
 	const owners = TIMER_OWNING_FACTORIES.map(factoryName => ({name: factoryName, source: dependencyBlock(factoryName)})).concat({
 		name: "createPluginTranslationCacheStore",
 		source: translationCacheWiring
+	}, {
+		name: "createPluginProviderClient",
+		source: providerClientWiring
 	});
 	for (const owner of owners) {
 		assert.match(owner.source, /setTimeout:\s*\(callback, delay\) => BDFDB\.TimeUtils\.timeout\(callback, delay\)/, `${owner.name} must receive the managed timer`);
@@ -48,5 +51,5 @@ test("the repaint scheduler refuses to fall back to a global timer", () => {
 test("the provider backoff sleep stays a raw timer on purpose", () => {
 	// Routing this one through BDFDB would leave the awaiting promise pending forever
 	// once the plugin stops, which is worse than the timer outliving the instance.
-	assert.match(dependencyBlock("createProviderClient"), /sleep: ms => new Promise\(resolve => setTimeout\(resolve, ms\)\)/);
+	assert.match(providerClientWiring, /sleep = ms => new Promise\(resolve => setTimeout\(resolve, ms\)\)/);
 });

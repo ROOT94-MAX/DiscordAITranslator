@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refactor: Slice 5d 第三个 composition-root 切片把 provider client 的 BDFDB 网络请求、托管重试计时器、原始退避睡眠、凭证/语言读取和提示词/UI 回调接线迁入 `provider-client-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,431 行降至 3,415 行，所有供应商请求与响应契约保持不变
+- Test: 新增 provider client 接线的完整依赖清单、请求/计时器/退避语义、凭证持久化、语言表、通知和 AI 提示策略透传契约
 - Refactor: Slice 5d 第二个 composition-root 切片把翻译缓存的 BDFDB 持久化键、托管计时器以及来源/签名/显示/策略回调接线迁入 `translation-cache-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,448 行降至 3,431 行，缓存格式、500 条上限、300ms 防抖和停止时提交行为保持不变
 - Test: 新增翻译缓存接线的完整依赖清单、`translationCache` 持久化键、托管计时器和全部策略回调透传契约
 - Removed: 接收与发送输出语言下拉框不再提供动态 `$discord` 目标；旧的全局、服务器和频道输出值首次加载时迁移为客户端当前的明确语言，之后客户端界面语言变化不会暗中改变翻译目标
