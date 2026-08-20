@@ -8,7 +8,7 @@ Completed incident history, rejected approaches, and field evidence live in `fie
 
 Everything in this section is already shipped or verified. It is retained only so future work starts from the correct current state.
 
-- v0.3.39 is published from `master` as one deterministic `DiscordAITranslator.plugin.js` artifact.
+- v0.3.40 is published from `master` as one deterministic `DiscordAITranslator.plugin.js` artifact.
 - Mounted ordinary messages attempt Flux row repaint first; one whole-chat repaint remains the confirmed fallback.
 - Historical snapshots seal after a 500 ms quiet window, compatible waiting work merges before start, and one job commits one display batch.
 - Viewport restoration is owned by `MessageViewportStore` and obeys newer user scroll intent.
@@ -69,7 +69,7 @@ Preserved decisions:
 - Treat capsule restyling as a separate decision after both settings surfaces are stable.
 - Begin with a current control-to-setting contract inventory; do not implement from the archived line numbers or old branch assumptions.
 
-Restart this work only after a fresh recon against the current `settings-panel.js`, `translate-components.js`, labels, styles, and v0.3.39+ tests.
+Restart this work only after a fresh recon against the current `settings-panel.js`, `translate-components.js`, labels, styles, and v0.3.40+ tests.
 
 ## Delivery Gate
 

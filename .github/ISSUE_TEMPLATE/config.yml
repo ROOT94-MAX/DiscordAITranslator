@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security report
+    url: https://github.com/ROOT94-MAX/DiscordAITranslator/security/advisories/new
+    about: Report vulnerabilities privately instead of opening a public issue.
+  - name: Latest release
+    url: https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest
+    about: Download and test the newest published build first.

@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a reproducible plugin defect.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve DiscordAITranslator. Remove credentials, message contents, account IDs, and server IDs from evidence.
+  - type: input
+    id: version
+    attributes:
+      label: Version and build ID
+      description: Copy both values from the plugin settings footer or metadata header.
+      placeholder: v0.3.40 · build 0123456789abcdef
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Discord client
+      options:
+        - Stable
+        - PTB
+        - Canary
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence
+      description: Add screenshots, relevant diagnostics, and whether the problem crosses channels, scrolling, rendering, or provider requests.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I tested the latest published release.
+          required: true
+        - label: I removed credentials and private Discord data.
+          required: true

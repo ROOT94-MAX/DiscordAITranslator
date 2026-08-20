@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.3.40
+
 - Architecture: 完成 Slice 5d composition-root 收口；新增 19 个延迟单例的显式白名单与每项最多 8 行的紧凑边界契约，确认 `runtime.js` 终态为 3,260 行和两个模块级可变声明。后续渲染、生命周期及大模块债务继续按独立证据开启，不再把无边界的继续缩行列为活动任务
 - Fixed: 用户上滚阅读历史时，新实时消息到达不再把虚拟消息列表推到最新位置；Live Queue 在新行提交前通知 Viewport Store，后者优先捕获当前阅读线，并在 Discord 已经跳底时回用最近一次用户历史滚动快照。恢复仍服从更新的用户手势否决，主动回到底部不会被旧锚点拉回
 - Refactor: Slice 5d 第十个 composition-root 切片把 Live Translation Queue 的运行时/频道判断、显示提交、历史交接、频道会话、批量翻译结果策略和单条回退接线迁入 `live-translation-queue-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,329 行降至 3,260 行，实时消息优先、同频道批量、历史让位和频道隔离策略保持不变

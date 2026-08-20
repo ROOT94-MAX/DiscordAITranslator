@@ -7,9 +7,9 @@ const root = path.resolve(__dirname, "..");
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), "utf8");
 const readJson = relativePath => JSON.parse(read(relativePath));
 const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const RELEASE_VERSION = "0.3.39";
+const RELEASE_VERSION = "0.3.40";
 
-test("release metadata, README and changelog agree on v0.3.39", () => {
+test("release metadata, README and changelog agree on v0.3.40", () => {
 	const packageJson = readJson("package.json");
 	const packageLock = readJson("package-lock.json");
 	const metadata = readJson("src/plugin/metadata.json");
@@ -81,6 +81,21 @@ test("root README offers complete English and Simplified Chinese mirrors", () =>
 	const docsIndex = read("docs/README.md");
 	assert.match(docsIndex, /\.\.\/README\.md/);
 	assert.match(docsIndex, /\.\.\/README\.en\.md/);
+});
+
+test("public repository governance files are present and local assistant state stays untracked", () => {
+	for (const relativePath of [
+		"SECURITY.md",
+		"CODE_OF_CONDUCT.md",
+		".github/dependabot.yml",
+		".github/pull_request_template.md",
+		".github/ISSUE_TEMPLATE/bug_report.yml",
+		".github/ISSUE_TEMPLATE/feature_request.yml",
+		".github/ISSUE_TEMPLATE/config.yml"
+	]) assert.equal(fs.existsSync(path.join(root, relativePath)), true, `${relativePath} must exist`);
+	assert.equal(fs.existsSync(path.join(root, "AGENTS.md")), false, "local assistant instructions stay outside the public repository");
+	assert.match(read(".gitignore"), /^AGENTS\.md$/m);
+	assert.match(read("SECURITY.md"), /security\/advisories\/new/);
 });
 
 test("architecture and field handoff provide complete Chinese companion entry points", () => {

@@ -1,0 +1,28 @@
+name: Feature request
+description: Propose a user-visible improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the user problem rather than only the proposed implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: ownership
+    attributes:
+      label: Scope and ownership
+      description: Note whether the setting or state should be global, server-scoped, or channel-scoped.
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Alternatives and trade-offs

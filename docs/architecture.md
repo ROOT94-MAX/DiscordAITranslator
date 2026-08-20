@@ -6,9 +6,9 @@ This document describes the current runtime boundaries and migration rules. User
 
 ## Current Status
 
-- Release line: v0.3.39.
+- Release line: v0.3.40.
 - Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
-- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased build ID: `c0b27e1479677971`.
+- Published v0.3.40 build ID: `c0b27e1479677971`; current repository build ID: `c0b27e1479677971`.
 - Legacy composition-root ratchet: 3,260 lines and two module-level shared declarators.
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
 - Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.

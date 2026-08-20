@@ -6,14 +6,14 @@
 
 [![平台](https://img.shields.io/badge/Platform-Discord-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.com)
 [![加载器](https://img.shields.io/badge/Loader-BetterDiscord-4E5D94?style=flat-square)](https://betterdiscord.app)
-[![版本](https://img.shields.io/badge/Version-0.3.39-success?style=flat-square)](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest)
+[![版本](https://img.shields.io/badge/Version-0.3.40-success?style=flat-square)](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest)
 [![验证](https://img.shields.io/github/actions/workflow/status/ROOT94-MAX/DiscordAITranslator/verify.yml?branch=master&style=flat-square&label=verify)](https://github.com/ROOT94-MAX/DiscordAITranslator/actions/workflows/verify.yml)
 [![下载量](https://img.shields.io/github/downloads/ROOT94-MAX/DiscordAITranslator/total?style=flat-square&color=yellow)](https://github.com/ROOT94-MAX/DiscordAITranslator/releases)
 [![许可证](https://img.shields.io/badge/License-GPL%20v2-blue?style=flat-square)](./LICENSE)
 
 一款 BetterDiscord 翻译插件，支持频道级收到消息翻译、发送前翻译、历史补翻、手动操作、转发消息和受保护文本。
 
-**当前版本：v0.3.39** · **运行环境：BetterDiscord + BDFDB Library**
+**当前版本：v0.3.40** · **运行环境：BetterDiscord + BDFDB Library**
 
 [下载最新版插件](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest/download/DiscordAITranslator.plugin.js) · [查看发布说明](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest) · [阅读技术文档](./docs/README.md)
 

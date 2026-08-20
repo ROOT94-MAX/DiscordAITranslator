@@ -8,12 +8,11 @@ User-visible behavior remains owned by `product.md`; setting ownership by `setti
 
 ## Verified State at Handoff
 
-- The detailed field history is preserved locally on `codex/capsule-counter` and `backup/pre-publication-detailed-20260820`. The public v0.3.39 branch condenses those 45 field commits into one reviewed release commit so intermediate machine-specific evidence does not enter public history.
-- Local `master` contains the completed extraction sequence through `6e7a4cd`; backup tags preserve the pre-publication state.
-- Published v0.3.39 artifact: one installable `DiscordAITranslator.plugin.js`, build ID `08e2b0182796eded`. The unreleased master artifact after retired-code cleanup uses build ID `530b6d5ac4b47c18`.
-- Field-handoff verification passed `1247/1247`; the v0.3.39 release gate adds two metadata/bilingual-document contracts and passes `1249/1249`. Generated and installed plugin hashes matched after the last runtime deployment.
-- Legacy-runtime ratchet: the planning recon measured 4,322 lines; after the dead watermark cleanup the enforced Slice-1 baseline was 4,318; the current enforced budget is 3,476. This is meaningful reduction, but `src/legacy/runtime.js` is still the composition root.
-- Latest accepted PTB results: capsule placement is acceptable; duplicate provider-error toasts are fixed; forwarded automatic/manual translation and restore paths work; and the duplicate direct-original setting is successfully removed. Current tests also pin one forwarded original and history-preserving auto-enable, but those two latest presentation/viewport corrections remain explicit PTB observation items rather than being promoted from test evidence to final field proof.
+- Published v0.3.40 artifact: one installable `DiscordAITranslator.plugin.js`, build ID `c0b27e1479677971`.
+- The release gate passes 1,313 unit, contract, and integration tests; generated, repository, installed, and release-asset hashes are compared during publication.
+- Slice 5d composition-root extraction is complete at a 3,260-line runtime ratchet, two module-level mutable declarators, and 19 compact lazy singleton boundaries.
+- Accepted PTB evidence covers cumulative capsule behavior, forwarded automatic/manual translation and restore, configuration transitions, active-scroll veto, post-scroll completion, live priority, channel isolation, and the live-arrival History Guard.
+- Whole-chat fallback can still refresh the composer/input; the user explicitly parked that separate render-boundary debt.
 - Remaining field observations are listed under **Open or Observation Items**. Do not convert an observation into a root cause without new evidence.
 
 ## Working Rules

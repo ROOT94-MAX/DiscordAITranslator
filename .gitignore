@@ -10,3 +10,4 @@ DiscordAITranslator.debug.plugin.js
 *.backup.plugin.js
 .cursor/
 tmp-*
+AGENTS.md
