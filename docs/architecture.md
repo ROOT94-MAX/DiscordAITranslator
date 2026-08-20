@@ -13,7 +13,7 @@ This document describes the current runtime boundaries and migration rules. User
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
 - Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
 
-The source is substantially more modular than the v0.3.38 baseline, but `src/legacy/runtime.js` is still the composition root and lifecycle patch shell. The migration is useful and incomplete; module count alone is not evidence of completion.
+Slice 5d composition-root extraction is complete. `src/legacy/runtime.js` remains the legacy plugin facade and lifecycle patch shell, with 19 explicitly inventoried lazy singletons of at most eight lines each. This closes the bounded extraction plan; it does not claim that the separate render, lifecycle, or oversized-module debts below are complete.
 
 ## Distribution Contract
 
@@ -50,7 +50,7 @@ The build uses esbuild in CommonJS mode with an ES2020 target, preserves the Bet
 | Composer and menus | `src/ui/composer-wiring.js`, `src/ui/context-menu-wiring.js` | Channel submit interception, input icon, and manual actions |
 | Settings schema and persistence wiring | `src/settings/plugin-defaults.js`, `src/settings/settings-store.js`, `src/settings/settings-store-wiring.js`, `src/ui/settings-panel.js` | One schema and one owner for global versus channel settings; one BDFDB adapter owns the established persisted keys |
 | Translation cache and persistence wiring | `src/cache/translation-cache-store.js`, `src/cache/translation-cache-wiring.js` | Bounded paid-result/paid-skip cache; one adapter owns the BDFDB key, managed debounce timers, and caller policy/display ports |
-| Remaining composition | `src/legacy/runtime.js` | Plugin lifecycle, BDFDB patch shell, and dependency wiring only; it may shrink but not grow |
+| Legacy plugin facade and composition | `src/legacy/runtime.js` | Plugin lifecycle, BDFDB patch shell, public compatibility facade, and 19 compact lazy singleton boundaries; new host fan-out belongs in owning wiring modules |
 
 ## Architectural Invariants
 
@@ -171,7 +171,7 @@ npm run verify
 
 ## Known Debt
 
-- `src/legacy/runtime.js` remains a 3,260-line composition root.
+- `src/legacy/runtime.js` remains a 3,260-line legacy facade; further shrinkage requires a separately scoped ownership contract rather than an open-ended line-count task.
 - Whole-chat fallback diagnostics (`R`) can still remount/refresh the composer and its input row. The combined display-wiring PTB check on build `65a775c63d76dffa` reproduced this pre-existing behavior; it is explicitly parked for later render-boundary work.
 - Provider abort support and lifecycle task registry cleanup remain observation-gated in `recovery-plan.md`; automatic multi-page history fetching is parked after field rollback, while direct Store message-delete subscriptions are field-closed.
 - Discord internal store and snapshot shapes require re-observation after client updates.

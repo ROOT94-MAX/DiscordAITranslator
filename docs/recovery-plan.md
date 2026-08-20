@@ -17,6 +17,7 @@ Everything in this section is already shipped or verified. It is retained only s
 - Google Free chunks by encoded query size and uses reversible transport-safe protected placeholders.
 - Field observation is closed for the automatic collection/count mismatch, direct single/bulk message deletion, forwarded one-original display, and enabling automatic translation while reading old history.
 - Release metadata, README language entry points, CHANGELOG, generated artifact identity, and the complete automated suite are covered by `npm run verify`.
+- Slice 5d composition-root extraction is complete: `src/legacy/runtime.js` is 3,260 lines with two module-level mutable declarators and 19 explicitly inventoried lazy singleton boundaries, each no more than eight lines.
 
 Working rules:
 
@@ -50,36 +51,6 @@ Strengthen confirmation and command identity after field evidence justifies the 
 - Captured real parent/child and Store shapes outrank synthetic owner mocks for render-boundary decisions.
 
 The unresolved product decision is whether reply previews should carry the same translated decoration as full messages. Decide and document that behavior before changing preview styling.
-
-## Next Executable Slice: Architecture
-
-**Status: ACTIVE — Slice 5d composition root.** The retired atomic rebuild cleanup is complete, but the composition root and oversized ownership boundaries remain. The first resumed cut moved plugin/BDFDB settings persistence wiring into `settings-store-wiring.js`; the legacy runtime retained only the lazy singleton boundary and its ratchet dropped from 3,476 to 3,448 lines without changing settings behavior.
-Continue bottom-up ownership extraction; do not replace the composition root in one rewrite.
-
-The first-cut PTB smoke exposed configuration-transition gaps. Corrections preserved restore proof, reset only the affected channel on real configuration changes, resolved Discord language before policy/provider decisions, made same-language echoes terminal skips, and parked failures until explicit retry or source/configuration change. The result was fast-forwarded to `master` at `38082f6`.
-
-The second resumed cut moved the translation cache's BDFDB persistence key, managed debounce timers, and source/signature/display/policy callback wiring into `translation-cache-wiring.js`. The cache store and every public runtime delegation remained unchanged; installed build `64ea246abd086f70` preserved all 301 live cache entries byte-for-byte, and the validated cut was fast-forwarded to `master` at `7639cb7` with the ratchet at 3,431 lines.
-
-The third resumed cut moved provider-client request, timer, credential/language, notification, and AI prompt-policy wiring into `provider-client-wiring.js`. Managed retry timers still use BDFDB while backoff sleep remains deliberately raw, so plugin stop cannot strand an awaited promise. All 1,286 tests and a real keyless English-to-Chinese request passed; installed build `27a66a9c04c7b371` left the complete configuration byte-identical, and the validated cut was fast-forwarded to `master` at `ed2b0af` with the ratchet at 3,415 lines.
-
-The fourth resumed cut moved Message Viewport document, managed timer, animation-frame, selected-channel, scroller-selector, CSS escaping, and scroll-idle callback wiring into `message-viewport-wiring.js`. All 1,290 tests passed and installed build `abaa550cd78f3382` left configuration byte-identical. PTB confirmed history position, active-scroll veto, bottom/input focus, and cross-channel isolation. Returning to channel A landed at the native client bottom position, but channel B was never moved by A's restore work; that host navigation behavior was accepted and the validated cut was fast-forwarded to `master` at `ad5b117` with the ratchet at 3,404 lines.
-
-The fifth resumed cut moved historical quiet-window managed timers, active-scroll state, queue identity, and snapshot-finish wiring into `historical-snapshot-cadence-wiring.js`. All 1,294 tests passed and installed build `b99e4ae741747bed` left configuration byte-identical. PTB confirmed one seal after continuous upward scrolling idled, no periodic capsule/repaint growth after completion, and one additional batch for the next newly loaded history segment; the validated cut was fast-forwarded to `master` at `d837f54` with the ratchet at 3,401 lines.
-
-The sixth resumed cut moved Message Deletion Store dispatcher resolution plus live queue, historical job/failure ledger, cache, marker, and display cleanup wiring into `message-deletion-lifecycle-wiring.js`. The lifecycle still owns direct single/bulk subscriptions, deduplication, partial-subscribe rollback, cleanup order, and channel isolation; the legacy runtime keeps only its lazy singleton boundary and the ratchet dropped from 3,401 to 3,391 lines. Deterministic build parity and all 1,297 tests passed; installed build `aa1a1dd0823abeff` left the complete configuration byte-identical. The already-closed direct single/bulk deletion and cross-channel cleanup field evidence covers this wiring-only move, so no duplicate PTB pass was required; the validated functional cut was fast-forwarded to `master` at `66b258f`.
-
-The seventh resumed cut moved Loaded Status Capsule selected-channel Store, browser positioning, runtime-active gate, scroll/retry, and DOM lifecycle callback wiring into `loaded-status-capsule-wiring.js`. The status store still owns cumulative per-channel identity and timers; the capsule controller still owns visibility and DOM policy; the legacy runtime keeps only its lazy singleton and compatibility positioning entry, and the ratchet dropped from 3,391 to 3,369 lines. All 1,300 tests passed; installed deterministic build `4432647c5d41772e` left the complete configuration byte-identical. Existing field evidence for cumulative count, native-hint positioning, heartbeat stability, and cross-channel hiding covered this wiring-only move, so no duplicate PTB pass was required; the validated cut was fast-forwarded to `master` at `2be5c3d`.
-
-The eighth and ninth resumed cuts moved Received Display Runtime and Repaint Scheduler host wiring into `display-runtime-wiring.js` and `repaint-scheduler-wiring.js`, lowering the ratchet from 3,369 to 3,329 lines. Builds `143512968d82fab2` and `65a775c63d76dffa` passed automated and configuration-parity gates. PTB closed scroll behavior; the pre-existing composer refresh was parked, and commits `04ea458`/`aa3057f` were fast-forwarded to `master`.
-
-The tenth resumed cut moved Live Translation Queue policy, display/history/session, cache, and fallback wiring into `live-translation-queue-wiring.js`; newest-first order, locks, same-channel bursts, handoff identity, and retry cadence remain queue-owned. BDFDB now manages the 900 ms retry timer, and the ratchet dropped from 3,329 to 3,260 lines. Build `fe6085ad52351072` passed 1,309 tests and installed configuration parity. PTB confirmed live priority and channel isolation but exposed a history reader snapping to newest when a live row arrived. A failing queue/viewport regression drove a pre-commit reading-line guard; installed build `c0b27e1479677971` passed all 1,311 tests, configuration parity, and the focused History Guard retest. The validated wiring and fix were fast-forwarded to `master` at `8580478` and `e3039d7`.
-
-- `src/legacy/runtime.js` remains the lifecycle/patch composition root and may only shrink.
-- Move wiring into a composition module when one responsibility can leave with contract tests and no new shared state.
-- Split oversized provider, settings, label, style, and display modules by ownership rather than arbitrary line count.
-- Keep the single readable generated plugin as the distribution contract.
-
-Continue from the fresh inventory of lazy `ensureX` factories and their lifecycle ownership. For each cut, select one bounded wiring responsibility, pin its singleton/dependency contract in tests, move that wiring to its owning module, delete the replaced runtime wiring, and lower the architecture ratchet in the same commit. Every cut must preserve render, provider, settings, channel isolation, and installed-plugin behavior.
 
 ## Parked UI Redesign
 

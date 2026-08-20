@@ -103,7 +103,7 @@ test("architecture and field handoff provide complete Chinese companion entry po
 	assert.match(index, /field-debugging-guide\.zh-CN\.md/);
 });
 
-test("the recovery plan keeps closed field work out and names the next executable slice", () => {
+test("the recovery plan keeps closed field work and completed slices out of the active backlog", () => {
 	assert.equal(fs.existsSync(path.join(root, "docs", "ui-redesign-plan.md")), false);
 	const recovery = read("docs/recovery-plan.md");
 	const headings = [
@@ -111,7 +111,6 @@ test("the recovery plan keeps closed field work out and names the next executabl
 		"## Parked: Historical Source Completeness",
 		"## Observation-Gated: Lifecycle And Cancellation",
 		"## Observation-Gated: Render Truth",
-		"## Next Executable Slice: Architecture",
 		"## Parked UI Redesign",
 		"## Delivery Gate"
 	];
@@ -119,12 +118,12 @@ test("the recovery plan keeps closed field work out and names the next executabl
 	for (const status of [
 		"PARTIALLY COMPLETE",
 		"OPEN WITH PARTIAL FOUNDATIONS",
-		"Status: ACTIVE — Slice 5d composition root.",
 		"PARKED",
 		"PROCESS RULES"
 	]) assert.match(recovery, new RegExp(escapeRegex(status)));
 	assert.doesNotMatch(recovery, /Priority 0: Field Observation|Priority 1: Message Deletion Dispatcher|ACTIVE DEBUG|bulk-delete observation pending/);
-	assert.match(recovery, /Slice 5d composition root/);
+	assert.match(recovery, /Slice 5d composition-root extraction is complete/);
+	assert.doesNotMatch(recovery, /## Next Executable Slice: Architecture|Status: ACTIVE — Slice 5d composition root/);
 	assert.match(read("docs/field-debugging-guide.md"), /^### Field Closure Record$/m);
 	assert.match(read("docs/field-debugging-guide.zh-CN.md"), /^### 现场关闭记录$/m);
 	assert.ok(recovery.split("\n").length <= 140, "recovery-plan keeps only the executable active backlog");

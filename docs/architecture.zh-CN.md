@@ -13,7 +13,7 @@
 - 发布验证：`npm run verify` 统一执行确定性构建、语法、发布契约和完整 Node 测试。
 - 显示策略：已挂载消息先尝试频道级 Flux `MESSAGE_UPDATE` 合并；整聊天区重建只作为确认后的回退，而不是每个结果的默认路径。
 
-相较 v0.3.38 基线，目前源码已经明显模块化，但 `src/legacy/runtime.js` 仍是组合根和生命周期补丁外壳。重构已经产生实际价值，但尚未结束；文件数量增加本身不代表架构完成。
+Slice 5d 组合根提取已经完成。`src/legacy/runtime.js` 继续作为旧插件门面和生命周期补丁外壳，保留 19 个明确清点、每项最多 8 行的延迟单例边界。该结论关闭的是有界提取计划，并不表示下方独立的渲染、生命周期或大模块债务已经完成。
 
 ## 分发契约
 
@@ -50,7 +50,7 @@ src/plugin/index.js
 | 输入框与菜单 | `src/ui/composer-wiring.js`、`src/ui/context-menu-wiring.js` | 频道发送拦截、输入框图标和手动操作 |
 | 设置结构与持久化接线 | `src/settings/plugin-defaults.js`、`src/settings/settings-store.js`、`src/settings/settings-store-wiring.js`、`src/ui/settings-panel.js` | 全局和频道设置只有一套结构归属；一个 BDFDB 适配器拥有既有持久化键 |
 | 翻译缓存与持久化接线 | `src/cache/translation-cache-store.js`、`src/cache/translation-cache-wiring.js` | 有界付费结果/付费跳过缓存；一个适配器拥有 BDFDB 键、托管防抖计时器和调用方策略/显示端口 |
-| 剩余组合职责 | `src/legacy/runtime.js` | 插件生命周期、BDFDB 补丁外壳和依赖接线；只能缩小，不能增长 |
+| 旧插件门面与组合职责 | `src/legacy/runtime.js` | 插件生命周期、BDFDB 补丁外壳、公共兼容门面和 19 个紧凑延迟单例边界；新的宿主依赖分发必须进入所属 wiring 模块 |
 
 ## 架构不变量
 
@@ -171,7 +171,7 @@ npm run verify
 
 ## 已知债务
 
-- `src/legacy/runtime.js` 仍是 3,260 行组合根。
+- `src/legacy/runtime.js` 仍是 3,260 行旧门面；后续缩减必须先建立独立职责契约，不能继续使用无边界的行数任务。
 - 整聊天区回退诊断 `R` 仍会重挂载或刷新输入框及其所在行。组合显示接线构建 `65a775c63d76dffa` 的 PTB 复验再次观察到这一既有行为；该问题已明确停放，留待后续渲染边界工作处理。
 - 供应商物理中止和生命周期任务注册表继续在 `recovery-plan.md` 中由证据触发；自动多页历史读取已在现场回退后暂停，Store 消息删除直接订阅已经完成现场确认。
 - Discord 内部 Store 和快照结构在客户端更新后需要重新观察。
