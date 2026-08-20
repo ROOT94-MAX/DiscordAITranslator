@@ -2178,7 +2178,7 @@ module.exports = (_ => {
 						if (!this.isHistoricalTranslationJobCurrent(job)) return resolve({status: "failed", reason: "stale_job"});
 						this.translateText(requestText, messageTypes.RECEIVED, (translation, input, output, meta = {}) => {
 						if (!this.isHistoricalTranslationJobCurrent(job)) return resolve({status: "failed", reason: "stale_job"});
-						if (!translation) return resolve({status: meta.skipped ? "skipped" : "failed", reason: meta.skipped ? "same_language" : "provider_failed"});
+						if (!translation) return resolve({status: meta.skipped ? "skipped" : "failed", reason: meta.skipped ? meta.reason || "same_language" : "provider_failed"});
 						const storedTranslation = this.createStoredReceivedTranslationData(prepared.message, job.channelId, prepared.originalContentData, prepared.signature, translation, input, output, true);
 						const rejectReason = storedTranslation && this.getAutoTranslatedResultRejectReason(storedTranslation, job.channelId);
 						if (!storedTranslation || rejectReason || this.isTranslationResultTooSimilar(storedTranslation)) return resolve({status: "skipped", reason: rejectReason || "too_similar"});

@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 15b1e18a1d04d3fb
+ * @buildId 0f5736827fe85656
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -5371,11 +5371,12 @@ var require_translation_pipeline = __commonJS({
                     }
                     plugin.applyStoredTranslationToMessage(message, storedTranslation, originalContentData), plugin.scheduleReceivedDisplayFlush(channelId, message.id, null, null, "manual"), plugin.persistTranslationCacheEntry(message.id, signature, storedTranslation);
                   } else if (meta && meta.skipped && options.auto) {
-                    plugin.persistReceivedSkipDecision(message.id, signature, "ai_skip_signal", allTextsToTranslate), plugin.commitReceivedDisplayResult(plugin.createReceivedDisplayCommitResult(message, channelId, {
+                    let skipReason = meta.reason || "ai_skip_signal";
+                    plugin.persistReceivedSkipDecision(message.id, signature, skipReason, allTextsToTranslate), plugin.commitReceivedDisplayResult(plugin.createReceivedDisplayCommitResult(message, channelId, {
                       sourceSignature: signature,
                       requestIdentity: liveRequest ? String(liveRequest.id) : null,
                       status: "skipped",
-                      reason: "ai_skip_signal"
+                      reason: skipReason
                     }), { refresh: !1 }).then((_) => finish(!0), (_) => finish(!0));
                     return;
                   } else if (options.auto && !translation && !(meta && meta.skipped)) {
@@ -5422,8 +5423,12 @@ var require_translation_pipeline = __commonJS({
           }, "complete");
           if (isSkip) return complete("", input, output, { skipped: !0 });
           if (translation && wrongTarget) return complete("", input, output, { failed: !0, wrongTargetLanguage: !0 });
-          complete(translation == text ? "" : translation, input, output, { failed: !translation });
-        }, "finishTranslation"), [newText, protectedSegments, translate] = plugin.removeExceptions(text.trim(), place), channelId = options.channelId || BDFDB.LibraryStores.SelectedChannelStore.getChannelId(), primaryEngineKey = plugin.getEffectivePrimaryEngine(channelId), backupEngineKey = plugin.getEffectiveBackupEngine(channelId), input = Object.assign({}, plugin.ensureSettingsStore().getLanguage(plugin.getLanguageChoice(languageTypes.INPUT, place, channelId))), output = forcedOutputLanguage ? Object.assign({}, plugin.ensureSettingsStore().getLanguage(forcedOutputLanguage) || { id: forcedOutputLanguage, name: forcedOutputLanguage }) : Object.assign({}, plugin.ensureSettingsStore().getLanguage(plugin.getLanguageChoice(languageTypes.OUTPUT, place, channelId)));
+          if (translation == text) return complete("", input, output, { skipped: !0, reason: plugin.isSameLanguageOrVariant(input && input.id, output && output.id) ? "same_language" : "too_similar" });
+          complete(translation, input, output, { failed: !translation });
+        }, "finishTranslation"), [newText, protectedSegments, translate] = plugin.removeExceptions(text.trim(), place), channelId = options.channelId || BDFDB.LibraryStores.SelectedChannelStore.getChannelId(), primaryEngineKey = plugin.getEffectivePrimaryEngine(channelId), backupEngineKey = plugin.getEffectiveBackupEngine(channelId), resolveLanguage = /* @__PURE__ */ __name((languageId) => {
+          let dynamicDiscordLanguage = String(languageId || "").toLowerCase() == "$discord", resolvedId = dynamicDiscordLanguage ? plugin.normalizeLanguageId(languageId) : languageId, language = Object.assign({}, plugin.ensureSettingsStore().getLanguage(resolvedId) || plugin.ensureSettingsStore().getLanguage(languageId) || { id: resolvedId || languageId, name: resolvedId || languageId });
+          return dynamicDiscordLanguage && (language.id = resolvedId, delete language.special), language;
+        }, "resolveLanguage"), input = resolveLanguage(plugin.getLanguageChoice(languageTypes.INPUT, place, channelId)), output = resolveLanguage(forcedOutputLanguage || plugin.getLanguageChoice(languageTypes.OUTPUT, place, channelId));
         if (translate && input.id != output.id) {
           let specialCase = plugin.checkForSpecialCase(newText, input);
           if (specialCase)
@@ -11858,7 +11863,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "15b1e18a1d04d3fb";
+            return "0f5736827fe85656";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13315,7 +13320,7 @@ __________________ __________________ __________________
                 if (!this.isHistoricalTranslationJobCurrent(job)) return resolve({ status: "failed", reason: "stale_job" });
                 this.translateText(requestText, messageTypes.RECEIVED, (translation, input, output, meta = {}) => {
                   if (!this.isHistoricalTranslationJobCurrent(job)) return resolve({ status: "failed", reason: "stale_job" });
-                  if (!translation) return resolve({ status: meta.skipped ? "skipped" : "failed", reason: meta.skipped ? "same_language" : "provider_failed" });
+                  if (!translation) return resolve({ status: meta.skipped ? "skipped" : "failed", reason: meta.skipped ? meta.reason || "same_language" : "provider_failed" });
                   let storedTranslation = this.createStoredReceivedTranslationData(prepared.message, job.channelId, prepared.originalContentData, prepared.signature, translation, input, output, !0), rejectReason = storedTranslation && this.getAutoTranslatedResultRejectReason(storedTranslation, job.channelId);
                   if (!storedTranslation || rejectReason || this.isTranslationResultTooSimilar(storedTranslation)) return resolve({ status: "skipped", reason: rejectReason || "too_similar" });
                   resolve({ status: "translated", translation: storedTranslation });

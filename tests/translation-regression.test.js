@@ -2358,6 +2358,53 @@ test("Discord English resolves as the effective target before received same-lang
 	assert.equal(plugin.shouldAutoTranslateReceivedMessage(message, channel, source, true), false, "English must not enter an English-target history job");
 });
 
+test("Discord English reaches the provider as concrete English instead of a special codec", async () => {
+	const plugin = createPluginInstance({
+		getLanguageChoice: (direction, place) => place == "received" && direction == "output" ? "$discord" : "auto",
+		bdfdb: {
+			LanguageUtils: {
+				languages: {
+					auto: {id: "auto", name: "Detect", auto: true},
+					en: {id: "en", name: "English"},
+					$discord: {id: "$discord", name: "Discord (English)", special: true}
+				},
+				getLanguage: () => ({id: "en"}),
+				LibraryStrings: {please_wait: "Please wait"}
+			}
+		}
+	});
+	let providerData = null;
+	plugin.googleApiTranslate = (data, callback) => {
+		providerData = data;
+		callback("Hello friend");
+	};
+
+	const outcome = await new Promise(resolve => plugin.translateText("Hola amigo", "received", (translation, input, output, meta) => resolve({translation, input, output, meta}), null, {channelId: "channel-discord-provider", trackBusy: false, showToast: false}));
+
+	assert.ok(providerData, "the dynamic Discord target must dispatch through the provider path");
+	assert.equal(providerData.output.id, "en");
+	assert.equal(providerData.output.special, undefined);
+	assert.equal(outcome.translation, "Hello friend");
+	assert.equal(outcome.output.id, "en");
+});
+
+test("a provider echo in the effective target language is a terminal skip, not a retryable failure", async () => {
+	const plugin = createPluginInstance({
+		getLanguageChoice: (direction, place) => place == "received" && direction == "output" ? "$discord" : "auto"
+	});
+	plugin.googleApiTranslate = (data, callback) => {
+		data.input.id = "en";
+		callback(data.text);
+	};
+
+	const outcome = await new Promise(resolve => plugin.translateText("hello there my friend", "received", (translation, input, output, meta) => resolve({translation, input, output, meta}), null, {channelId: "channel-echo-skip", trackBusy: false, showToast: false}));
+
+	assert.equal(outcome.translation, "");
+	assert.equal(outcome.input.id, "en");
+	assert.equal(outcome.output.id, "en");
+	assert.deepEqual(outcome.meta, {skipped: true, reason: "same_language"});
+});
+
 test("a failed historical message waits for explicit retry instead of re-entering every render", () => {
 	const plugin = createPluginInstance();
 	const channel = {id: "channel-failed-guard"};

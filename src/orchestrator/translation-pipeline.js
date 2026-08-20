@@ -151,12 +151,13 @@ function createTranslationPipeline({BDFDB, getPlugin, messageTypes, languageType
 								plugin.persistTranslationCacheEntry(message.id, signature, storedTranslation);
 							}
 							else if (meta && meta.skipped && options.auto) {
-								plugin.persistReceivedSkipDecision(message.id, signature, "ai_skip_signal", allTextsToTranslate);
+								const skipReason = meta.reason || "ai_skip_signal";
+								plugin.persistReceivedSkipDecision(message.id, signature, skipReason, allTextsToTranslate);
 								plugin.commitReceivedDisplayResult(plugin.createReceivedDisplayCommitResult(message, channelId, {
 									sourceSignature: signature,
 									requestIdentity: liveRequest ? String(liveRequest.id) : null,
 									status: "skipped",
-									reason: "ai_skip_signal"
+									reason: skipReason
 								}), {refresh: false}).then(_ => finish(true), _ => finish(true));
 								return;
 							}
@@ -218,17 +219,23 @@ function createTranslationPipeline({BDFDB, getPlugin, messageTypes, languageType
 			};
 			if (isSkip) return complete("", input, output, {skipped: true});
 			if (translation && wrongTarget) return complete("", input, output, {failed: true, wrongTargetLanguage: true});
-			complete(translation == text ? "" : translation, input, output, {failed: !translation});
+			if (translation == text) return complete("", input, output, {skipped: true, reason: plugin.isSameLanguageOrVariant(input && input.id, output && output.id) ? "same_language" : "too_similar"});
+			complete(translation, input, output, {failed: !translation});
 		};
 		// Bottom-layer protection is shared by AI and traditional engines: only protected placeholders are sent for mentions/emoji/links/code.
 		let [newText, protectedSegments, translate] = plugin.removeExceptions(text.trim(), place);
 		let channelId = options.channelId || BDFDB.LibraryStores.SelectedChannelStore.getChannelId();
 		const primaryEngineKey = plugin.getEffectivePrimaryEngine(channelId);
 		const backupEngineKey = plugin.getEffectiveBackupEngine(channelId);
-		let input = Object.assign({}, plugin.ensureSettingsStore().getLanguage(plugin.getLanguageChoice(languageTypes.INPUT, place, channelId)));
-		let output = forcedOutputLanguage ?
-			Object.assign({}, plugin.ensureSettingsStore().getLanguage(forcedOutputLanguage) || {id: forcedOutputLanguage, name: forcedOutputLanguage}) :
-			Object.assign({}, plugin.ensureSettingsStore().getLanguage(plugin.getLanguageChoice(languageTypes.OUTPUT, place, channelId)));
+		const resolveLanguage = languageId => {
+			const dynamicDiscordLanguage = String(languageId || "").toLowerCase() == "$discord";
+			const resolvedId = dynamicDiscordLanguage ? plugin.normalizeLanguageId(languageId) : languageId;
+			const language = Object.assign({}, plugin.ensureSettingsStore().getLanguage(resolvedId) || plugin.ensureSettingsStore().getLanguage(languageId) || {id: resolvedId || languageId, name: resolvedId || languageId});
+			if (dynamicDiscordLanguage) {language.id = resolvedId; delete language.special;}
+			return language;
+		};
+		let input = resolveLanguage(plugin.getLanguageChoice(languageTypes.INPUT, place, channelId));
+		let output = resolveLanguage(forcedOutputLanguage || plugin.getLanguageChoice(languageTypes.OUTPUT, place, channelId));
 		if (translate && input.id != output.id) {
 			let specialCase = plugin.checkForSpecialCase(newText, input);
 			if (specialCase) {

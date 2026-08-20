@@ -8,7 +8,7 @@ This document describes the current runtime boundaries and migration rules. User
 
 - Release line: v0.3.39.
 - Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
-- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased master build ID: `15b1e18a1d04d3fb`.
+- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased master build ID: `0f5736827fe85656`.
 - Legacy composition-root ratchet: 3,448 lines and two module-level shared declarators.
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
 - Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
@@ -126,7 +126,7 @@ Positioning uses the smallest valid native slow-mode/cooldown hint near the comp
 
 Provider contracts live in `providers.md`. Google Free is keyless, uses encoded query length for chunking, maps protected terms to reversible transport-safe tokens, and returns through the same strict placeholder validator as other providers. Exact duplicate provider errors are coalesced for 10 seconds; different failures remain visible.
 
-The `$discord` language sentinel resolves through `BDFDB.LanguageUtils.getLanguage().id` before signature, same-language, script-family, and result-validation comparisons. A failed historical snapshot stores that resolved configuration signature; ordinary stream rescans leave matching failures parked, while explicit retry bypasses the guard.
+The `$discord` language sentinel resolves through `BDFDB.LanguageUtils.getLanguage().id` before signature, same-language, script-family, provider-dispatch, and result-validation comparisons. A provider echo whose detected source matches that concrete target is a terminal same-language skip, not a failure. A failed historical snapshot stores the resolved configuration signature; ordinary stream rescans leave matching failures parked, while explicit retry bypasses the guard.
 
 Persistent responsibilities are separated:
 
