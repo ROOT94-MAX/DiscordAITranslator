@@ -49,17 +49,9 @@ Close this item after one PTB bulk-delete observation confirms the second real e
 
 ## Priority 2: Historical Source Completeness
 
-**Status: OPEN.** `historical-message-source.js` currently performs at most one `prefetchMessages` call for the initially missing quantity. Ineligible, duplicate, or off-channel records returned by that call can still leave the eligible target underfilled.
-The historical source must keep paging until it reaches the configured number of **eligible unique** messages, receives an explicit exhaustion signal, or reaches a documented page/request ceiling.
+**Status: PARKED AFTER FIELD ROLLBACK.** User-driven upward scrolling already loads and batch-translates older messages. Commit `8a3876b` changed only the initial background path from one bounded prefetch to as many as eight requests in an attempt to fill the configured eligible target; field testing reported many errors, so revert `e064fcd` restored the one-request behavior and installed build `d8af59cf7ce43f9c`.
 
-Required behavior:
-
-- Off-channel, duplicate, already-owned, or ineligible records do not consume the eligible target.
-- Prefetch failure and true exhaustion remain distinguishable from successful completion.
-- An underfilled target never auto-hides as a successful full batch.
-- Channel generation changes cancel collection without blocking live work.
-
-Add source-level pagination tests before changing the Discord history adapter.
+Do not reintroduce automatic multi-page history fetching from this backlog item. Reopen only with a concrete user-visible underfill reproduction, captured fetch/store response shapes, and a design that proves additional background requests will not destabilize scrolling, batching, capsule accounting, or rendering. The working user-scroll translation path is a separate flow and is not evidence for this issue.
 
 ## Priority 3: Lifecycle And Cancellation
 

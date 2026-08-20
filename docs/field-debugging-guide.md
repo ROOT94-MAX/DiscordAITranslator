@@ -170,6 +170,7 @@ This section preserves the order in which the failures were reported and correct
 - Per-message history sealing or capsule repaint: violates batch presentation and multiplies remounts.
 - Counter ownership at scheduler output: misses direct historical/manual/store commits.
 - Configured history limit as capsule denominator: capacity is not discovered work.
+- Automatic multi-page Discord history fetching to fill the configured eligible target (`8a3876b`): upward-scroll translation already worked, and field testing of the extra background requests reported many errors. Revert `e064fcd` restored one initial prefetch and installed build `d8af59cf7ce43f9c`; do not retry without captured fetch/store evidence and a viewport-safe design.
 - Snapshot identity properties: Discord normalization strips unknown fields.
 - Relaxing protected-placeholder validation: silently accepts damaged translations.
 - Reusing a manual-message anchor for channel lifecycle repaint: can strand virtualized history at newest.
@@ -185,7 +186,7 @@ This section preserves the order in which the failures were reported and correct
 5. The history-preserving auto-enable correction has regression coverage but still needs a focused PTB repeat at an old date; capsule cumulative behavior and native-hint alignment should also be rechecked after Discord UI changes.
 6. Slice 5d is not finished: `src/legacy/runtime.js` is still a 3,476-line composition root with two module-level shared declarators. Continue ownership extraction only behind contract tests; do not call the refactor complete merely because many modules exist.
 7. Oversized modules and generated-bundle size remain architecture debt. Split by ownership after contracts exist; do not split merely to reduce a line count.
-8. History source completeness, provider cancellation, and lifecycle task cleanup remain open in `recovery-plan.md`; message-delete subscription is implemented locally and remains there only for PTB closure.
+8. Automatic multi-page history fetching is parked after field rollback. Provider cancellation and lifecycle task cleanup remain open; message-delete subscription remains only for bulk-delete PTB closure.
 
 ## Regression and Evidence Map
 

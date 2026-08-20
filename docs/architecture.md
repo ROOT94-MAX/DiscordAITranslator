@@ -161,7 +161,7 @@ npm run verify
 
 - `src/legacy/runtime.js` remains a 3,476-line composition root.
 - Whole-chat fallback diagnostics (`R`) can still correspond to occasional composer flicker.
-- History-source completeness, provider abort support, and lifecycle task registry cleanup remain open in `recovery-plan.md`; the direct Store message-delete subscription is implemented locally and awaits PTB event-shape observation.
+- Provider abort support and lifecycle task registry cleanup remain open in `recovery-plan.md`; automatic multi-page history fetching is parked after field rollback, while direct Store message-delete subscription awaits only its bulk-delete observation.
 - Discord internal store and snapshot shapes require re-observation after client updates.
 - Some modules remain large and should split only when ownership contracts and regression tests exist.
 
