@@ -115,7 +115,7 @@ module.exports = (_ => {
 			getChannelEnablementStateValue,
 			channelEnablementStatesEqual
 		} = require("../settings/settings-store");
-		const {createPluginSettingsStore} = require("../settings/settings-store-wiring");
+		const {createPluginSettingsStore, resolveConcreteDiscordLanguageId} = require("../settings/settings-store-wiring");
 		const {getGeneralSettingLabels, getLabelsForUiLanguage} = require("../i18n/labels");
 		const {getCustomTextValue} = require("../i18n/text");
 		var _this;
@@ -137,7 +137,7 @@ module.exports = (_ => {
 		const DISCORD_EPOCH = 1420070400000;
 		const defaultLanguages = {
 			INPUT: "auto",
-			OUTPUT: "$discord"
+			OUTPUT: resolveConcreteDiscordLanguageId(BDFDB, translationEngines)
 		};
 		const languageTypes = {
 			INPUT: "input",

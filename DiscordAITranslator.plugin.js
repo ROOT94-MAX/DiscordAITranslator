@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 0f5736827fe85656
+ * @buildId 662eda15be5567e6
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -9927,9 +9927,31 @@ var require_settings_store = __commonJS({
       // The global fallback lives in the plugin settings, not in this store.
       loadGlobalLanguageChoice = /* @__PURE__ */ __name(() => null, "loadGlobalLanguageChoice"),
       persistGlobalLanguageChoice = /* @__PURE__ */ __name(() => {
-      }, "persistGlobalLanguageChoice")
+      }, "persistGlobalLanguageChoice"),
+      // `$discord` used to mean "follow the current client locale". It is no longer a
+      // selectable output because changing the client language could silently change a
+      // channel's translation target. The adapter resolves old stored values once so the
+      // store can persist a normal, stable language id without knowing about BDFDB.
+      resolveLegacyDiscordLanguage = /* @__PURE__ */ __name(() => "en", "resolveLegacyDiscordLanguage")
     } = {}) {
       let languages = {}, favorites = [], authKeys = {}, channelLanguages = {}, guildLanguages = {}, channelPrimaryEngineOverrides = {}, translationEnabledStates = createEmptyChannelEnablementState(!1);
+      function isLegacyDiscordLanguageChoice(choice) {
+        return typeof choice == "string" && choice.toLowerCase() == "$discord";
+      }
+      __name(isLegacyDiscordLanguageChoice, "isLegacyDiscordLanguageChoice");
+      function migrateScopedDiscordOutputChoices(scopes, concreteLanguageId) {
+        let changed = !1;
+        for (let scopeId in scopes) {
+          let scope = scopes[scopeId];
+          if (isRecord(scope))
+            for (let place in scope) {
+              let choices = scope[place];
+              !isRecord(choices) || !isLegacyDiscordLanguageChoice(choices[LANGUAGE_DIRECTIONS.OUTPUT]) || (choices[LANGUAGE_DIRECTIONS.OUTPUT] = concreteLanguageId, changed = !0);
+            }
+        }
+        return changed;
+      }
+      __name(migrateScopedDiscordOutputChoices, "migrateScopedDiscordOutputChoices");
       function getChannelLanguageScope(channelId, place) {
         let record = channelLanguages[channelId];
         return record && record[place] || null;
@@ -9996,7 +10018,9 @@ var require_settings_store = __commonJS({
         // The single writer. The caller builds the table because that needs BDFDB and
         // the engine catalogue; the store stamps the favourite flags and orders it.
         setLanguages(builtLanguages) {
-          let table = isRecord(builtLanguages) ? builtLanguages : {};
+          let table = {};
+          if (isRecord(builtLanguages)) for (let languageId in builtLanguages)
+            isLegacyDiscordLanguageChoice(languageId) || (table[languageId] = builtLanguages[languageId]);
           for (let languageId in table) isRecord(table[languageId]) && (table[languageId].fav = favorites.includes(languageId) ? 0 : 1);
           return languages = sortLanguages(table) || table, languages;
         },
@@ -10157,6 +10181,9 @@ var require_settings_store = __commonJS({
           channelLanguages = isRecord(storedChannelLanguages) ? storedChannelLanguages : channelLanguages;
           let storedGuildLanguages = loadGuildLanguages();
           guildLanguages = isRecord(storedGuildLanguages) ? storedGuildLanguages : guildLanguages;
+          let resolvedLegacyLanguage = resolveLegacyDiscordLanguage(), concreteLegacyLanguage = typeof resolvedLegacyLanguage == "string" && resolvedLegacyLanguage && !isLegacyDiscordLanguageChoice(resolvedLegacyLanguage) ? resolvedLegacyLanguage : "en";
+          migrateScopedDiscordOutputChoices(channelLanguages, concreteLegacyLanguage) && persistChannelLanguages(channelLanguages), migrateScopedDiscordOutputChoices(guildLanguages, concreteLegacyLanguage) && persistGuildLanguages(guildLanguages);
+          for (let place of ["received", "sent"]) isLegacyDiscordLanguageChoice(loadGlobalLanguageChoice(place, LANGUAGE_DIRECTIONS.OUTPUT)) && persistGlobalLanguageChoice(place, LANGUAGE_DIRECTIONS.OUTPUT, concreteLegacyLanguage);
           let storedOverrides = loadChannelPrimaryEngineOverrides();
           channelPrimaryEngineOverrides = isRecord(storedOverrides) ? normalizeStoredChannelPrimaryEngineOverrides(storedOverrides) : channelPrimaryEngineOverrides;
           let storedPrimaryState = loadTranslationEnabledStates(), storedSecondaryState = loadReceivedAutoTranslationEnabledStates();
@@ -10184,6 +10211,17 @@ var require_settings_store = __commonJS({
 var require_settings_store_wiring = __commonJS({
   "src/settings/settings-store-wiring.js"(exports2, module2) {
     var { createSettingsStore } = require_settings_store();
+    function resolveConcreteDiscordLanguageId(BDFDB, translationEngines) {
+      let currentLanguageId = "";
+      try {
+        let currentLanguage = BDFDB && BDFDB.LanguageUtils && BDFDB.LanguageUtils.getLanguage && BDFDB.LanguageUtils.getLanguage();
+        currentLanguageId = currentLanguage && currentLanguage.id || "";
+      } catch {
+      }
+      let supportedLanguageIds = [...new Set(Object.values(translationEngines || {}).reduce((ids, engine) => ids.concat(engine && engine.languages || []), []))], exactMatch = supportedLanguageIds.find((languageId) => languageId == currentLanguageId), caseInsensitiveMatch = supportedLanguageIds.find((languageId) => String(languageId).toLowerCase() == String(currentLanguageId).toLowerCase());
+      return exactMatch || caseInsensitiveMatch || (supportedLanguageIds.includes("en") ? "en" : supportedLanguageIds[0]) || "en";
+    }
+    __name(resolveConcreteDiscordLanguageId, "resolveConcreteDiscordLanguageId");
     function createPluginSettingsStore({
       plugin,
       BDFDB,
@@ -10215,11 +10253,12 @@ var require_settings_store_wiring = __commonJS({
         loadGlobalLanguageChoice: /* @__PURE__ */ __name((place, direction) => plugin.settings.choices[place] && plugin.settings.choices[place][direction], "loadGlobalLanguageChoice"),
         persistGlobalLanguageChoice: /* @__PURE__ */ __name((place, direction, choice) => {
           plugin.settings.choices[place][direction] = choice, BDFDB.DataUtils.save(plugin.settings.choices, plugin, "choices");
-        }, "persistGlobalLanguageChoice")
+        }, "persistGlobalLanguageChoice"),
+        resolveLegacyDiscordLanguage: /* @__PURE__ */ __name(() => resolveConcreteDiscordLanguageId(BDFDB, translationEngines), "resolveLegacyDiscordLanguage")
       });
     }
     __name(createPluginSettingsStore, "createPluginSettingsStore");
-    module2.exports = { createPluginSettingsStore };
+    module2.exports = { createPluginSettingsStore, resolveConcreteDiscordLanguageId };
   }
 });
 
@@ -11834,7 +11873,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
           loadChannelEnablementState,
           getChannelEnablementStateValue,
           channelEnablementStatesEqual
-        } = require_settings_store(), { createPluginSettingsStore } = require_settings_store_wiring(), { getGeneralSettingLabels, getLabelsForUiLanguage } = require_labels(), { getCustomTextValue } = require_text();
+        } = require_settings_store(), { createPluginSettingsStore, resolveConcreteDiscordLanguageId } = require_settings_store_wiring(), { getGeneralSettingLabels, getLabelsForUiLanguage } = require_labels(), { getCustomTextValue } = require_text();
         var _this;
         let translationProtectionSignatureVersion = TRANSLATION_PROTECTION_SIGNATURE_VERSION, { TranslateButtonComponent } = createTranslateComponents({
           BDFDB,
@@ -11848,7 +11887,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         var pluginRuntimeActive = !0;
         let DEFAULT_LOADED_AUTO_TRANSLATE_LIMIT = 50, LOADED_AUTO_TRANSLATE_LIMIT_MIN = 1, LOADED_AUTO_TRANSLATE_LIMIT_MAX = 100, DISCORD_EPOCH = 14200704e5, defaultLanguages = {
           INPUT: "auto",
-          OUTPUT: "$discord"
+          OUTPUT: resolveConcreteDiscordLanguageId(BDFDB, translationEngines)
         }, languageTypes = {
           INPUT: "input",
           OUTPUT: "output"
@@ -11863,7 +11902,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "0f5736827fe85656";
+            return "662eda15be5567e6";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);

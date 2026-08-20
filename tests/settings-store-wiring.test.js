@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {createPluginSettingsStore} = require("../src/settings/settings-store-wiring");
+const {createPluginSettingsStore, resolveConcreteDiscordLanguageId} = require("../src/settings/settings-store-wiring");
 
 function createFixture() {
 	const loads = [];
@@ -77,6 +77,7 @@ test("plugin settings wiring creates the store with the complete dependency cont
 		"persistFavorites",
 		"persistGlobalLanguageChoice",
 		"persistGuildLanguages",
+		"resolveLegacyDiscordLanguage",
 		"resolveGuildId",
 		"sortLanguages"
 	].sort());
@@ -87,6 +88,7 @@ test("plugin settings wiring creates the store with the complete dependency cont
 	assert.equal(fixture.dependencies.resolveGuildId("guild-channel"), "guild-1");
 	assert.equal(fixture.dependencies.resolveGuildId("dm-channel"), "@me");
 	assert.equal(fixture.dependencies.resolveGuildId("missing"), null);
+	assert.equal(fixture.dependencies.resolveLegacyDiscordLanguage(), "en");
 });
 
 test("plugin settings wiring keeps every persisted record on its established BDFDB key", () => {
@@ -137,4 +139,11 @@ test("global language choices remain owned by plugin settings and persist as one
 		owner: fixture.plugin,
 		key: "choices"
 	}]);
+});
+
+test("the retired Discord alias resolves to a provider-supported concrete locale", () => {
+	const engines = {googleapi: {languages: ["en", "zh-CN", "fr"]}};
+	assert.equal(resolveConcreteDiscordLanguageId({LanguageUtils: {getLanguage: () => ({id: "zh-cn"})}}, engines), "zh-CN");
+	assert.equal(resolveConcreteDiscordLanguageId({LanguageUtils: {getLanguage: () => ({id: "unsupported"})}}, engines), "en");
+	assert.equal(resolveConcreteDiscordLanguageId(null, {}), "en");
 });

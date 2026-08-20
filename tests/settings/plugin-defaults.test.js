@@ -10,7 +10,7 @@ const {createPluginDefaults, MODULE_PATCHES} = require("../../src/settings/plugi
 const FIXTURE = {
 	messageTypes: {RECEIVED: "received", SENT: "sent"},
 	languageTypes: {INPUT: "input", OUTPUT: "output"},
-	defaultLanguages: {INPUT: "auto", OUTPUT: "$discord"}
+	defaultLanguages: {INPUT: "auto", OUTPUT: "zh-CN"}
 };
 
 test("the defaults schema keeps its sections and the load-bearing values", () => {
@@ -28,8 +28,8 @@ test("the defaults schema keeps its sections and the load-bearing values", () =>
 
 test("the language choices are built for both message types from the defaults", () => {
 	const defaults = createPluginDefaults(FIXTURE);
-	assert.deepEqual(defaults.choices.received.value, {input: "auto", output: "$discord"});
-	assert.deepEqual(defaults.choices.sent.value, {input: "auto", output: "$discord"});
+	assert.deepEqual(defaults.choices.received.value, {input: "auto", output: "zh-CN"});
+	assert.deepEqual(defaults.choices.sent.value, {input: "auto", output: "zh-CN"});
 });
 
 test("the module patch lists name every hooked surface exactly", () => {

@@ -126,7 +126,7 @@ Positioning uses the smallest valid native slow-mode/cooldown hint near the comp
 
 Provider contracts live in `providers.md`. Google Free is keyless, uses encoded query length for chunking, maps protected terms to reversible transport-safe tokens, and returns through the same strict placeholder validator as other providers. Exact duplicate provider errors are coalesced for 10 seconds; different failures remain visible.
 
-The `$discord` language sentinel resolves through `BDFDB.LanguageUtils.getLanguage().id` before signature, same-language, script-family, provider-dispatch, and result-validation comparisons. A provider echo whose detected source matches that concrete target is a terminal same-language skip, not a failure. A failed historical snapshot stores the resolved configuration signature; ordinary stream rescans leave matching failures parked, while explicit retry bypasses the guard.
+The retired `$discord` language sentinel remains readable only as a migration/compatibility input. Settings reload resolves it through `BDFDB.LanguageUtils.getLanguage().id`, persists that concrete id at global/server/channel output scope, and the selectable language table drops the alias key. The downstream normalizer still resolves an in-memory legacy value defensively before signature, same-language, script-family, provider-dispatch, and result-validation comparisons. A provider echo whose detected source matches that concrete target is a terminal same-language skip, not a failure. A failed historical snapshot stores the resolved configuration signature; ordinary stream rescans leave matching failures parked, while explicit retry bypasses the guard.
 
 Persistent responsibilities are separated:
 

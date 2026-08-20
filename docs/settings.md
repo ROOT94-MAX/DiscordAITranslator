@@ -71,3 +71,4 @@ Stored legacy values that attempted to hide either button are ignored.
 3. Do not convert inherited enabled channels into explicit enabled records.
 4. Keep right-click changes channel-scoped.
 5. Clear the affected channel's pending automatic work and restore all of its displayed received-message translations when disabled.
+6. Retire `$discord` from both output-language selectors. On first load, replace any stored received or sent output alias at global, server, or channel scope with the client's current concrete language and persist that explicit choice.

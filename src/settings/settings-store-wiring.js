@@ -1,5 +1,18 @@
 const {createSettingsStore} = require("./settings-store");
 
+function resolveConcreteDiscordLanguageId(BDFDB, translationEngines) {
+	let currentLanguageId = "";
+	try {
+		const currentLanguage = BDFDB && BDFDB.LanguageUtils && BDFDB.LanguageUtils.getLanguage && BDFDB.LanguageUtils.getLanguage();
+		currentLanguageId = currentLanguage && currentLanguage.id || "";
+	}
+	catch (error) {}
+	const supportedLanguageIds = [...new Set(Object.values(translationEngines || {}).reduce((ids, engine) => ids.concat(engine && engine.languages || []), []))];
+	const exactMatch = supportedLanguageIds.find(languageId => languageId == currentLanguageId);
+	const caseInsensitiveMatch = supportedLanguageIds.find(languageId => String(languageId).toLowerCase() == String(currentLanguageId).toLowerCase());
+	return exactMatch || caseInsensitiveMatch || (supportedLanguageIds.includes("en") ? "en" : supportedLanguageIds[0]) || "en";
+}
+
 // Owns the plugin/BDFDB adapter for the settings store. The store itself knows
 // persistence semantics but deliberately knows nothing about BetterDiscord; this
 // wiring is the one place that maps its records to the established profile keys.
@@ -36,8 +49,9 @@ function createPluginSettingsStore({
 		persistGlobalLanguageChoice: (place, direction, choice) => {
 			plugin.settings.choices[place][direction] = choice;
 			BDFDB.DataUtils.save(plugin.settings.choices, plugin, "choices");
-		}
+		},
+		resolveLegacyDiscordLanguage: () => resolveConcreteDiscordLanguageId(BDFDB, translationEngines)
 	});
 }
 
-module.exports = {createPluginSettingsStore};
+module.exports = {createPluginSettingsStore, resolveConcreteDiscordLanguageId};

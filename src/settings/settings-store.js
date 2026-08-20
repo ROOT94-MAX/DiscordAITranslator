@@ -131,7 +131,12 @@ function createSettingsStore({
 	persistChannelEnablementState = () => {},
 	// The global fallback lives in the plugin settings, not in this store.
 	loadGlobalLanguageChoice = () => null,
-	persistGlobalLanguageChoice = () => {}
+	persistGlobalLanguageChoice = () => {},
+	// `$discord` used to mean "follow the current client locale". It is no longer a
+	// selectable output because changing the client language could silently change a
+	// channel's translation target. The adapter resolves old stored values once so the
+	// store can persist a normal, stable language id without knowing about BDFDB.
+	resolveLegacyDiscordLanguage = () => "en"
 } = {}) {
 	let languages = {};
 	let favorites = [];
@@ -140,6 +145,25 @@ function createSettingsStore({
 	let guildLanguages = {};
 	let channelPrimaryEngineOverrides = {};
 	let translationEnabledStates = createEmptyChannelEnablementState(false);
+
+	function isLegacyDiscordLanguageChoice(choice) {
+		return typeof choice == "string" && choice.toLowerCase() == "$discord";
+	}
+
+	function migrateScopedDiscordOutputChoices(scopes, concreteLanguageId) {
+		let changed = false;
+		for (const scopeId in scopes) {
+			const scope = scopes[scopeId];
+			if (!isRecord(scope)) continue;
+			for (const place in scope) {
+				const choices = scope[place];
+				if (!isRecord(choices) || !isLegacyDiscordLanguageChoice(choices[LANGUAGE_DIRECTIONS.OUTPUT])) continue;
+				choices[LANGUAGE_DIRECTIONS.OUTPUT] = concreteLanguageId;
+				changed = true;
+			}
+		}
+		return changed;
+	}
 
 	function getChannelLanguageScope(channelId, place) {
 		const record = channelLanguages[channelId];
@@ -229,7 +253,14 @@ function createSettingsStore({
 		// The single writer. The caller builds the table because that needs BDFDB and
 		// the engine catalogue; the store stamps the favourite flags and orders it.
 		setLanguages(builtLanguages) {
-			const table = isRecord(builtLanguages) ? builtLanguages : {};
+			const table = {};
+			if (isRecord(builtLanguages)) for (const languageId in builtLanguages) {
+				// BDFDB contributes this alias to its language table under a special key,
+				// while the record itself carries the concrete locale id. Keeping the normal
+				// locale entry gives users the same language without the moving target.
+				if (isLegacyDiscordLanguageChoice(languageId)) continue;
+				table[languageId] = builtLanguages[languageId];
+			}
 			for (const languageId in table) if (isRecord(table[languageId])) table[languageId].fav = favorites.includes(languageId) ? 0 : 1;
 			languages = sortLanguages(table) || table;
 			return languages;
@@ -459,6 +490,11 @@ function createSettingsStore({
 			channelLanguages = isRecord(storedChannelLanguages) ? storedChannelLanguages : channelLanguages;
 			const storedGuildLanguages = loadGuildLanguages();
 			guildLanguages = isRecord(storedGuildLanguages) ? storedGuildLanguages : guildLanguages;
+			const resolvedLegacyLanguage = resolveLegacyDiscordLanguage();
+			const concreteLegacyLanguage = typeof resolvedLegacyLanguage == "string" && resolvedLegacyLanguage && !isLegacyDiscordLanguageChoice(resolvedLegacyLanguage) ? resolvedLegacyLanguage : "en";
+			if (migrateScopedDiscordOutputChoices(channelLanguages, concreteLegacyLanguage)) persistChannelLanguages(channelLanguages);
+			if (migrateScopedDiscordOutputChoices(guildLanguages, concreteLegacyLanguage)) persistGuildLanguages(guildLanguages);
+			for (const place of ["received", "sent"]) if (isLegacyDiscordLanguageChoice(loadGlobalLanguageChoice(place, LANGUAGE_DIRECTIONS.OUTPUT))) persistGlobalLanguageChoice(place, LANGUAGE_DIRECTIONS.OUTPUT, concreteLegacyLanguage);
 			const storedOverrides = loadChannelPrimaryEngineOverrides();
 			channelPrimaryEngineOverrides = isRecord(storedOverrides) ? normalizeStoredChannelPrimaryEngineOverrides(storedOverrides) : channelPrimaryEngineOverrides;
 

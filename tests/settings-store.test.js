@@ -77,7 +77,8 @@ function createHarness(options = {}) {
 			choices[place] = Object.assign({}, choices[place]);
 			choices[place][direction] = choice;
 			record("choices", choices);
-		}
+		},
+		resolveLegacyDiscordLanguage: options.resolveLegacyDiscordLanguage || (() => "zh-CN")
 	});
 
 	if (options.languages !== null) store.setLanguages(options.languages || createLanguageTable());
@@ -113,6 +114,18 @@ test("setLanguages survives a table entry that is not a language record", () => 
 
 	assert.equal(store.getLanguage("en").fav, 1);
 	assert.equal(store.getLanguage("broken"), null);
+});
+
+test("the retired Discord language alias is not exposed as a selectable language", () => {
+	const {store} = createHarness({languages: null});
+
+	store.setLanguages(Object.assign(createLanguageTable(), {
+		$discord: {id: "zh-CN", name: "Discord (Chinese (China))"}
+	}));
+
+	assert.equal(store.getLanguage("$discord"), null);
+	assert.equal(store.getLanguage("zh-CN").id, "zh-CN");
+	assert.equal(store.getLanguageIds().includes("$discord"), false);
 });
 
 test("language lookups answer from the current table", () => {
@@ -274,6 +287,43 @@ test("the output direction never resolves to auto", () => {
 
 	assert.equal(store.getLanguageChoice(INPUT, RECEIVED, "channel-1"), "auto");
 	assert.equal(store.getLanguageChoice(OUTPUT, RECEIVED, "channel-1"), "en");
+});
+
+test("reload migrates every legacy Discord output choice to the current concrete language", () => {
+	const {store, persisted, keysWritten} = createHarness({
+		guildsByChannel: {"channel-1": "guild-1"},
+		persisted: {
+			choices: {
+				received: {input: "auto", output: "$discord"},
+				sent: {input: "auto", output: "$discord"}
+			},
+			channelLanguages: {
+				"channel-1": {
+					received: {input: "auto", output: "$discord"},
+					sent: {input: "auto", output: "$discord"}
+				}
+			},
+			guildLanguages: {
+				"guild-1": {
+					received: {input: "auto", output: "$discord"},
+					sent: {input: "auto", output: "$discord"}
+				}
+			}
+		},
+		resolveLegacyDiscordLanguage: () => "zh-CN"
+	});
+
+	store.reload();
+
+	assert.equal(persisted.choices.received.output, "zh-CN");
+	assert.equal(persisted.choices.sent.output, "zh-CN");
+	assert.equal(persisted.channelLanguages["channel-1"].received.output, "zh-CN");
+	assert.equal(persisted.channelLanguages["channel-1"].sent.output, "zh-CN");
+	assert.equal(persisted.guildLanguages["guild-1"].received.output, "zh-CN");
+	assert.equal(persisted.guildLanguages["guild-1"].sent.output, "zh-CN");
+	assert.equal(store.getLanguageChoice(OUTPUT, RECEIVED, "channel-1"), "zh-CN");
+	assert.equal(store.getLanguageChoice(OUTPUT, SENT, "channel-1"), "zh-CN");
+	assert.deepEqual(keysWritten(), ["channelLanguages", "guildLanguages", "choices", "choices"]);
 });
 
 test("saving a choice writes into the narrowest scope that already exists", () => {
