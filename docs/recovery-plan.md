@@ -56,6 +56,8 @@ The unresolved product decision is whether reply previews should carry the same 
 **Status: ACTIVE — Slice 5d composition root.** The retired atomic rebuild cleanup is complete, but the composition root and oversized ownership boundaries remain. The first resumed cut moves plugin/BDFDB settings persistence wiring into `settings-store-wiring.js`; the legacy runtime retains only the lazy singleton boundary and its ratchet drops from 3,476 to 3,448 lines without changing settings behavior.
 Continue bottom-up ownership extraction; do not replace the composition root in one rewrite.
 
+The first-cut PTB smoke exposed a configuration-transition display bug: a translation painted under the previous target language could lose its restore proof, become the next captured source, and amplify historical repaint work. The local correction retains displaced paint only as restore evidence, restores the immutable source through both render paths, and admits one replacement decision. Repeat the English-target/old-Chinese-cache scroll scenario before merging this cut or selecting the next wiring owner.
+
 - `src/legacy/runtime.js` remains the lifecycle/patch composition root and may only shrink.
 - Move wiring into a composition module when one responsibility can leave with contract tests and no new shared state.
 - Split oversized provider, settings, label, style, and display modules by ownership rather than arbitrary line count.

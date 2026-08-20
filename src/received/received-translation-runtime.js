@@ -325,7 +325,7 @@ function createReceivedTranslationRuntime({
 			// until a render pass swaps the original back. restoredTranslation is what lets
 			// this pass tell that paint from a real edit - without it, the cancel itself was
 			// captured as a source change and the original never came back.
-			const translation = record && (record.status == "translated" && record.translation || record.status == "cancelled" && record.restoredTranslation);
+			const translation = record && (record.status == "translated" && record.translation || record.restoredTranslation);
 			if (!translation || !record.source || !record.source.content) return null;
 			// A forward's paint lands in the snapshot, not in message.content; the echo
 			// check must read the same body the extraction reads, or every stream pass
@@ -433,11 +433,10 @@ function createReceivedTranslationRuntime({
 				plugin.paintStreamBody(stream, plugin.getStreamBodyContent(archive && archive.message));
 				messageChanged = true;
 			}
-			// The automatic path's untranslate: the record is cancelled, the message still
-			// carries the painted translation, and there is no archive to consume. The
-			// restoredTranslation is the proof the paint is ours; the record's source is
-			// the original to put back.
-			else if (storeView && storeView.status == "cancelled" && storeView.restoredTranslation && storeView.content
+			// Automatic untranslate and configuration changes can both leave an old paint
+			// on the message after its active translation was retired. restoredTranslation
+			// proves that paint is ours; the record's source is the original to put back.
+			else if (storeView && storeView.status != "translated" && storeView.restoredTranslation && storeView.content
 				&& plugin.getStreamBodyContent(stream.content) !== storeView.content
 				&& receivedTranslationRuntime.matchesPaintedTranslation(plugin, plugin.getStreamBodyContent(stream.content), storeView.restoredTranslation, stream.content)) {
 				plugin.paintStreamBody(stream, storeView.content);

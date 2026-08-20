@@ -364,6 +364,13 @@ function createMessageStateStore({journal = null, onTranslationDisplayed = () =>
 				&& current.origin === MESSAGE_ORIGINS.MANUAL
 				&& current.status === MESSAGE_STATUSES.TRANSLATED
 				&& !current.sourceSignature);
+			// A signature change can be configuration-only (for example Chinese target to
+			// English target) while Discord's row still carries the old painted translation.
+			// Retain proof of that displaced paint until a render restores the immutable
+			// source; otherwise the next pass captures our old translation as a new source.
+			const restoredTranslation = current && current.status === MESSAGE_STATUSES.TRANSLATED && current.translation
+				? current.translation
+				: current && current.restoredTranslation || null;
 			// A changed source resets the translation lifecycle but keeps the projections that
 			// carry their own validity rule: suppression is standing user intent, the archive is
 			// the only way back to the original, and the preview is checked against a signature
@@ -377,6 +384,7 @@ function createMessageStateStore({journal = null, onTranslationDisplayed = () =>
 				previewPending: current ? current.previewPending : null,
 				status: keepsManualTranslation ? current.status : MESSAGE_STATUSES.IDLE,
 				translation: keepsManualTranslation ? current.translation : null,
+				restoredTranslation,
 				origin: keepsManualTranslation ? current.origin : null,
 				manualOptions: keepsManualTranslation ? current.manualOptions : null,
 				generation: snapshot.generation,

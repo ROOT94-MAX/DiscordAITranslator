@@ -389,6 +389,25 @@ test("prepareMessageContentDisplay restores a cancelled automatic forward throug
 	assert.equal(originalEntry.message.content, "转发译文", "restoration clones instead of mutating Discord's record");
 });
 
+test("prepareMessageContentDisplay restores a configuration-retired paint from an idle record", () => {
+	const logic = createLogic();
+	const plugin = createFakePlugin({
+		matchesPaintedTranslationContent: (painted, translation) => painted === translation.content
+	});
+	plugin.display.displayStates.set("m1", {
+		status: "idle",
+		source: {content: "Original English"},
+		restoredTranslation: {content: "旧中文译文"}
+	});
+	const e = {instance: {props: {message: {id: "m1", channel_id: "c1", content: "旧中文译文"}}}};
+
+	const state = logic.prepareMessageContentDisplay(plugin, e);
+
+	assert.equal(state.translation, null);
+	assert.equal(state.message.content, "Original English");
+	assert.equal(e.instance.props.message.content, "Original English");
+});
+
 test("prepareMessageContentDisplay leaves the archive alone while a translation is displayed", () => {
 	const logic = createLogic();
 	const plugin = createFakePlugin();

@@ -8,7 +8,7 @@ This document describes the current runtime boundaries and migration rules. User
 
 - Release line: v0.3.39.
 - Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
-- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased master build ID: `2c78bb06791a813c`.
+- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased master build ID: `73996dd4d6d711f0`.
 - Legacy composition-root ratchet: 3,448 lines and two module-level shared declarators.
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
 - Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
@@ -140,6 +140,8 @@ Runtime queues, display state, viewport state, counters, probes, and generations
 Disabling a channel advances its generation, cancels pending automatic work, restores automatic and manual message/preview/embed/title display for that channel, and starts one channel-scoped display transaction. Manual translation remains available afterward. A late result from an older generation cannot repaint the channel.
 
 Stopping applies the same restoration to every channel before patches and managed tasks are released. The cache owner flushes one pending debounced write first; the runtime never reaches into its timer or cache object. Editing a message captures a new source signature and invalidates old pending/display results. Channel-session pruning keeps only state still needed for an active request, unconfirmed restore, manual suppression, or source archive.
+
+When received translation configuration changes while an old translation is still painted, `MessageStateStore` retains that displaced translation only as restoration proof. Both stream and content render paths restore the immutable source before another capture; the proof is never exposed as an active translation. This prevents a previous target-language paint from becoming source text and repeatedly re-entering historical work.
 
 ## Diagnostics and Privacy
 

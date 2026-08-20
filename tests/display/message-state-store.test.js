@@ -107,6 +107,25 @@ test("an edited source replaces stale display state", () => {
 	assert.equal(state.revision > translatedRevision, true);
 });
 
+test("a new configuration signature retains proof of the displaced visible translation", () => {
+	const store = createMessageStateStore();
+	const first = {...snapshot("m1", "c1", "Original text"), sourceSignature: "config-a"};
+	store.captureSource(first);
+	store.commitResult({
+		...translated("m1", "c1", "Original text", "旧中文译文"),
+		sourceSignature: "config-a",
+		translation: {content: "旧中文译文", translatedContent: "旧中文译文", originalContent: "Original text"}
+	});
+
+	store.captureSource({...first, sourceSignature: "config-b"});
+
+	const state = store.getDisplayState("m1");
+	assert.equal(state.status, "idle");
+	assert.equal(state.translation, null);
+	assert.equal(state.source.content, "Original text");
+	assert.equal(state.restoredTranslation.translatedContent, "旧中文译文");
+});
+
 test("a late result for an edited source cannot replace the newer request state", () => {
 	const store = createMessageStateStore();
 	store.captureSource(snapshot("m1", "c1", "Version one"));

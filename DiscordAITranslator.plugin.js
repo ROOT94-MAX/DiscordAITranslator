@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 2c78bb06791a813c
+ * @buildId 73996dd4d6d711f0
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -295,7 +295,7 @@ var require_message_state_store = __commonJS({
           if (current && current.channelId && current.channelId !== channelId || channelGenerations.has(channelId) && channelGenerations.get(channelId) !== snapshot.generation) return null;
           let sourceSignature = normalizeIdentity(snapshot.sourceSignature);
           if (current && current.generation === snapshot.generation && current.sourceSignature === sourceSignature) return current;
-          let keepsManualTranslation = !!(current && current.origin === MESSAGE_ORIGINS.MANUAL && current.status === MESSAGE_STATUSES.TRANSLATED && !current.sourceSignature), record = Object.freeze({
+          let keepsManualTranslation = !!(current && current.origin === MESSAGE_ORIGINS.MANUAL && current.status === MESSAGE_STATUSES.TRANSLATED && !current.sourceSignature), restoredTranslation = current && current.status === MESSAGE_STATUSES.TRANSLATED && current.translation ? current.translation : current && current.restoredTranslation || null, record = Object.freeze({
             ...createBaseRecord(messageId, channelId),
             archive: current ? current.archive : null,
             suppressed: !!(current && current.suppressed),
@@ -304,6 +304,7 @@ var require_message_state_store = __commonJS({
             previewPending: current ? current.previewPending : null,
             status: keepsManualTranslation ? current.status : MESSAGE_STATUSES.IDLE,
             translation: keepsManualTranslation ? current.translation : null,
+            restoredTranslation,
             origin: keepsManualTranslation ? current.origin : null,
             manualOptions: keepsManualTranslation ? current.manualOptions : null,
             generation: snapshot.generation,
@@ -1494,7 +1495,7 @@ var require_translation_display_logic = __commonJS({
           let channelId = plugin.getMessageChannelId(message), translation = translationDisplayLogic.getActiveMessageTranslation(plugin, message, channelId);
           if (!translation && plugin.ensureReceivedDisplayRuntime().hasSourceArchive(message.id) && (message = e.instance.props.message = new BDFDB.DiscordObjects.Message(plugin.ensureReceivedDisplayRuntime().consumeSourceArchive(message.id).message)), !translation && message.id) {
             let state = plugin.ensureReceivedDisplayRuntime().getDisplayState(message.id), visibleBody = translationDisplayLogic.getStreamBodyContent(plugin, message);
-            if (state && state.status == "cancelled" && state.restoredTranslation && state.source && state.source.content && visibleBody !== state.source.content && plugin.matchesPaintedTranslationContent(visibleBody, state.restoredTranslation, message)) {
+            if (state && state.status != "translated" && state.restoredTranslation && state.source && state.source.content && visibleBody !== state.source.content && plugin.matchesPaintedTranslationContent(visibleBody, state.restoredTranslation, message)) {
               let restoredMessage = translationDisplayLogic.cloneStreamMessageWithBody(plugin, message, state.source.content);
               restoredMessage && (message = e.instance.props.message = restoredMessage);
             }
@@ -9230,7 +9231,7 @@ var require_received_translation_runtime = __commonJS({
         resolveOriginalContentDataAnchor(plugin, message) {
           let archive = message && message.id && plugin.ensureReceivedDisplayRuntime().peekSourceArchive(message.id);
           if (archive && archive.originalContentData) return archive.originalContentData;
-          let record = message && message.id && plugin.ensureReceivedDisplayRuntime().getDisplayState(message.id), translation = record && (record.status == "translated" && record.translation || record.status == "cancelled" && record.restoredTranslation);
+          let record = message && message.id && plugin.ensureReceivedDisplayRuntime().getDisplayState(message.id), translation = record && (record.status == "translated" && record.translation || record.restoredTranslation);
           if (!translation || !record.source || !record.source.content) return null;
           let paintedBody = message.content;
           if (!paintedBody || !String(paintedBody).trim()) {
@@ -9290,7 +9291,7 @@ var require_received_translation_runtime = __commonJS({
           else if (plugin.ensureReceivedDisplayRuntime().hasSourceArchive(message.id)) {
             let archive = plugin.ensureReceivedDisplayRuntime().consumeSourceArchive(message.id);
             plugin.paintStreamBody(stream, plugin.getStreamBodyContent(archive && archive.message)), messageChanged = !0;
-          } else storeView && storeView.status == "cancelled" && storeView.restoredTranslation && storeView.content && plugin.getStreamBodyContent(stream.content) !== storeView.content && receivedTranslationRuntime.matchesPaintedTranslation(plugin, plugin.getStreamBodyContent(stream.content), storeView.restoredTranslation, stream.content) && (plugin.paintStreamBody(stream, storeView.content), messageChanged = !0);
+          } else storeView && storeView.status != "translated" && storeView.restoredTranslation && storeView.content && plugin.getStreamBodyContent(stream.content) !== storeView.content && receivedTranslationRuntime.matchesPaintedTranslation(plugin, plugin.getStreamBodyContent(stream.content), storeView.restoredTranslation, stream.content) && (plugin.paintStreamBody(stream, storeView.content), messageChanged = !0);
           return { translation, storeCommitted, messageChanged, cachedTranslation, canAutoTranslateMessage };
         },
         queueCheckMessageTranslation(plugin, message, channel, context, outcome) {
@@ -11830,7 +11831,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "2c78bb06791a813c";
+            return "73996dd4d6d711f0";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);

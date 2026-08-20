@@ -2276,6 +2276,37 @@ test("a second render pass does not launder an automatic translation into the so
 	assert.equal(plugin.createReceivedTranslationSignature(message, "channel-launder", rederived), signature, "an unedited message keeps its signature across passes");
 });
 
+test("changing the received target language restores stale paint without laundering it into the next source", () => {
+	const plugin = createPluginInstance();
+	plugin.isTranslationEnabled = () => true;
+	plugin.isReceivedAutoTranslationEnabled = () => true;
+	const channel = {id: "channel-config-change"};
+	const message = {id: "100", channel_id: channel.id, content: "Good morning", embeds: [], attachments: [], author: {id: "other-user"}};
+	plugin.settings.choices.received.output = "zh-CN";
+	const oldSignature = commitAutomaticTranslation(plugin, message, channel.id, "旧中文译文");
+
+	// Discord's current row still carries the old paint when the channel target changes.
+	message.content = "旧中文译文";
+	plugin.settings.choices.received.output = "en";
+	const nextSignature = plugin.createReceivedTranslationSignature(message, channel.id, {content: "Good morning", embeds: []});
+	assert.notEqual(nextSignature, oldSignature, "the language change must create a new request identity");
+	const channelState = plugin.getAutoTranslationChannelState(channel.id);
+	channelState.initialized = true;
+	channelState.boundaryMessageId = "999";
+	const queued = [];
+	plugin.queueAutoTranslateMessage = (queuedMessage, _channel, source) => (queued.push({id: queuedMessage.id, source: source.content}), true);
+	const stream = {content: message};
+
+	plugin.checkMessage(stream, message, channel, {skipAutoQueue: false, autoTranslateBoundaryId: "999", historicalLoad: false});
+	plugin.checkMessage(stream, message, channel, {skipAutoQueue: false, autoTranslateBoundaryId: "999", historicalLoad: false});
+
+	const state = plugin.ensureReceivedDisplayRuntime().getDisplayState(message.id);
+	assert.equal(stream.content.content, "Good morning", "the old Chinese paint must be restored immediately");
+	assert.equal(state.source.content, "Good morning", "a later render must retain the immutable English source");
+	assert.equal(state.sourceSignature, nextSignature, "the source remains attached to the new English-target configuration");
+	assert.deepEqual(queued, [{id: "100", source: "Good morning"}], "the configuration change queues at most one replacement decision");
+});
+
 test("a real edit after an automatic translation is still treated as an edit", () => {
 	// The anchor must recognise our own paint and nothing else, or a genuine edit would be
 	// invisible and the message would keep showing a translation of text that is gone.
