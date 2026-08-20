@@ -40,7 +40,9 @@ const BUDGET = Object.freeze({
 	// finish callback wiring moved into historical-snapshot-cadence-wiring.js.
 	// -10 (2026-08-21): Store deletion dispatcher plus live/history/cache/display
 	// cleanup wiring moved into message-deletion-lifecycle-wiring.js.
-	runtimeLines: 3391,
+	// -22 (2026-08-21): loaded-status Store, browser, positioning, lifecycle and
+	// retry callback wiring moved into loaded-status-capsule-wiring.js.
+	runtimeLines: 3369,
 	moduleLevelVarDeclarators: 2
 });
 
@@ -151,6 +153,15 @@ test("plugin-specific message deletion wiring stays out of the legacy runtime", 
 	const ensureMethod = source.match(/\n\t\t\tensureMessageDeletionLifecycle \(\) \{[\s\S]*?\n\t\t\t\}/);
 	assert.ok(ensureMethod, "the lazy message-deletion singleton boundary remains explicit");
 	assert.doesNotMatch(ensureMethod[0], /resolveStoreDispatcher|ensureLiveTranslationQueue|ensureHistoricalJobRegistry|clearCachedTranslation|ensureReceivedDisplayRuntime/, "deletion cleanup fan-out belongs to message-deletion-lifecycle-wiring.js");
+});
+
+test("plugin-specific loaded-status capsule wiring stays out of the legacy runtime", () => {
+	const source = readRuntimeLines().join("\n");
+	assert.match(source, /createPluginLoadedStatusCapsuleController/);
+	assert.doesNotMatch(source, /\bcreateLoadedStatusCapsuleController\b/);
+	const ensureMethod = source.match(/\n\t\t\tensureLoadedStatusCapsuleController \(\) \{[\s\S]*?\n\t\t\t\}/);
+	assert.ok(ensureMethod, "the lazy loaded-status capsule singleton boundary remains explicit");
+	assert.doesNotMatch(ensureMethod[0], /SelectedChannelStore|isTranslationEnabled|getReceivedAutoTranslateScope|isChineseUiLanguage|isUserActivelyScrollingMessages|attachAutoTranslationScrollWatcher|retryFailedHistoricalTranslations/, "capsule host and plugin callback wiring belongs to loaded-status-capsule-wiring.js");
 });
 
 test("the recorded budget matches the current tree, so drift is visible", () => {

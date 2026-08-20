@@ -8,8 +8,8 @@ This document describes the current runtime boundaries and migration rules. User
 
 - Release line: v0.3.39.
 - Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
-- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased build ID: `aa1a1dd0823abeff`.
-- Legacy composition-root ratchet: 3,391 lines and two module-level shared declarators.
+- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased build ID: `4432647c5d41772e`.
+- Legacy composition-root ratchet: 3,369 lines and two module-level shared declarators.
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
 - Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
 
@@ -45,7 +45,7 @@ The build uses esbuild in CommonJS mode with an ES2020 target, preserves the Bet
 | Message deletion lifecycle | `src/lifecycle/message-deletion-lifecycle.js`, `src/lifecycle/message-deletion-lifecycle-wiring.js` | Direct Store subscriptions; channel-scoped live/history/cache/display cleanup; one adapter owns cleanup fan-out and dispatcher resolution |
 | Translation policy and dispatch | `src/orchestrator/translation-pipeline.js`, `src/providers/provider-client.js`, `src/providers/provider-client-wiring.js` | Protection, language policy, primary/backup dispatch, provider integrity, retry, and error reporting; one adapter owns plugin/BDFDB transport ports |
 | Viewport preservation | `src/viewport/message-viewport-store.js`, `src/viewport/message-viewport-wiring.js` | Reading-line anchor, user-intent veto, bottom-stranding rescue, raw-offset fallback, and settle checks; one adapter owns browser/BDFDB host ports |
-| Loaded status | `src/status/loaded-translation-status-store.js`, `src/ui/loaded-status-capsule.js`, `src/ui/loaded-status-position.js` | Cumulative channel count, capsule lifecycle, retry affordance, and native-hint-aware geometry |
+| Loaded status | `src/status/loaded-translation-status-store.js`, `src/ui/loaded-status-capsule.js`, `src/ui/loaded-status-capsule-wiring.js`, `src/ui/loaded-status-position.js` | Cumulative channel count, capsule lifecycle, retry affordance, and native-hint-aware geometry; one adapter owns Store, browser, positioning, and plugin callback ports |
 | Forwarded content projection | `src/display/translation-display-logic.js`, `src/received/received-translation-runtime.js` | Snapshot-aware source, paint, echo detection, one-original composition, and restore |
 | Composer and menus | `src/ui/composer-wiring.js`, `src/ui/context-menu-wiring.js` | Channel submit interception, input icon, and manual actions |
 | Settings schema and persistence wiring | `src/settings/plugin-defaults.js`, `src/settings/settings-store.js`, `src/settings/settings-store-wiring.js`, `src/ui/settings-panel.js` | One schema and one owner for global versus channel settings; one BDFDB adapter owns the established persisted keys |
@@ -169,7 +169,7 @@ npm run verify
 
 ## Known Debt
 
-- `src/legacy/runtime.js` remains a 3,391-line composition root.
+- `src/legacy/runtime.js` remains a 3,369-line composition root.
 - Whole-chat fallback diagnostics (`R`) can still correspond to occasional composer flicker.
 - Provider abort support and lifecycle task registry cleanup remain observation-gated in `recovery-plan.md`; automatic multi-page history fetching is parked after field rollback, while direct Store message-delete subscriptions are field-closed.
 - Discord internal store and snapshot shapes require re-observation after client updates.

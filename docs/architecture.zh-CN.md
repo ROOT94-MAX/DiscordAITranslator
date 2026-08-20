@@ -8,8 +8,8 @@
 
 - 发布版本：v0.3.39。
 - 分发产物：由 `src/` 确定性生成的一份可读 `DiscordAITranslator.plugin.js`。
-- 已发布 v0.3.39 构建 ID：`08e2b0182796eded`；当前未发布构建 ID：`aa1a1dd0823abeff`。
-- 旧运行时组合根约束：3,391 行、两个模块级共享声明。
+- 已发布 v0.3.39 构建 ID：`08e2b0182796eded`；当前未发布构建 ID：`4432647c5d41772e`。
+- 旧运行时组合根约束：3,369 行、两个模块级共享声明。
 - 发布验证：`npm run verify` 统一执行确定性构建、语法、发布契约和完整 Node 测试。
 - 显示策略：已挂载消息先尝试频道级 Flux `MESSAGE_UPDATE` 合并；整聊天区重建只作为确认后的回退，而不是每个结果的默认路径。
 
@@ -45,7 +45,7 @@ src/plugin/index.js
 | 消息删除生命周期 | `src/lifecycle/message-deletion-lifecycle.js`、`src/lifecycle/message-deletion-lifecycle-wiring.js` | 直接 Store 订阅；频道级实时/历史/缓存/显示清理；一个适配器拥有清理分发和 dispatcher 解析 |
 | 翻译策略和调用 | `src/orchestrator/translation-pipeline.js`、`src/providers/provider-client.js`、`src/providers/provider-client-wiring.js` | 文本保护、语言策略、主备供应商、完整性、重试和错误提示；一个适配器拥有插件/BDFDB 传输端口 |
 | 视口保护 | `src/viewport/message-viewport-store.js`、`src/viewport/message-viewport-wiring.js` | 阅读行锚点、用户意图否决、底部搁浅救援、原始偏移回退和稳定检查；一个适配器拥有浏览器/BDFDB 宿主端口 |
-| 已加载状态 | `src/status/loaded-translation-status-store.js`、`src/ui/loaded-status-capsule.js`、`src/ui/loaded-status-position.js` | 频道累计计数、胶囊生命周期、重试入口和原生提示感知定位 |
+| 已加载状态 | `src/status/loaded-translation-status-store.js`、`src/ui/loaded-status-capsule.js`、`src/ui/loaded-status-capsule-wiring.js`、`src/ui/loaded-status-position.js` | 频道累计计数、胶囊生命周期、重试入口和原生提示感知定位；一个适配器拥有 Store、浏览器、定位和插件回调端口 |
 | 转发内容投影 | `src/display/translation-display-logic.js`、`src/received/received-translation-runtime.js` | 快照原文、显示、回声判断、单份原文组合和恢复 |
 | 输入框与菜单 | `src/ui/composer-wiring.js`、`src/ui/context-menu-wiring.js` | 频道发送拦截、输入框图标和手动操作 |
 | 设置结构与持久化接线 | `src/settings/plugin-defaults.js`、`src/settings/settings-store.js`、`src/settings/settings-store-wiring.js`、`src/ui/settings-panel.js` | 全局和频道设置只有一套结构归属；一个 BDFDB 适配器拥有既有持久化键 |
@@ -169,7 +169,7 @@ npm run verify
 
 ## 已知债务
 
-- `src/legacy/runtime.js` 仍是 3,391 行组合根。
+- `src/legacy/runtime.js` 仍是 3,369 行组合根。
 - 整聊天区回退诊断 `R` 仍可能对应偶发输入框图标闪烁。
 - 供应商物理中止和生命周期任务注册表继续在 `recovery-plan.md` 中由证据触发；自动多页历史读取已在现场回退后暂停，Store 消息删除直接订阅已经完成现场确认。
 - Discord 内部 Store 和快照结构在客户端更新后需要重新观察。

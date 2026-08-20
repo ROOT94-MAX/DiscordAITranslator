@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId aa1a1dd0823abeff
+ * @buildId 4432647c5d41772e
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -6127,94 +6127,6 @@ var require_reply_preview_queue = __commonJS({
   }
 });
 
-// src/ui/loaded-status-position.js
-var require_loaded_status_position = __commonJS({
-  "src/ui/loaded-status-position.js"(exports2, module2) {
-    var hintScanCache = /* @__PURE__ */ new WeakMap(), HINT_MISS_RESCAN_MS = 15e3;
-    function findNativeTextAreaStatusElement({ document: documentRef, anchorRect = null, anchorElement = null }) {
-      if (!documentRef) return null;
-      let now = Date.now(), cached = anchorElement && hintScanCache.get(anchorElement) || null;
-      if (cached) {
-        let cachedRect = cached.hint && typeof cached.hint.getBoundingClientRect == "function" ? cached.hint.getBoundingClientRect() : null, cachedHintAlive = cached.hint && cached.hint.isConnected === !0 && cachedRect && cachedRect.width && cachedRect.height;
-        if (cached.hint && !cachedHintAlive) hintScanCache.delete(anchorElement);
-        else if (cached.hint || now - cached.scannedAt < HINT_MISS_RESCAN_MS) return cached.hint;
-      }
-      let matchIn = /* @__PURE__ */ __name((scope2) => {
-        let candidates = [];
-        try {
-          candidates = Array.from(scope2.querySelectorAll("div, span"));
-        } catch {
-          return [];
-        }
-        return candidates.map((element) => {
-          if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
-          try {
-            if (typeof element.closest == "function" && element.closest('[id^="chat-messages-"], [data-list-item-id*="chat-messages"], ol[class*="scrollerInner"], [class*="messagesWrapper"]')) return null;
-          } catch {
-          }
-          let text = (element.textContent || "").trim();
-          if (!text || !/慢速模式|slow\s*mode|slowmode|已开启/i.test(text)) return null;
-          let rect = element.getBoundingClientRect();
-          if (!rect.width || !rect.height) return null;
-          if (anchorRect) {
-            let nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42, aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8, belowInput = rect.top >= anchorRect.bottom - 10 && rect.top <= anchorRect.bottom + 42 && rect.bottom <= anchorRect.bottom + 58;
-            if (!(rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45) || !(nearInputTop && aboveInput || belowInput)) return null;
-          }
-          return { element, rect, area: rect.width * rect.height };
-        }).filter(Boolean).sort((a, b) => a.area - b.area);
-      }, "matchIn"), found = null, scope = anchorElement && anchorElement.parentElement || null;
-      for (let level = 0; level < 3 && scope && !found; level++, scope = scope.parentElement) {
-        let matches = matchIn(scope);
-        found = matches.length && matches[0] && matches[0].element || null;
-      }
-      return anchorElement && hintScanCache.set(anchorElement, { hint: found, scannedAt: now }), found;
-    }
-    __name(findNativeTextAreaStatusElement, "findNativeTextAreaStatusElement");
-    function positionLoadedStatusElement({ BDFDB, document: documentRef, window: windowRef, element }) {
-      if (!element || !documentRef || !windowRef || typeof documentRef.querySelectorAll != "function") return;
-      let selectors = ['[class*="channelTextArea"]', 'form [role="textbox"]'], anchors = [];
-      for (let selector of selectors)
-        if (selector)
-          try {
-            anchors = anchors.concat(Array.from(documentRef.querySelectorAll(selector)).filter(Boolean));
-          } catch {
-          }
-      anchors = anchors.map((anchor2) => {
-        if (!anchor2 || !anchor2.getBoundingClientRect) return null;
-        let rect = anchor2.getBoundingClientRect();
-        if (!rect.width || !rect.height || !(rect.bottom > 0 && rect.top < windowRef.innerHeight && rect.right > 0 && rect.left < windowRef.innerWidth)) return null;
-        let nearBottom = Math.max(0, windowRef.innerHeight - rect.bottom), score = Math.min(rect.width, 900) - nearBottom * 2 + rect.right * 0.05;
-        return { anchor: anchor2, rect, score };
-      }).filter(Boolean).sort((a, b) => b.score - a.score);
-      let anchorData = anchors[0], anchor = anchorData && anchorData.anchor;
-      if (!anchor && element.style && element.style.top) return;
-      let viewportPadding = 12, maxStatusWidth = Math.max(180, Math.min(360, windowRef.innerWidth - viewportPadding * 2));
-      if (anchor && anchor.getBoundingClientRect) {
-        let anchorRect = anchor.getBoundingClientRect();
-        anchorRect && anchorRect.width && (maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(anchorRect.width * 0.55), anchorRect.width - 16)));
-      }
-      element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
-      let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20);
-      element.style.left = "auto", element.style.bottom = "auto";
-      let anchorRectOut = null, nativeHintRect = null, right = 0, top = 0;
-      if (anchor && anchor.getBoundingClientRect) {
-        let rect = anchor.getBoundingClientRect();
-        anchorRectOut = rect;
-        let nativeStatus = findNativeTextAreaStatusElement({ document: documentRef, anchorRect: rect, anchorElement: anchor });
-        if (right = windowRef.innerWidth - (rect.right - viewportPadding), top = rect.top - statusHeight - 8, nativeStatus && nativeStatus.getBoundingClientRect) {
-          let nativeRect = nativeStatus.getBoundingClientRect();
-          nativeHintRect = nativeRect, right = windowRef.innerWidth - nativeRect.right, top = nativeRect.top - statusHeight - 8;
-        }
-        right = Math.max(viewportPadding, right), top = Math.max(viewportPadding, Math.min(top, windowRef.innerHeight - statusHeight - viewportPadding));
-      } else
-        right = 108, top = Math.max(viewportPadding, windowRef.innerHeight - statusHeight - 54);
-      element.style.right = `${Math.round(right)}px`, element.style.top = `${Math.round(top)}px`;
-    }
-    __name(positionLoadedStatusElement, "positionLoadedStatusElement");
-    module2.exports = { findNativeTextAreaStatusElement, positionLoadedStatusElement };
-  }
-});
-
 // src/status/loaded-translation-status-store.js
 var require_loaded_translation_status_store = __commonJS({
   "src/status/loaded-translation-status-store.js"(exports2, module2) {
@@ -6711,6 +6623,142 @@ var require_loaded_status_capsule = __commonJS({
     }
     __name(createLoadedStatusCapsuleController, "createLoadedStatusCapsuleController");
     module2.exports = { CAPSULE_ELEMENT_ID, createLoadedStatusCapsuleController };
+  }
+});
+
+// src/ui/loaded-status-position.js
+var require_loaded_status_position = __commonJS({
+  "src/ui/loaded-status-position.js"(exports2, module2) {
+    var hintScanCache = /* @__PURE__ */ new WeakMap(), HINT_MISS_RESCAN_MS = 15e3;
+    function findNativeTextAreaStatusElement({ document: documentRef, anchorRect = null, anchorElement = null }) {
+      if (!documentRef) return null;
+      let now = Date.now(), cached = anchorElement && hintScanCache.get(anchorElement) || null;
+      if (cached) {
+        let cachedRect = cached.hint && typeof cached.hint.getBoundingClientRect == "function" ? cached.hint.getBoundingClientRect() : null, cachedHintAlive = cached.hint && cached.hint.isConnected === !0 && cachedRect && cachedRect.width && cachedRect.height;
+        if (cached.hint && !cachedHintAlive) hintScanCache.delete(anchorElement);
+        else if (cached.hint || now - cached.scannedAt < HINT_MISS_RESCAN_MS) return cached.hint;
+      }
+      let matchIn = /* @__PURE__ */ __name((scope2) => {
+        let candidates = [];
+        try {
+          candidates = Array.from(scope2.querySelectorAll("div, span"));
+        } catch {
+          return [];
+        }
+        return candidates.map((element) => {
+          if (!element || element.id == "DiscordAITranslator-loaded-status" || !element.getBoundingClientRect) return null;
+          try {
+            if (typeof element.closest == "function" && element.closest('[id^="chat-messages-"], [data-list-item-id*="chat-messages"], ol[class*="scrollerInner"], [class*="messagesWrapper"]')) return null;
+          } catch {
+          }
+          let text = (element.textContent || "").trim();
+          if (!text || !/慢速模式|slow\s*mode|slowmode|已开启/i.test(text)) return null;
+          let rect = element.getBoundingClientRect();
+          if (!rect.width || !rect.height) return null;
+          if (anchorRect) {
+            let nearInputTop = rect.bottom <= anchorRect.top + 10 && rect.bottom >= anchorRect.top - 42, aboveInput = rect.top >= anchorRect.top - 58 && rect.top <= anchorRect.top + 8, belowInput = rect.top >= anchorRect.bottom - 10 && rect.top <= anchorRect.bottom + 42 && rect.bottom <= anchorRect.bottom + 58;
+            if (!(rect.right <= anchorRect.right + 24 && rect.right >= anchorRect.left + anchorRect.width * 0.45) || !(nearInputTop && aboveInput || belowInput)) return null;
+          }
+          return { element, rect, area: rect.width * rect.height };
+        }).filter(Boolean).sort((a, b) => a.area - b.area);
+      }, "matchIn"), found = null, scope = anchorElement && anchorElement.parentElement || null;
+      for (let level = 0; level < 3 && scope && !found; level++, scope = scope.parentElement) {
+        let matches = matchIn(scope);
+        found = matches.length && matches[0] && matches[0].element || null;
+      }
+      return anchorElement && hintScanCache.set(anchorElement, { hint: found, scannedAt: now }), found;
+    }
+    __name(findNativeTextAreaStatusElement, "findNativeTextAreaStatusElement");
+    function positionLoadedStatusElement({ BDFDB, document: documentRef, window: windowRef, element }) {
+      if (!element || !documentRef || !windowRef || typeof documentRef.querySelectorAll != "function") return;
+      let selectors = ['[class*="channelTextArea"]', 'form [role="textbox"]'], anchors = [];
+      for (let selector of selectors)
+        if (selector)
+          try {
+            anchors = anchors.concat(Array.from(documentRef.querySelectorAll(selector)).filter(Boolean));
+          } catch {
+          }
+      anchors = anchors.map((anchor2) => {
+        if (!anchor2 || !anchor2.getBoundingClientRect) return null;
+        let rect = anchor2.getBoundingClientRect();
+        if (!rect.width || !rect.height || !(rect.bottom > 0 && rect.top < windowRef.innerHeight && rect.right > 0 && rect.left < windowRef.innerWidth)) return null;
+        let nearBottom = Math.max(0, windowRef.innerHeight - rect.bottom), score = Math.min(rect.width, 900) - nearBottom * 2 + rect.right * 0.05;
+        return { anchor: anchor2, rect, score };
+      }).filter(Boolean).sort((a, b) => b.score - a.score);
+      let anchorData = anchors[0], anchor = anchorData && anchorData.anchor;
+      if (!anchor && element.style && element.style.top) return;
+      let viewportPadding = 12, maxStatusWidth = Math.max(180, Math.min(360, windowRef.innerWidth - viewportPadding * 2));
+      if (anchor && anchor.getBoundingClientRect) {
+        let anchorRect = anchor.getBoundingClientRect();
+        anchorRect && anchorRect.width && (maxStatusWidth = Math.max(180, Math.min(maxStatusWidth, Math.floor(anchorRect.width * 0.55), anchorRect.width - 16)));
+      }
+      element.style.maxWidth = `${Math.round(maxStatusWidth)}px`;
+      let measuredRect = element.getBoundingClientRect ? element.getBoundingClientRect() : null, statusHeight = Math.max(18, measuredRect && measuredRect.height || element.offsetHeight || 20);
+      element.style.left = "auto", element.style.bottom = "auto";
+      let anchorRectOut = null, nativeHintRect = null, right = 0, top = 0;
+      if (anchor && anchor.getBoundingClientRect) {
+        let rect = anchor.getBoundingClientRect();
+        anchorRectOut = rect;
+        let nativeStatus = findNativeTextAreaStatusElement({ document: documentRef, anchorRect: rect, anchorElement: anchor });
+        if (right = windowRef.innerWidth - (rect.right - viewportPadding), top = rect.top - statusHeight - 8, nativeStatus && nativeStatus.getBoundingClientRect) {
+          let nativeRect = nativeStatus.getBoundingClientRect();
+          nativeHintRect = nativeRect, right = windowRef.innerWidth - nativeRect.right, top = nativeRect.top - statusHeight - 8;
+        }
+        right = Math.max(viewportPadding, right), top = Math.max(viewportPadding, Math.min(top, windowRef.innerHeight - statusHeight - viewportPadding));
+      } else
+        right = 108, top = Math.max(viewportPadding, windowRef.innerHeight - statusHeight - 54);
+      element.style.right = `${Math.round(right)}px`, element.style.top = `${Math.round(top)}px`;
+    }
+    __name(positionLoadedStatusElement, "positionLoadedStatusElement");
+    module2.exports = { findNativeTextAreaStatusElement, positionLoadedStatusElement };
+  }
+});
+
+// src/ui/loaded-status-capsule-wiring.js
+var require_loaded_status_capsule_wiring = __commonJS({
+  "src/ui/loaded-status-capsule-wiring.js"(exports2, module2) {
+    var { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { positionLoadedStatusElement } = require_loaded_status_position();
+    function createPluginLoadedStatusCapsuleController({
+      plugin,
+      BDFDB,
+      store,
+      getRuntimeActive = /* @__PURE__ */ __name(() => !0, "getRuntimeActive"),
+      clearHistoricalTracker = /* @__PURE__ */ __name(() => {
+      }, "clearHistoricalTracker"),
+      createController = createLoadedStatusCapsuleController
+    }) {
+      return createController({
+        store,
+        getSelectedChannelId: /* @__PURE__ */ __name(() => BDFDB.LibraryStores.SelectedChannelStore.getChannelId(), "getSelectedChannelId"),
+        isTranslationEnabled: /* @__PURE__ */ __name((channelId) => plugin.isTranslationEnabled(channelId), "isTranslationEnabled"),
+        getReceivedAutoTranslateScope: /* @__PURE__ */ __name(() => plugin.getReceivedAutoTranslateScope(), "getReceivedAutoTranslateScope"),
+        isChineseUiLanguage: /* @__PURE__ */ __name(() => plugin.isChineseUiLanguage(), "isChineseUiLanguage"),
+        positionElement: /* @__PURE__ */ __name((element) => plugin.positionLoadedAutoTranslationStatusElement(element), "positionElement"),
+        isUserScrolling: /* @__PURE__ */ __name(() => plugin.isUserActivelyScrollingMessages(), "isUserScrolling"),
+        isRuntimeActive: getRuntimeActive,
+        clearHistoricalTracker,
+        hooks: {
+          attachScrollWatcher: /* @__PURE__ */ __name(() => plugin.attachAutoTranslationScrollWatcher(), "attachScrollWatcher"),
+          ensurePositionWatcher: /* @__PURE__ */ __name(() => plugin.ensureLoadedAutoTranslationStatusPositionWatcher(), "ensurePositionWatcher"),
+          removeElement: /* @__PURE__ */ __name(() => plugin.removeLoadedAutoTranslationStatusElement(), "removeElement"),
+          updateInlineElements: /* @__PURE__ */ __name(() => plugin.updateInlineLoadedAutoTranslationStatusElements(), "updateInlineElements"),
+          positionElement: /* @__PURE__ */ __name((element) => plugin.positionLoadedAutoTranslationStatusElement(element), "positionElement"),
+          onRetry: /* @__PURE__ */ __name((channelId) => plugin.retryFailedHistoricalTranslations(channelId), "onRetry")
+        }
+      });
+    }
+    __name(createPluginLoadedStatusCapsuleController, "createPluginLoadedStatusCapsuleController");
+    function positionPluginLoadedStatusElement({
+      BDFDB,
+      element,
+      getDocument = /* @__PURE__ */ __name(() => typeof document > "u" ? null : document, "getDocument"),
+      getWindow = /* @__PURE__ */ __name(() => typeof window > "u" ? null : window, "getWindow"),
+      positionLoadedStatusElement: positionElement = positionLoadedStatusElement
+    }) {
+      return positionElement({ BDFDB, document: getDocument(), window: getWindow(), element });
+    }
+    __name(positionPluginLoadedStatusElement, "positionPluginLoadedStatusElement");
+    module2.exports = { createPluginLoadedStatusCapsuleController, positionPluginLoadedStatusElement };
   }
 });
 
@@ -12001,7 +12049,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createPluginMessageViewportStore } = require_message_viewport_wiring(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createPluginHistoricalSnapshotCadence } = require_historical_snapshot_cadence_wiring(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), { createPluginLoadedStatusCapsuleController, positionPluginLoadedStatusElement } = require_loaded_status_capsule_wiring(), { createChannelTitleStore } = require_channel_title_store(), { createPluginMessageViewportStore } = require_message_viewport_wiring(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createPluginHistoricalSnapshotCadence } = require_historical_snapshot_cadence_wiring(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -12049,7 +12097,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "aa1a1dd0823abeff";
+            return "4432647c5d41772e";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -12809,7 +12857,7 @@ __________________ __________________ __________________
             this.ensureLoadedStatusCapsuleController().updateInlineElements();
           }
           positionLoadedAutoTranslationStatusElement(element) {
-            loadedStatusPosition.positionLoadedStatusElement({ BDFDB, document: typeof document < "u" ? document : null, window: typeof window < "u" ? window : null, element });
+            positionPluginLoadedStatusElement({ BDFDB, element });
           }
           isChannelTextAreaFocused() {
             return this.ensureMessageViewportStore().isChannelTextAreaFocused();
@@ -12834,29 +12882,8 @@ __________________ __________________ __________________
           shouldShowLoadedAutoTranslationStatus(status) {
             return this.ensureLoadedStatusCapsuleController().shouldShow(status);
           }
-          // The capsule controller owns the floating status DOM (element, watcher,
-          // timers). The hooks route its collaborator calls back through the plugin
-          // methods below, which is where tests have always placed their stubs.
           ensureLoadedStatusCapsuleController() {
-            return this.loadedStatusCapsuleControllerInstance || (this.loadedStatusCapsuleControllerInstance = createLoadedStatusCapsuleController({
-              store: loadedTranslationStatusStore,
-              getSelectedChannelId: /* @__PURE__ */ __name(() => BDFDB.LibraryStores.SelectedChannelStore.getChannelId(), "getSelectedChannelId"),
-              isTranslationEnabled: /* @__PURE__ */ __name((channelId) => this.isTranslationEnabled(channelId), "isTranslationEnabled"),
-              getReceivedAutoTranslateScope: /* @__PURE__ */ __name(() => this.getReceivedAutoTranslateScope(), "getReceivedAutoTranslateScope"),
-              isChineseUiLanguage: /* @__PURE__ */ __name(() => this.isChineseUiLanguage(), "isChineseUiLanguage"),
-              positionElement: /* @__PURE__ */ __name((element) => this.positionLoadedAutoTranslationStatusElement(element), "positionElement"),
-              isUserScrolling: /* @__PURE__ */ __name(() => this.isUserActivelyScrollingMessages(), "isUserScrolling"),
-              isRuntimeActive: /* @__PURE__ */ __name(() => pluginRuntimeActive, "isRuntimeActive"),
-              clearHistoricalTracker: /* @__PURE__ */ __name(() => historicalDisplayTracker.clear(), "clearHistoricalTracker"),
-              hooks: {
-                attachScrollWatcher: /* @__PURE__ */ __name(() => this.attachAutoTranslationScrollWatcher(), "attachScrollWatcher"),
-                ensurePositionWatcher: /* @__PURE__ */ __name(() => this.ensureLoadedAutoTranslationStatusPositionWatcher(), "ensurePositionWatcher"),
-                removeElement: /* @__PURE__ */ __name(() => this.removeLoadedAutoTranslationStatusElement(), "removeElement"),
-                updateInlineElements: /* @__PURE__ */ __name(() => this.updateInlineLoadedAutoTranslationStatusElements(), "updateInlineElements"),
-                positionElement: /* @__PURE__ */ __name((element) => this.positionLoadedAutoTranslationStatusElement(element), "positionElement"),
-                onRetry: /* @__PURE__ */ __name((channelId) => this.retryFailedHistoricalTranslations(channelId), "onRetry")
-              }
-            })), this.loadedStatusCapsuleControllerInstance;
+            return this.loadedStatusCapsuleControllerInstance || (this.loadedStatusCapsuleControllerInstance = createPluginLoadedStatusCapsuleController({ plugin: this, BDFDB, store: loadedTranslationStatusStore, getRuntimeActive: /* @__PURE__ */ __name(() => pluginRuntimeActive, "getRuntimeActive"), clearHistoricalTracker: /* @__PURE__ */ __name(() => historicalDisplayTracker.clear(), "clearHistoricalTracker") })), this.loadedStatusCapsuleControllerInstance;
           }
           updateLoadedAutoTranslationStatus(updates = {}) {
             this.ensureLoadedStatusCapsuleController().update(updates);

@@ -283,9 +283,9 @@ test("the runtime hands the capsule controller its runtime-active gate", () => {
 	const fs = require("node:fs");
 	const path = require("node:path");
 	const runtime = fs.readFileSync(path.resolve(__dirname, "..", "..", "src", "legacy", "runtime.js"), "utf8");
-	const start = runtime.indexOf("createLoadedStatusCapsuleController({");
+	const start = runtime.indexOf("createPluginLoadedStatusCapsuleController({");
 	assert.notEqual(start, -1, "controller construction not found");
 	const end = runtime.indexOf("});", start);
 	const block = runtime.slice(start, end);
-	assert.match(block, /isRuntimeActive: \(\) => pluginRuntimeActive/, "the capsule pipeline must be gated on the live plugin instance");
+	assert.match(block, /getRuntimeActive: \(\) => pluginRuntimeActive/, "the capsule pipeline must be gated on the live plugin instance");
 });

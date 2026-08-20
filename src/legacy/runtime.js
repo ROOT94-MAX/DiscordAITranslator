@@ -72,8 +72,7 @@ module.exports = (_ => {
 		const {createDiscordMarkupRenderer} = require("../display/discord-markup-renderer");
 		const {createPluginDefaults, MODULE_PATCHES} = require("../settings/plugin-defaults");
 		const {createReplyPreviewQueue} = require("../received/reply-preview-queue");
-		const loadedStatusPosition = require("../ui/loaded-status-position");
-		const {createLoadedStatusCapsuleController} = require("../ui/loaded-status-capsule");
+		const {createPluginLoadedStatusCapsuleController, positionPluginLoadedStatusElement} = require("../ui/loaded-status-capsule-wiring");
 		const {createChannelTitleStore} = require("../channel-title/channel-title-store");
 		const {createPluginMessageViewportStore} = require("../viewport/message-viewport-wiring");
 		const {createLoadedTranslationStatusStore} = require("../status/loaded-translation-status-store");
@@ -1283,7 +1282,7 @@ module.exports = (_ => {
 			}
 
 			positionLoadedAutoTranslationStatusElement (element) {
-				loadedStatusPosition.positionLoadedStatusElement({BDFDB, document: typeof document != "undefined" ? document : null, window: typeof window != "undefined" ? window : null, element});
+				positionPluginLoadedStatusElement({BDFDB, element});
 			}
 
 			isChannelTextAreaFocused () {
@@ -1316,29 +1315,8 @@ module.exports = (_ => {
 				return this.ensureLoadedStatusCapsuleController().shouldShow(status);
 			}
 
-			// The capsule controller owns the floating status DOM (element, watcher,
-			// timers). The hooks route its collaborator calls back through the plugin
-			// methods below, which is where tests have always placed their stubs.
 			ensureLoadedStatusCapsuleController () {
-				if (!this.loadedStatusCapsuleControllerInstance) this.loadedStatusCapsuleControllerInstance = createLoadedStatusCapsuleController({
-					store: loadedTranslationStatusStore,
-					getSelectedChannelId: () => BDFDB.LibraryStores.SelectedChannelStore.getChannelId(),
-					isTranslationEnabled: channelId => this.isTranslationEnabled(channelId),
-					getReceivedAutoTranslateScope: () => this.getReceivedAutoTranslateScope(),
-					isChineseUiLanguage: () => this.isChineseUiLanguage(),
-					positionElement: element => this.positionLoadedAutoTranslationStatusElement(element),
-					isUserScrolling: () => this.isUserActivelyScrollingMessages(),
-					isRuntimeActive: () => pluginRuntimeActive,
-					clearHistoricalTracker: () => historicalDisplayTracker.clear(),
-					hooks: {
-						attachScrollWatcher: () => this.attachAutoTranslationScrollWatcher(),
-						ensurePositionWatcher: () => this.ensureLoadedAutoTranslationStatusPositionWatcher(),
-						removeElement: () => this.removeLoadedAutoTranslationStatusElement(),
-						updateInlineElements: () => this.updateInlineLoadedAutoTranslationStatusElements(),
-						positionElement: element => this.positionLoadedAutoTranslationStatusElement(element),
-						onRetry: channelId => this.retryFailedHistoricalTranslations(channelId)
-					}
-				});
+				if (!this.loadedStatusCapsuleControllerInstance) this.loadedStatusCapsuleControllerInstance = createPluginLoadedStatusCapsuleController({plugin: this, BDFDB, store: loadedTranslationStatusStore, getRuntimeActive: () => pluginRuntimeActive, clearHistoricalTracker: () => historicalDisplayTracker.clear()});
 				return this.loadedStatusCapsuleControllerInstance;
 			}
 

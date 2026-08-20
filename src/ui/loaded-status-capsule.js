@@ -2,8 +2,8 @@
 // retry affordance, the resize/scroll position watcher, and teardown. Extracted from
 // the legacy runtime in display-unification slice 2. Positioning MATH stays in
 // loaded-status-position and arrives through the injected positionElement; the
-// runtime routes the DOM hooks through its own methods so tests can stub them at the
-// plugin seam exactly as they always have.
+// loaded-status-capsule-wiring routes the DOM hooks through plugin methods so tests
+// and host adapters keep the established plugin seam.
 const {LOADED_STATUS_REFRESH_MS} = require("../status/loaded-translation-status-store");
 
 const CAPSULE_ELEMENT_ID = "DiscordAITranslator-loaded-status";
