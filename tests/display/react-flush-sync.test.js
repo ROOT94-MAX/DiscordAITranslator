@@ -57,16 +57,16 @@ test("the retired atomic rebuild implementation and wiring are absent", () => {
 
 	const displayRuntime = fs.readFileSync(path.join(root, "src", "display", "display-runtime.js"), "utf8");
 	const adapter = fs.readFileSync(path.join(root, "src", "display", "discord-render-adapter.js"), "utf8");
-	const runtime = fs.readFileSync(path.join(root, "src", "legacy", "runtime.js"), "utf8");
+	const wiring = fs.readFileSync(path.join(root, "src", "display", "display-runtime-wiring.js"), "utf8");
 	assert.match(displayRuntime, /require\("\.\/react-flush-sync"\)/);
 	assert.doesNotMatch(displayRuntime, /atomic-chat-rebuild|createAtomicChatRebuild/);
 	assert.doesNotMatch(adapter, /atomicChatRebuild|createAtomicChatRebuild/);
 
-	const start = runtime.indexOf("createDisplayRuntime({");
-	const end = runtime.indexOf("document:", start);
+	const start = wiring.indexOf("return createRuntime({");
+	const end = wiring.indexOf("document:", start);
 	assert.notEqual(start, -1);
 	assert.notEqual(end, -1);
-	const bdfdbWiring = runtime.slice(start, end);
+	const bdfdbWiring = wiring.slice(start, end);
 	for (const deadHandle of ["ObjectUtils", "LibraryStores", "DMUtils", "ChannelUtils"]) {
 		assert.doesNotMatch(bdfdbWiring, new RegExp(`${deadHandle}: BDFDB\\.${deadHandle}`));
 	}

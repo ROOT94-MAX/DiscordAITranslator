@@ -42,7 +42,9 @@ const BUDGET = Object.freeze({
 	// cleanup wiring moved into message-deletion-lifecycle-wiring.js.
 	// -22 (2026-08-21): loaded-status Store, browser, positioning, lifecycle and
 	// retry callback wiring moved into loaded-status-capsule-wiring.js.
-	runtimeLines: 3369,
+	// -30 (2026-08-21): received-display Flux, Store, browser, timer, capsule and
+	// viewport wiring moved into display-runtime-wiring.js.
+	runtimeLines: 3339,
 	moduleLevelVarDeclarators: 2
 });
 
@@ -162,6 +164,15 @@ test("plugin-specific loaded-status capsule wiring stays out of the legacy runti
 	const ensureMethod = source.match(/\n\t\t\tensureLoadedStatusCapsuleController \(\) \{[\s\S]*?\n\t\t\t\}/);
 	assert.ok(ensureMethod, "the lazy loaded-status capsule singleton boundary remains explicit");
 	assert.doesNotMatch(ensureMethod[0], /SelectedChannelStore|isTranslationEnabled|getReceivedAutoTranslateScope|isChineseUiLanguage|isUserActivelyScrollingMessages|attachAutoTranslationScrollWatcher|retryFailedHistoricalTranslations/, "capsule host and plugin callback wiring belongs to loaded-status-capsule-wiring.js");
+});
+
+test("plugin-specific received display runtime wiring stays out of the legacy runtime", () => {
+	const source = readRuntimeLines().join("\n");
+	assert.match(source, /createPluginReceivedDisplayRuntime/);
+	assert.doesNotMatch(source, /\bcreateDisplayRuntime\b/);
+	const ensureMethod = source.match(/\n\t\t\tensureReceivedDisplayRuntime \(\) \{[\s\S]*?\n\t\t\t\}/);
+	assert.ok(ensureMethod, "the lazy received-display singleton boundary remains explicit");
+	assert.doesNotMatch(ensureMethod[0], /BDFDB\.dotCN|MessageStore|ChannelStore|resolveStoreDispatcher|captureDisplayTransactionScrollState|restoreDisplayTransactionScrollState|requestAnimationFrame/, "display host, Flux and viewport wiring belongs to display-runtime-wiring.js");
 });
 
 test("the recorded budget matches the current tree, so drift is visible", () => {

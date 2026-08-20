@@ -106,7 +106,7 @@ test("display-transaction scroll restore honors the manual translation anchor", 
 	// The legacy full-list path anchored the clicked message during manual repaints;
 	// the transaction path must keep that anchor or manual translation jumps the view.
 	// The choice lives in the viewport store; the runtime wiring must call it.
-	const wiring = methodSlice("runtime", "ensureReceivedDisplayRuntime", "resetReceivedDisplayRuntime");
+	const wiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "display", "display-runtime-wiring.js"), "utf8");
 	assert.match(wiring, /captureDisplayTransactionScrollState\(context\)/);
 	assert.match(wiring, /restoreDisplayTransactionScrollState\(/);
 	const viewportSource = fs.readFileSync(path.resolve(__dirname, "..", "src", "viewport", "message-viewport-store.js"), "utf8");

@@ -8,8 +8,8 @@
 
 - 发布版本：v0.3.39。
 - 分发产物：由 `src/` 确定性生成的一份可读 `DiscordAITranslator.plugin.js`。
-- 已发布 v0.3.39 构建 ID：`08e2b0182796eded`；当前未发布构建 ID：`4432647c5d41772e`。
-- 旧运行时组合根约束：3,369 行、两个模块级共享声明。
+- 已发布 v0.3.39 构建 ID：`08e2b0182796eded`；当前未发布构建 ID：`143512968d82fab2`。
+- 旧运行时组合根约束：3,339 行、两个模块级共享声明。
 - 发布验证：`npm run verify` 统一执行确定性构建、语法、发布契约和完整 Node 测试。
 - 显示策略：已挂载消息先尝试频道级 Flux `MESSAGE_UPDATE` 合并；整聊天区重建只作为确认后的回退，而不是每个结果的默认路径。
 
@@ -38,7 +38,7 @@ src/plugin/index.js
 | 关注点 | 当前所有者 | 契约 |
 | --- | --- | --- |
 | 收到消息状态 | `src/display/message-state-store.js` | 不可变原文、请求身份、自动/手动来源、抑制状态、回复预览、显示修订和恢复档案 |
-| 显示事务 | `src/display/translation-display-controller.js` | 消息 ID 与回复预览宿主 ID 的单一频道级提交边界 |
+| 显示事务 | `src/display/translation-display-controller.js`、`src/display/display-runtime.js`、`src/display/display-runtime-wiring.js` | 消息 ID 与回复预览宿主 ID 的单一频道级提交边界；一个适配器拥有 Flux/Store、浏览器、计时器、胶囊和视口端口 |
 | 单行重绘和回退 | `src/display/flux-row-repaint.js`、`src/display/discord-render-adapter.js` | 先走 Flux 单行合并，确认 DOM 修订，每个事务最多一次整聊天区回退 |
 | 历史采集和封批 | `src/received/historical-source-runtime.js`、`src/orchestrator/historical-snapshot-cadence.js`、`src/orchestrator/historical-snapshot-cadence-wiring.js`、`src/orchestrator/historical-translation-job.js` | 不可变频道任务、500ms 安静窗口、等待任务吸收、一次原子批次提交；一个适配器拥有 cadence 宿主端口 |
 | 实时调度 | `src/orchestrator/live-translation-queue.js` | 高优先级频道任务，不因历史采集而人为延迟 |
@@ -169,7 +169,7 @@ npm run verify
 
 ## 已知债务
 
-- `src/legacy/runtime.js` 仍是 3,369 行组合根。
+- `src/legacy/runtime.js` 仍是 3,339 行组合根。
 - 整聊天区回退诊断 `R` 仍可能对应偶发输入框图标闪烁。
 - 供应商物理中止和生命周期任务注册表继续在 `recovery-plan.md` 中由证据触发；自动多页历史读取已在现场回退后暂停，Store 消息删除直接订阅已经完成现场确认。
 - Discord 内部 Store 和快照结构在客户端更新后需要重新观察。

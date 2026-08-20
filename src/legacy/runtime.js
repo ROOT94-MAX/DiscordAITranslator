@@ -58,7 +58,7 @@ module.exports = (_ => {
 	} : (([Plugin, BDFDB]) => {
 		// Extracted modules. Declared before any state so module-backed stores can be
 		// constructed in the state block below.
-		const {createDisplayRuntime} = require("../display/display-runtime");
+		const {createPluginReceivedDisplayRuntime} = require("../display/display-runtime-wiring");
 		const {createTranslationDisplayLogic} = require("../display/translation-display-logic");
 		const {createDisplayRepaintScheduler} = require("../display/repaint-scheduler");
 		const {createHistoricalDisplayTracker} = require("../display/historical-display-tracker");
@@ -2508,37 +2508,7 @@ module.exports = (_ => {
 			}
 
 			ensureReceivedDisplayRuntime () {
-				if (!this.receivedDisplayRuntimeInstance) this.receivedDisplayRuntimeInstance = createDisplayRuntime({
-					// Display fallback needs the list selectors and rerender helper; live
-					// class rows optionally use ReactUtils.flushSync for one commit.
-					BDFDB: {dotCN: BDFDB.dotCN || {}, MessageUtils: BDFDB.MessageUtils, ReactUtils: BDFDB.ReactUtils},
-					document: {
-						querySelector: selector => typeof document == "undefined" || !document || !selector ? null : document.querySelector(selector)
-					},
-					requestAnimationFrame: callback => typeof requestAnimationFrame == "function" ? requestAnimationFrame(callback) : setTimeout(callback, 0),
-					isRuntimeActive: () => pluginRuntimeActive,
-					// Preview-wave coalescer: managed timer plus the scheduler's repaint gate.
-					setTimeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay),
-					canRepaintNow: () => this.canRepaintReceivedDisplayNow(),
-					// Flux per-row repaint handles (experiment-verified 2026-08-19): the store
-					// dispatcher, the message record, and the guild for the payload envelope.
-					resolveDispatcher: () => resolveStoreDispatcher(BDFDB, ["dispatch"]),
-					getStoreMessage: (channelId, messageId) => {try {return BDFDB.LibraryStores.MessageStore.getMessage(channelId, messageId) || null;} catch (error) {return null;}},
-					getGuildId: channelId => {try {const channel = BDFDB.LibraryStores.ChannelStore.getChannel(channelId); return channel && channel.guild_id || null;} catch (error) {return null;}},
-					onTranslationDisplayed: (channelId, messageId) => this.ensureLoadedStatusCapsuleController().recordTranslationsDisplayed(channelId, [messageId]),
-					getUserScrollIntentSequence: () => this.ensureMessageViewportStore().getUserScrollIntentSequence(),
-					// Scroll preservation is best-effort: a capture or restore failure must never
-					// break a display transaction. The viewport store owns the anchor-over-offset choice.
-					captureScrollState: context => {
-						try {return this.ensureMessageViewportStore().captureDisplayTransactionScrollState(context);}
-						catch (error) {return null;}
-					},
-					restoreScrollState: scrollerState => {
-						try {this.ensureMessageViewportStore().restoreDisplayTransactionScrollState(scrollerState);}
-						catch (error) {}
-					},
-					restoreScrollStateNow: scrollerState => this.ensureMessageViewportStore().restoreDisplayTransactionScrollStateNow(scrollerState)
-				});
+				if (!this.receivedDisplayRuntimeInstance) this.receivedDisplayRuntimeInstance = createPluginReceivedDisplayRuntime({plugin: this, BDFDB, getRuntimeActive: () => pluginRuntimeActive});
 				return this.receivedDisplayRuntimeInstance;
 			}
 			resetReceivedDisplayRuntime () {

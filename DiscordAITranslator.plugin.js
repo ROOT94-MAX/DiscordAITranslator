@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 4432647c5d41772e
+ * @buildId 143512968d82fab2
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -1192,6 +1192,102 @@ var require_display_runtime = __commonJS({
     }
     __name(createDisplayRuntime, "createDisplayRuntime");
     module2.exports = { createDisplayRuntime };
+  }
+});
+
+// src/discord/store-dispatcher.js
+var require_store_dispatcher = __commonJS({
+  "src/discord/store-dispatcher.js"(exports2, module2) {
+    function resolveStoreDispatcher(BDFDB, requiredMethods = ["dispatch"]) {
+      let methods = [...new Set([].concat(requiredMethods || []).filter((method) => typeof method == "string" && method))], stores = null;
+      try {
+        stores = BDFDB && BDFDB.LibraryStores || null;
+      } catch {
+        return null;
+      }
+      for (let storeName of ["SelectedChannelStore", "MessageStore"]) {
+        let dispatcher = null;
+        try {
+          dispatcher = stores && stores[storeName] && stores[storeName]._dispatcher || null;
+        } catch {
+          continue;
+        }
+        if (dispatcher && methods.every((method) => typeof dispatcher[method] == "function")) return dispatcher;
+      }
+      return null;
+    }
+    __name(resolveStoreDispatcher, "resolveStoreDispatcher");
+    module2.exports = { resolveStoreDispatcher };
+  }
+});
+
+// src/display/display-runtime-wiring.js
+var require_display_runtime_wiring = __commonJS({
+  "src/display/display-runtime-wiring.js"(exports2, module2) {
+    var { createDisplayRuntime } = require_display_runtime(), { resolveStoreDispatcher } = require_store_dispatcher();
+    function createPluginReceivedDisplayRuntime({
+      plugin,
+      BDFDB,
+      getRuntimeActive = /* @__PURE__ */ __name(() => !0, "getRuntimeActive"),
+      getDocument = /* @__PURE__ */ __name(() => typeof document > "u" ? null : document, "getDocument"),
+      requestAnimationFrame: scheduleAnimationFrame = /* @__PURE__ */ __name((callback) => typeof requestAnimationFrame == "function" ? requestAnimationFrame(callback) : setTimeout(callback, 0), "scheduleAnimationFrame"),
+      resolveDispatcher: resolveDisplayDispatcher = /* @__PURE__ */ __name(() => resolveStoreDispatcher(BDFDB, ["dispatch"]), "resolveDisplayDispatcher"),
+      createRuntime = createDisplayRuntime
+    }) {
+      return createRuntime({
+        // Display fallback needs only list selectors and rerender support; live class
+        // rows optionally use ReactUtils.flushSync for one commit.
+        BDFDB: { dotCN: BDFDB.dotCN || {}, MessageUtils: BDFDB.MessageUtils, ReactUtils: BDFDB.ReactUtils },
+        document: {
+          querySelector: /* @__PURE__ */ __name((selector) => {
+            let documentRef = getDocument();
+            return !documentRef || !selector ? null : documentRef.querySelector(selector);
+          }, "querySelector")
+        },
+        requestAnimationFrame: scheduleAnimationFrame,
+        isRuntimeActive: getRuntimeActive,
+        // Preview-wave coalescing stays on BDFDB's managed timer and the shared
+        // scheduler gate.
+        setTimeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "setTimeout"),
+        canRepaintNow: /* @__PURE__ */ __name(() => plugin.canRepaintReceivedDisplayNow(), "canRepaintNow"),
+        resolveDispatcher: resolveDisplayDispatcher,
+        getStoreMessage: /* @__PURE__ */ __name((channelId, messageId) => {
+          try {
+            return BDFDB.LibraryStores.MessageStore.getMessage(channelId, messageId) || null;
+          } catch {
+            return null;
+          }
+        }, "getStoreMessage"),
+        getGuildId: /* @__PURE__ */ __name((channelId) => {
+          try {
+            let channel = BDFDB.LibraryStores.ChannelStore.getChannel(channelId);
+            return channel && channel.guild_id || null;
+          } catch {
+            return null;
+          }
+        }, "getGuildId"),
+        onTranslationDisplayed: /* @__PURE__ */ __name((channelId, messageId) => plugin.ensureLoadedStatusCapsuleController().recordTranslationsDisplayed(channelId, [messageId]), "onTranslationDisplayed"),
+        getUserScrollIntentSequence: /* @__PURE__ */ __name(() => plugin.ensureMessageViewportStore().getUserScrollIntentSequence(), "getUserScrollIntentSequence"),
+        // Scroll preservation is best-effort: capture/restore failures never break a
+        // display transaction. The viewport store keeps anchor-over-offset policy.
+        captureScrollState: /* @__PURE__ */ __name((context) => {
+          try {
+            return plugin.ensureMessageViewportStore().captureDisplayTransactionScrollState(context);
+          } catch {
+            return null;
+          }
+        }, "captureScrollState"),
+        restoreScrollState: /* @__PURE__ */ __name((scrollerState) => {
+          try {
+            plugin.ensureMessageViewportStore().restoreDisplayTransactionScrollState(scrollerState);
+          } catch {
+          }
+        }, "restoreScrollState"),
+        restoreScrollStateNow: /* @__PURE__ */ __name((scrollerState) => plugin.ensureMessageViewportStore().restoreDisplayTransactionScrollStateNow(scrollerState), "restoreScrollStateNow")
+      });
+    }
+    __name(createPluginReceivedDisplayRuntime, "createPluginReceivedDisplayRuntime");
+    module2.exports = { createPluginReceivedDisplayRuntime };
   }
 });
 
@@ -9974,32 +10070,6 @@ var require_message_deletion_lifecycle = __commonJS({
   }
 });
 
-// src/discord/store-dispatcher.js
-var require_store_dispatcher = __commonJS({
-  "src/discord/store-dispatcher.js"(exports2, module2) {
-    function resolveStoreDispatcher(BDFDB, requiredMethods = ["dispatch"]) {
-      let methods = [...new Set([].concat(requiredMethods || []).filter((method) => typeof method == "string" && method))], stores = null;
-      try {
-        stores = BDFDB && BDFDB.LibraryStores || null;
-      } catch {
-        return null;
-      }
-      for (let storeName of ["SelectedChannelStore", "MessageStore"]) {
-        let dispatcher = null;
-        try {
-          dispatcher = stores && stores[storeName] && stores[storeName]._dispatcher || null;
-        } catch {
-          continue;
-        }
-        if (dispatcher && methods.every((method) => typeof dispatcher[method] == "function")) return dispatcher;
-      }
-      return null;
-    }
-    __name(resolveStoreDispatcher, "resolveStoreDispatcher");
-    module2.exports = { resolveStoreDispatcher };
-  }
-});
-
 // src/lifecycle/message-deletion-lifecycle-wiring.js
 var require_message_deletion_lifecycle_wiring = __commonJS({
   "src/lifecycle/message-deletion-lifecycle-wiring.js"(exports2, module2) {
@@ -12049,7 +12119,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), { createPluginLoadedStatusCapsuleController, positionPluginLoadedStatusElement } = require_loaded_status_capsule_wiring(), { createChannelTitleStore } = require_channel_title_store(), { createPluginMessageViewportStore } = require_message_viewport_wiring(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createPluginHistoricalSnapshotCadence } = require_historical_snapshot_cadence_wiring(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createPluginReceivedDisplayRuntime } = require_display_runtime_wiring(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), { createPluginLoadedStatusCapsuleController, positionPluginLoadedStatusElement } = require_loaded_status_capsule_wiring(), { createChannelTitleStore } = require_channel_title_store(), { createPluginMessageViewportStore } = require_message_viewport_wiring(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createPluginHistoricalSnapshotCadence } = require_historical_snapshot_cadence_wiring(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -12097,7 +12167,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "4432647c5d41772e";
+            return "143512968d82fab2";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13812,55 +13882,7 @@ __________________ __________________ __________________
             return this.messageViewportStoreInstance || (this.messageViewportStoreInstance = createPluginMessageViewportStore({ plugin: this, BDFDB })), this.messageViewportStoreInstance;
           }
           ensureReceivedDisplayRuntime() {
-            return this.receivedDisplayRuntimeInstance || (this.receivedDisplayRuntimeInstance = createDisplayRuntime({
-              // Display fallback needs the list selectors and rerender helper; live
-              // class rows optionally use ReactUtils.flushSync for one commit.
-              BDFDB: { dotCN: BDFDB.dotCN || {}, MessageUtils: BDFDB.MessageUtils, ReactUtils: BDFDB.ReactUtils },
-              document: {
-                querySelector: /* @__PURE__ */ __name((selector) => typeof document > "u" || !document || !selector ? null : document.querySelector(selector), "querySelector")
-              },
-              requestAnimationFrame: /* @__PURE__ */ __name((callback) => typeof requestAnimationFrame == "function" ? requestAnimationFrame(callback) : setTimeout(callback, 0), "requestAnimationFrame"),
-              isRuntimeActive: /* @__PURE__ */ __name(() => pluginRuntimeActive, "isRuntimeActive"),
-              // Preview-wave coalescer: managed timer plus the scheduler's repaint gate.
-              setTimeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "setTimeout"),
-              canRepaintNow: /* @__PURE__ */ __name(() => this.canRepaintReceivedDisplayNow(), "canRepaintNow"),
-              // Flux per-row repaint handles (experiment-verified 2026-08-19): the store
-              // dispatcher, the message record, and the guild for the payload envelope.
-              resolveDispatcher: /* @__PURE__ */ __name(() => resolveStoreDispatcher(BDFDB, ["dispatch"]), "resolveDispatcher"),
-              getStoreMessage: /* @__PURE__ */ __name((channelId, messageId) => {
-                try {
-                  return BDFDB.LibraryStores.MessageStore.getMessage(channelId, messageId) || null;
-                } catch {
-                  return null;
-                }
-              }, "getStoreMessage"),
-              getGuildId: /* @__PURE__ */ __name((channelId) => {
-                try {
-                  let channel = BDFDB.LibraryStores.ChannelStore.getChannel(channelId);
-                  return channel && channel.guild_id || null;
-                } catch {
-                  return null;
-                }
-              }, "getGuildId"),
-              onTranslationDisplayed: /* @__PURE__ */ __name((channelId, messageId) => this.ensureLoadedStatusCapsuleController().recordTranslationsDisplayed(channelId, [messageId]), "onTranslationDisplayed"),
-              getUserScrollIntentSequence: /* @__PURE__ */ __name(() => this.ensureMessageViewportStore().getUserScrollIntentSequence(), "getUserScrollIntentSequence"),
-              // Scroll preservation is best-effort: a capture or restore failure must never
-              // break a display transaction. The viewport store owns the anchor-over-offset choice.
-              captureScrollState: /* @__PURE__ */ __name((context) => {
-                try {
-                  return this.ensureMessageViewportStore().captureDisplayTransactionScrollState(context);
-                } catch {
-                  return null;
-                }
-              }, "captureScrollState"),
-              restoreScrollState: /* @__PURE__ */ __name((scrollerState) => {
-                try {
-                  this.ensureMessageViewportStore().restoreDisplayTransactionScrollState(scrollerState);
-                } catch {
-                }
-              }, "restoreScrollState"),
-              restoreScrollStateNow: /* @__PURE__ */ __name((scrollerState) => this.ensureMessageViewportStore().restoreDisplayTransactionScrollStateNow(scrollerState), "restoreScrollStateNow")
-            })), this.receivedDisplayRuntimeInstance;
+            return this.receivedDisplayRuntimeInstance || (this.receivedDisplayRuntimeInstance = createPluginReceivedDisplayRuntime({ plugin: this, BDFDB, getRuntimeActive: /* @__PURE__ */ __name(() => pluginRuntimeActive, "getRuntimeActive") })), this.receivedDisplayRuntimeInstance;
           }
           resetReceivedDisplayRuntime() {
             this.receivedDisplayRuntimeInstance = null;

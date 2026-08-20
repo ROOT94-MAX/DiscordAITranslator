@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refactor: Slice 5d 第八个 composition-root 切片把 Received Display Runtime 的 Flux dispatcher、Message/Channel Store、浏览器 DOM/RAF、BDFDB 托管计时器、胶囊计数和视口恢复接线迁入 `display-runtime-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,369 行降至 3,339 行，显示状态、单行重绘、整区回退和滚动恢复策略保持不变
+- Test: 新增 Received Display Runtime 的完整宿主/插件端口、Store 异常收敛和 best-effort 视口恢复契约；显示生命周期、吞吐、Flux、手动锚点与 `flushSync` 既有契约继续通过
 - Refactor: Slice 5d 第七个 composition-root 切片把已加载状态胶囊的 SelectedChannel Store、浏览器定位、运行时存活门、滚动/重试及 DOM 生命周期回调接线迁入 `loaded-status-capsule-wiring.js`；`runtime.js` 仅保留延迟单例和兼容定位入口，架构约束从 3,391 行降至 3,369 行，累计计数、频道隔离和胶囊定位行为保持不变
 - Test: 新增已加载状态胶囊接线的完整依赖、插件回调透传及 BDFDB/document/window 定位 envelope 契约；既有胶囊 DOM、心跳、慢速模式提示定位和运行时停止门测试继续通过
 - Refactor: Slice 5d 第六个 composition-root 切片把消息删除的 Store dispatcher、实时队列、历史任务/失败账本、缓存、显示状态清理接线迁入 `message-deletion-lifecycle-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,401 行降至 3,391 行，单条/批量删除订阅和频道隔离行为保持不变
