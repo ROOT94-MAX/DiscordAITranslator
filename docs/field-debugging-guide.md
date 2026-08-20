@@ -42,6 +42,7 @@ The refactor was intentionally bottom-up. A top-down rewrite of the composition 
 | Slice 5b/5c audit (`4c12fd9`) | It was unclear whether preview/embed/title paint still required legacy path B | Verified preview commits were host-aware transactions, embeds rode the host row, and titles used a separate header mechanism. Full-list path B remained only for channel/lifecycle repaint semantics | Do not delete lifecycle rebuilds under the claim that all full-list work is obsolete |
 | Slice 5d cuts (`cadc29e` through `6e7a4cd`) | The runtime still owned unrelated codecs, labels, menus, markup, defaults/patch lists, and preview queue | Extracted special encodings, general-setting labels, context menus, Discord markup renderer, plugin defaults/patch lists, and reply-preview queue; repaired two Russian mojibake labels in a separate tested fix | Runtime 3,870 → 3,480 before later field changes; each cut lowered the architecture ratchet |
 | Field-era ownership cleanup (`1b8f565`, `8ff33bf`) | Forward content projection and duplicate direct-original display still leaked through the runtime | Moved content-view projection into display ownership and removed the obsolete direct-original React/CSS/settings branch | Ratchet reached 3,479 in that slice; retired-code cleanup lowered it to 3,478 and direct Store deletion subscriptions to 3,476. `showOriginalMessage` is the sole received-original setting |
+| Resumed display wiring (`04ea458`, `aa3057f`) | Display-runtime and repaint-scheduler host wiring still lived in the composition root | Moved Flux/Store/browser/viewport and repaint gate/timer/outcome ports into their owning wiring modules | Build `65a775c63d76dffa` passed active-scroll veto and stable post-scroll completion. Whole-chat fallback still refreshed the composer/input, matching the existing render debt; the user parked that issue for later |
 
 ### What the refactor did and did not accomplish
 
@@ -191,9 +192,9 @@ This section preserves the order in which the failures were reported and correct
 
 ## Open or Observation Items
 
-1. Some whole-chat rebuild fallbacks remain (`R` lane/diagnostic), so occasional composer-icon flicker can still occur when row confirmation fails, preview hosts require a broad paint, or lifecycle settings change.
+1. Some whole-chat rebuild fallbacks remain (`R` lane/diagnostic), so the composer/input can still refresh when row confirmation fails, preview hosts require a broad paint, or lifecycle settings change. Build `65a775c63d76dffa` reproduced this existing behavior; the user explicitly parked it for later.
 2. Scrollbar thumb size/position can move when translated rows change total height. Reopen only when the center reading-line message itself is lost or the view is stranded at newest.
-3. Slice 5d is not finished: `src/legacy/runtime.js` is still a 3,476-line composition root with two module-level shared declarators. Continue ownership extraction only behind contract tests; do not call the refactor complete merely because many modules exist.
+3. Slice 5d is not finished: `src/legacy/runtime.js` is still a 3,329-line composition root with two module-level shared declarators. Continue ownership extraction only behind contract tests; do not call the refactor complete merely because many modules exist.
 4. Oversized modules and generated-bundle size remain architecture debt. Split by ownership after contracts exist; do not split merely to reduce a line count.
 5. Automatic multi-page history fetching is parked after field rollback. Clean-stop cache flush is complete, while provider physical cancellation and broader lifecycle consolidation remain observation-gated.
 

@@ -170,7 +170,7 @@ npm run verify
 ## Known Debt
 
 - `src/legacy/runtime.js` remains a 3,329-line composition root.
-- Whole-chat fallback diagnostics (`R`) can still correspond to occasional composer flicker.
+- Whole-chat fallback diagnostics (`R`) can still remount/refresh the composer and its input row. The combined display-wiring PTB check on build `65a775c63d76dffa` reproduced this pre-existing behavior; it is explicitly parked for later render-boundary work.
 - Provider abort support and lifecycle task registry cleanup remain observation-gated in `recovery-plan.md`; automatic multi-page history fetching is parked after field rollback, while direct Store message-delete subscriptions are field-closed.
 - Discord internal store and snapshot shapes require re-observation after client updates.
 - Some modules remain large and should split only when ownership contracts and regression tests exist.
