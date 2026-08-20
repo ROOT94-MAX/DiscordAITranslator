@@ -41,11 +41,11 @@ Scrollbar-thumb movement caused only by added row height is expected; reopen whe
 
 ## Priority 1: Message Deletion Dispatcher
 
-**Status: IMPLEMENTED LOCALLY — PTB delete/bulk-delete observation pending.** The global `dispatch` patch is gone. `MESSAGE_DELETE` and `MESSAGE_DELETE_BULK` now subscribe directly through the Store resolver already shared with Flux row repaint.
+**Status: SINGLE DELETE FIELD-CONFIRMED — bulk-delete observation pending.** Installed build `d8af59cf7ce43f9c` received a real single-delete event on 2026-08-20; the message disappeared and its dependent view updated normally. The global `dispatch` patch is gone, and both delete action types subscribe directly through the Store resolver already shared with Flux row repaint.
 
 Automated evidence covers idempotent start, exact stop/unsubscribe, partial-start rollback, absent/throwing Store handles, single/bulk payload normalization, and channel-isolated cleanup of display state, reply hosts, live/history queues, and cache. The capsule's cumulative identity deliberately remains: `product.md` defines it as messages displayed during the channel session and resets it only on a global tracking reset.
 
-Close this item after one PTB observation confirms both real delete event shapes reach the subscription and the installed plugin stops without leaving duplicate handlers.
+Close this item after one PTB bulk-delete observation confirms the second real event shape reaches the subscription. Automated tests already cover exact stop/unsubscribe and duplicate-start prevention.
 
 ## Priority 2: Historical Source Completeness
 
