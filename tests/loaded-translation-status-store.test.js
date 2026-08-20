@@ -550,7 +550,7 @@ test("completed batches accumulate a session total in the pill and the hover det
 	assert.match(harness.store.getStatusDetailText(), /session total 33/);
 });
 
-test("the channel total survives batch restarts and per-channel resets, and only a global reset drops it", () => {
+test("the channel total survives batch restarts and ordinary per-channel resets", () => {
 	const harness = createHarness();
 	harness.store.update({channelId: "c1", batch: 1, active: true, collecting: false, done: false, total: 5, processed: 5});
 	harness.store.recordSessionDisplayed("c1", ids("m", 5));
@@ -570,7 +570,26 @@ test("the channel total survives batch restarts and per-channel resets, and only
 	assert.equal(harness.store.getStatusText(), "7/7", "the restarted batch closes on the cumulative total");
 	harness.store.resetSeen();
 	harness.store.update({});
-	assert.equal(harness.store.getStatus().sessionDisplayed, 0, "only the global tracking reset drops the totals");
+	assert.equal(harness.store.getStatus().sessionDisplayed, 0, "the global tracking reset drops every channel total");
+});
+
+test("a changed translation configuration starts a fresh cumulative session for only that channel", () => {
+	const harness = createHarness();
+	assert.equal(harness.store.setConfigurationSignature("c1", "config-a"), false);
+	assert.equal(harness.store.setConfigurationSignature("c2", "config-x"), false);
+	harness.store.markMessageSeen("c1", "old-1");
+	harness.store.recordSessionDisplayed("c1", ids("old", 36));
+	harness.store.recordSessionDisplayed("c2", ids("other", 4));
+	harness.store.update({channelId: "c1", active: false, done: true, total: 36, processed: 36, displayed: 36});
+	assert.equal(harness.store.getStatus().sessionDisplayed, 36);
+
+	assert.equal(harness.store.setConfigurationSignature("c1", "config-b"), true);
+	assert.equal(harness.store.getSeenCount("c1"), 0);
+	harness.store.update({channelId: "c1", active: true, done: false, total: 5, processed: 0, displayed: 0});
+	assert.equal(harness.store.getStatus().sessionDisplayed, 0, "the old target-language count cannot enter the new configuration");
+	harness.store.update({channelId: "c2", active: true, done: false, total: 1, processed: 0, displayed: 0});
+	assert.equal(harness.store.getStatus().sessionDisplayed, 4, "another channel keeps its own configuration session");
+	assert.equal(harness.store.setConfigurationSignature("c1", "config-b"), false, "re-reading the same configuration is a no-op");
 });
 
 test("the session total counts unique message ids, so re-reports and late batch echoes never inflate it", () => {

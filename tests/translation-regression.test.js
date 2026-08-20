@@ -2307,6 +2307,36 @@ test("changing the received target language restores stale paint without launder
 	assert.deepEqual(queued, [{id: "100", source: "Good morning"}], "the configuration change queues at most one replacement decision");
 });
 
+test("changing received configuration retires old cumulative and retry state before a new history session", () => {
+	const plugin = createPluginInstance();
+	const channelId = "channel-config-session";
+	plugin.settings.choices.received.output = "zh-CN";
+	plugin.processMessages({instance: {props: {channel: {id: channelId}, channelStream: []}}});
+	plugin.updateLoadedAutoTranslationStatus({channelId, batch: 1, active: false, done: true, total: 36, processed: 36, displayed: 36});
+	plugin.ensureLoadedStatusCapsuleController().recordTranslationsDisplayed(channelId, Array.from({length: 36}, (_, index) => `old-${index + 1}`));
+	plugin.ensureHistoricalJobRegistry().setFailedSnapshot(channelId, {
+		items: Array.from({length: 50}, (_, index) => ({message: {id: `failed-${index + 1}`}}))
+	});
+	const channelState = plugin.getAutoTranslationChannelState(channelId);
+	channelState.initialized = true;
+	channelState.boundaryMessageId = "999";
+	assert.match(plugin.getLoadedAutoTranslationStatusText(), /36/);
+	assert.equal(plugin.getFailedHistoricalTranslationCount(channelId), 50);
+
+	plugin.settings.choices.received.output = "en";
+	plugin.processMessages({instance: {props: {channel: {id: channelId}, channelStream: []}}});
+
+	assert.doesNotMatch(plugin.getLoadedAutoTranslationStatusText(), /36|50/, "the new target starts without old completed or retry counts");
+	assert.equal(plugin.getFailedHistoricalTranslationCount(channelId), 0);
+	assert.equal(channelState.initialized, false);
+	assert.equal(channelState.boundaryMessageId, null);
+	channelState.initialized = true;
+	channelState.boundaryMessageId = "888";
+	plugin.processMessages({instance: {props: {channel: {id: channelId}, channelStream: []}}});
+	assert.equal(channelState.initialized, true, "the same English configuration cannot reset repeatedly");
+	assert.equal(channelState.boundaryMessageId, "888");
+});
+
 test("a real edit after an automatic translation is still treated as an edit", () => {
 	// The anchor must recognise our own paint and nothing else, or a genuine edit would be
 	// invisible and the message would keep showing a translation of text that is gone.

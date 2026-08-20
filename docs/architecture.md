@@ -8,7 +8,7 @@ This document describes the current runtime boundaries and migration rules. User
 
 - Release line: v0.3.39.
 - Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
-- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased master build ID: `73996dd4d6d711f0`.
+- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased master build ID: `91275e9ec8b17a40`.
 - Legacy composition-root ratchet: 3,448 lines and two module-level shared declarators.
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
 - Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
@@ -115,6 +115,8 @@ Scrollbar thumb geometry may still change when translated rows increase total co
 ## Loaded Translation Status
 
 The capsule displays one cumulative ratio per channel. Unique translated message IDs are recorded at the message-state-store transition point, while the capsule DOM updates only on batch/status heartbeat. A later batch extends the same ratio, for example `13/13 -> 13/33 -> 33/33`.
+
+That cumulative identity includes the effective received-translation configuration. When its signature changes, only that channel drops its displayed-ID set, seen-message boundary, failed retry snapshot, queued work, and initialization boundary before collecting the new configuration. Re-reading the same signature is a no-op, so normal renders never reset the ratio.
 
 Configured capacity and inspected rows are not the denominator. Resolved skips leave pending work, stale batch reports are rejected, and retry/failure status uses the same cumulative basis. Channel switch hides the unrelated capsule without discarding its channel state.
 

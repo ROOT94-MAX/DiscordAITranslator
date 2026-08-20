@@ -194,6 +194,10 @@ function createLoadedTranslationStatusStore({
 	// what makes the total immune to double counting and to late batch reports
 	// bleeding across batch boundaries (2026-08-19 report).
 	let sessionDisplayedIds = new Map();
+	// A cumulative ratio belongs to one effective received-translation configuration.
+	// Changing target/source/provider policy starts a new identity for the channel;
+	// otherwise old-language completions and retry counts leak into the next session.
+	let sessionConfigurationSignatures = new Map();
 
 	function getSessionDisplayedCount(channelId) {
 		const channelSet = sessionDisplayedIds.get(normalizeChannelId(channelId));
@@ -295,9 +299,21 @@ function createLoadedTranslationStatusStore({
 			if (normalizeChannelId(status.channelId) === key) status = Object.assign({}, status, {sessionDisplayed: channelSet.size});
 			return this.getStatus();
 		},
+		setConfigurationSignature(channelId, signature) {
+			const key = normalizeChannelId(channelId);
+			const nextSignature = signature == null ? "" : String(signature);
+			if (!key || !nextSignature) return false;
+			const previousSignature = sessionConfigurationSignatures.get(key);
+			sessionConfigurationSignatures.set(key, nextSignature);
+			if (previousSignature === undefined || previousSignature === nextSignature) return false;
+			delete seenMessages[key];
+			sessionDisplayedIds.delete(key);
+			if (normalizeChannelId(status.channelId) === key) status = Object.assign({}, status, {sessionDisplayed: 0});
+			return true;
+		},
 		// clear() resets the visible status but keeps the per-channel session ids:
-		// batch restarts and channel re-entry must not zero the user's running total
-		// (2026-08-19 decision). Only the global tracking reset drops the ids.
+		// batch restarts and channel re-entry must not zero the user's running total.
+		// Only a global tracking reset or an effective configuration change drops ids.
 		clear() {
 			this.cancelTimers();
 			status = createEmptyStatus();

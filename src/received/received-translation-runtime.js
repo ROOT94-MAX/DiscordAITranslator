@@ -177,9 +177,24 @@ function createReceivedTranslationRuntime({
 	BDFDB = {ArrayUtils: {is: Array.isArray}, LibraryStores: {SelectedChannelStore: {getChannelId: () => null}}},
 	// Only the batch counters are read here. Every other call into the status store
 	// goes through the plugin, which owns the banner.
-	loadedTranslationStatusStore = {getNextBatchNumber: () => 0, getCurrentBatchNumber: () => 0}
+	loadedTranslationStatusStore = {getNextBatchNumber: () => 0, getCurrentBatchNumber: () => 0, setConfigurationSignature: () => false}
 } = {}) {
 	const receivedTranslationRuntime = {
+		ensureTranslationConfigurationSession(plugin, channelId) {
+			if (!channelId) return false;
+			const signature = plugin.createHistoricalTranslationJobConfigurationSignature(channelId);
+			if (!loadedTranslationStatusStore.setConfigurationSignature(channelId, signature)) return false;
+			// Old failures, counters and queued work name the previous configuration and
+			// cannot be retried or counted under the new target language.
+			plugin.clearAutoTranslationQueue(channelId);
+			plugin.ensureHistoricalJobRegistry().deleteFailedSnapshot(channelId);
+			const channelState = plugin.getAutoTranslationChannelState(channelId);
+			if (channelState) {
+				channelState.initialized = false;
+				channelState.boundaryMessageId = null;
+			}
+			return true;
+		},
 		// One object threaded through the whole stream walk, so the per-entry step stays
 		// a pure function of (entry, context). It also decides, once per render, whether
 		// this is the channel's first pass in loaded-messages scope - the only moment
@@ -193,6 +208,7 @@ function createReceivedTranslationRuntime({
 			const channel = e.instance.props.channel;
 			const channelId = channel && channel.id;
 			plugin.prepareAutoTranslationChannelSession(channelId);
+			receivedTranslationRuntime.ensureTranslationConfigurationSession(plugin, channelId);
 			const channelState = plugin.getAutoTranslationChannelState(channelId);
 			const shouldInitializeAutoTranslation = !!(channelId && plugin.isTranslationEnabled(channelId) && channelState && !channelState.initialized);
 			const receivedScope = plugin.getReceivedAutoTranslateScope();

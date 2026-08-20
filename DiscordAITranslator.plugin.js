@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 73996dd4d6d711f0
+ * @buildId 91275e9ec8b17a40
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -6325,7 +6325,7 @@ var require_loaded_translation_status_store = __commonJS({
       requestFrame = /* @__PURE__ */ __name((callback) => typeof requestAnimationFrame == "function" ? requestAnimationFrame(callback) : globalThis.setTimeout(callback, 16), "requestFrame"),
       cancelFrame = /* @__PURE__ */ __name((handle) => typeof cancelAnimationFrame == "function" ? cancelAnimationFrame(handle) : globalThis.clearTimeout(handle), "cancelFrame")
     } = {}) {
-      let startTimer = scheduleTimer || ((callback, delay) => globalThis.setTimeout(callback, delay)), stopTimer = cancelTimer || ((handle) => globalThis.clearTimeout(handle)), positionFrame = null, status = createEmptyStatus(), hideTimer = null, refreshTimer = null, seenMessages = {}, sealedTotal = null, sealedJobKey = "", sessionDisplayedIds = /* @__PURE__ */ new Map();
+      let startTimer = scheduleTimer || ((callback, delay) => globalThis.setTimeout(callback, delay)), stopTimer = cancelTimer || ((handle) => globalThis.clearTimeout(handle)), positionFrame = null, status = createEmptyStatus(), hideTimer = null, refreshTimer = null, seenMessages = {}, sealedTotal = null, sealedJobKey = "", sessionDisplayedIds = /* @__PURE__ */ new Map(), sessionConfigurationSignatures = /* @__PURE__ */ new Map();
       function getSessionDisplayedCount(channelId) {
         let channelSet = sessionDisplayedIds.get(normalizeChannelId(channelId));
         return channelSet ? channelSet.size : 0;
@@ -6387,9 +6387,15 @@ var require_loaded_translation_status_store = __commonJS({
           for (let messageId of messageIds) messageId != null && channelSet.add(String(messageId));
           return normalizeChannelId(status.channelId) === key && (status = Object.assign({}, status, { sessionDisplayed: channelSet.size })), this.getStatus();
         },
+        setConfigurationSignature(channelId, signature) {
+          let key = normalizeChannelId(channelId), nextSignature = signature == null ? "" : String(signature);
+          if (!key || !nextSignature) return !1;
+          let previousSignature = sessionConfigurationSignatures.get(key);
+          return sessionConfigurationSignatures.set(key, nextSignature), previousSignature === void 0 || previousSignature === nextSignature ? !1 : (delete seenMessages[key], sessionDisplayedIds.delete(key), normalizeChannelId(status.channelId) === key && (status = Object.assign({}, status, { sessionDisplayed: 0 })), !0);
+        },
         // clear() resets the visible status but keeps the per-channel session ids:
-        // batch restarts and channel re-entry must not zero the user's running total
-        // (2026-08-19 decision). Only the global tracking reset drops the ids.
+        // batch restarts and channel re-entry must not zero the user's running total.
+        // Only a global tracking reset or an effective configuration change drops ids.
         clear() {
           return this.cancelTimers(), status = createEmptyStatus(), sealedTotal = null, sealedJobKey = "", this.getStatus();
         },
@@ -9109,9 +9115,17 @@ var require_received_translation_runtime = __commonJS({
       BDFDB = { ArrayUtils: { is: Array.isArray }, LibraryStores: { SelectedChannelStore: { getChannelId: /* @__PURE__ */ __name(() => null, "getChannelId") } } },
       // Only the batch counters are read here. Every other call into the status store
       // goes through the plugin, which owns the banner.
-      loadedTranslationStatusStore = { getNextBatchNumber: /* @__PURE__ */ __name(() => 0, "getNextBatchNumber"), getCurrentBatchNumber: /* @__PURE__ */ __name(() => 0, "getCurrentBatchNumber") }
+      loadedTranslationStatusStore = { getNextBatchNumber: /* @__PURE__ */ __name(() => 0, "getNextBatchNumber"), getCurrentBatchNumber: /* @__PURE__ */ __name(() => 0, "getCurrentBatchNumber"), setConfigurationSignature: /* @__PURE__ */ __name(() => !1, "setConfigurationSignature") }
     } = {}) {
       let receivedTranslationRuntime = {
+        ensureTranslationConfigurationSession(plugin, channelId) {
+          if (!channelId) return !1;
+          let signature = plugin.createHistoricalTranslationJobConfigurationSignature(channelId);
+          if (!loadedTranslationStatusStore.setConfigurationSignature(channelId, signature)) return !1;
+          plugin.clearAutoTranslationQueue(channelId), plugin.ensureHistoricalJobRegistry().deleteFailedSnapshot(channelId);
+          let channelState = plugin.getAutoTranslationChannelState(channelId);
+          return channelState && (channelState.initialized = !1, channelState.boundaryMessageId = null), !0;
+        },
         // One object threaded through the whole stream walk, so the per-entry step stays
         // a pure function of (entry, context). It also decides, once per render, whether
         // this is the channel's first pass in loaded-messages scope - the only moment
@@ -9123,7 +9137,7 @@ var require_received_translation_runtime = __commonJS({
         createProcessMessagesContext(plugin, e) {
           e.instance.props.channelStream = [].concat(e.instance.props.channelStream);
           let channel = e.instance.props.channel, channelId = channel && channel.id;
-          plugin.prepareAutoTranslationChannelSession(channelId);
+          plugin.prepareAutoTranslationChannelSession(channelId), receivedTranslationRuntime.ensureTranslationConfigurationSession(plugin, channelId);
           let channelState = plugin.getAutoTranslationChannelState(channelId), shouldInitializeAutoTranslation = !!(channelId && plugin.isTranslationEnabled(channelId) && channelState && !channelState.initialized), receivedScope = plugin.getReceivedAutoTranslateScope(), historicalLoadedPass = shouldInitializeAutoTranslation && receivedScope == "loaded_messages", channelLastMessageId = shouldInitializeAutoTranslation && receivedScope == "new_only" && channel && (channel.lastMessageId || channel.last_message_id) || null, initialBoundaryMessageId = channelState && channelState.boundaryMessageId || channelLastMessageId;
           if (historicalLoadedPass) {
             let retainedFailedCount = plugin.getFailedHistoricalTranslationCount(channelId);
@@ -11831,7 +11845,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "73996dd4d6d711f0";
+            return "91275e9ec8b17a40";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);

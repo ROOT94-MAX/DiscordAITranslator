@@ -172,6 +172,7 @@ function createPlugin(overrides = {}) {
 		getHistoricalTranslationJobQueue: () => null,
 		refreshReceivedMessageSourceState: () => false,
 		createReceivedTranslationSignature: () => "signature-1",
+		createHistoricalTranslationJobConfigurationSignature: () => "signature-1",
 		invalidateHistoricalTranslationMessage: () => false,
 		invalidateLiveTranslationMessage: () => false,
 		getReceivedDisplayRuntimeView: () => null,
@@ -216,7 +217,8 @@ function createPlugin(overrides = {}) {
 function createRuntime(statusStoreOverrides = {}) {
 	const statusStore = Object.assign({
 		getNextBatchNumber: () => 7,
-		getCurrentBatchNumber: () => 7
+		getCurrentBatchNumber: () => 7,
+		setConfigurationSignature: () => false
 	}, statusStoreOverrides);
 	const {receivedTranslationRuntime} = createReceivedTranslationRuntime({BDFDB, loadedTranslationStatusStore: statusStore});
 	return receivedTranslationRuntime;
@@ -679,7 +681,8 @@ test("the snapshot is not finished while the user is actively scrolling", () => 
 });
 
 test("processMessages walks the whole stream and finishes once", () => {
-	const runtime = createRuntime();
+	const configurationSessions = [];
+	const runtime = createRuntime({setConfigurationSignature: (channelId, signature) => (configurationSessions.push([channelId, signature]), false)});
 	const plugin = createPlugin();
 	const channelState = {boundaryMessageId: "100", initialized: false};
 	plugin.channelState = channelState;
@@ -688,6 +691,7 @@ test("processMessages walks the whole stream and finishes once", () => {
 		{content: {id: "500", attachments: []}}
 	]));
 	assert.deepEqual(plugin.calls.checkMessage.map(args => args[1].id), ["300", "500"]);
+	assert.deepEqual(configurationSessions, [["channel-1", "signature-1"]], "configuration identity is checked before collection");
 	assert.equal(channelState.boundaryMessageId, "500");
 	assert.equal(channelState.initialized, true);
 });
