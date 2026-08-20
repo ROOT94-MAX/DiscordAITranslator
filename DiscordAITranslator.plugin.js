@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 92a9cc910670918d
+ * @buildId 776fc74287e3199d
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -9123,7 +9123,7 @@ var require_received_translation_runtime = __commonJS({
           e.instance.props.channelStream = [].concat(e.instance.props.channelStream);
           let channel = e.instance.props.channel, channelId = channel && channel.id;
           plugin.prepareAutoTranslationChannelSession(channelId);
-          let channelState = plugin.getAutoTranslationChannelState(channelId), shouldInitializeAutoTranslation = !!(channelId && plugin.isTranslationEnabled(channelId) && channelState && !channelState.initialized), historicalLoadedPass = shouldInitializeAutoTranslation && plugin.getReceivedAutoTranslateScope() == "loaded_messages";
+          let channelState = plugin.getAutoTranslationChannelState(channelId), shouldInitializeAutoTranslation = !!(channelId && plugin.isTranslationEnabled(channelId) && channelState && !channelState.initialized), receivedScope = plugin.getReceivedAutoTranslateScope(), historicalLoadedPass = shouldInitializeAutoTranslation && receivedScope == "loaded_messages", channelLastMessageId = shouldInitializeAutoTranslation && receivedScope == "new_only" && channel && (channel.lastMessageId || channel.last_message_id) || null, initialBoundaryMessageId = channelState && channelState.boundaryMessageId || channelLastMessageId;
           if (historicalLoadedPass) {
             let retainedFailedCount = plugin.getFailedHistoricalTranslationCount(channelId);
             plugin.attachAutoTranslationScrollWatcher(), plugin.updateLoadedAutoTranslationStatus({ active: !0, collecting: !0, done: !1, channelId, batch: loadedTranslationStatusStore.getNextBatchNumber(), total: 0, processed: 0, displayed: 0, skipped: 0, failed: 0, retryable: retainedFailedCount, aiDropped: 0, lastSkipReason: "", lastSkipPreview: "" });
@@ -9132,15 +9132,19 @@ var require_received_translation_runtime = __commonJS({
             channel,
             channelId,
             channelState,
+            receivedScope,
             shouldInitializeAutoTranslation,
             historicalLoadedPass,
             historicalSourceGeneration: historicalLoadedPass && typeof plugin.getHistoricalMessageSourceGeneration == "function" ? plugin.getHistoricalMessageSourceGeneration(channelId) : null,
             renderedHistoricalMessages: [],
             skipInitialLoadedMessages: shouldInitializeAutoTranslation && plugin.shouldDeferInitialAutoTranslate(channelId),
-            autoTranslateBoundaryId: channelState ? channelState.boundaryMessageId : null,
-            highestMessageId: channelState ? channelState.boundaryMessageId : null,
+            autoTranslateBoundaryId: initialBoundaryMessageId,
+            highestMessageId: initialBoundaryMessageId,
             collectedHistoricalMessages: !1
           };
+        },
+        shouldSkipInitialAutoQueue(plugin, message, context) {
+          return context.skipInitialLoadedMessages ? !context.autoTranslateBoundaryId || !plugin.isMessageIdNewer(message.id, context.autoTranslateBoundaryId) : !1;
         },
         shouldCollectHistoricalStreamMessage(plugin, message, context) {
           if (!message || !message.id || !context.channelId) return !1;
@@ -9151,9 +9155,9 @@ var require_received_translation_runtime = __commonJS({
           let message = entry && entry.content;
           if (!message) return context.highestMessageId;
           if (BDFDB.ArrayUtils.is(message.attachments)) {
-            let historicalLoad = receivedTranslationRuntime.shouldCollectHistoricalStreamMessage(plugin, message, context);
+            let historicalLoad = receivedTranslationRuntime.shouldCollectHistoricalStreamMessage(plugin, message, context), skipAutoQueue = receivedTranslationRuntime.shouldSkipInitialAutoQueue(plugin, message, context);
             return historicalLoad && (context.collectedHistoricalMessages = !0), historicalLoad && context.historicalLoadedPass && context.renderedHistoricalMessages.push(message), context.highestMessageId = plugin.getNewestMessageId(context.highestMessageId, message.id), plugin.checkMessage(entry, message, context.channel, {
-              skipAutoQueue: context.skipInitialLoadedMessages,
+              skipAutoQueue,
               autoTranslateBoundaryId: context.autoTranslateBoundaryId,
               historicalLoad,
               deferHistoricalSnapshotStart: historicalLoad,
@@ -9163,9 +9167,9 @@ var require_received_translation_runtime = __commonJS({
           if (BDFDB.ArrayUtils.is(message)) for (let index in message) {
             let childMessage = message[index].content;
             if (!childMessage || !BDFDB.ArrayUtils.is(childMessage.attachments)) continue;
-            let historicalLoad = receivedTranslationRuntime.shouldCollectHistoricalStreamMessage(plugin, childMessage, context);
+            let historicalLoad = receivedTranslationRuntime.shouldCollectHistoricalStreamMessage(plugin, childMessage, context), skipAutoQueue = receivedTranslationRuntime.shouldSkipInitialAutoQueue(plugin, childMessage, context);
             historicalLoad && (context.collectedHistoricalMessages = !0), historicalLoad && context.historicalLoadedPass && context.renderedHistoricalMessages.push(childMessage), context.highestMessageId = plugin.getNewestMessageId(context.highestMessageId, childMessage.id), plugin.checkMessage(message[index], childMessage, context.channel, {
-              skipAutoQueue: context.skipInitialLoadedMessages,
+              skipAutoQueue,
               autoTranslateBoundaryId: context.autoTranslateBoundaryId,
               historicalLoad,
               deferHistoricalSnapshotStart: historicalLoad,
@@ -9175,7 +9179,12 @@ var require_received_translation_runtime = __commonJS({
           return context.highestMessageId;
         },
         finishProcessMessages(plugin, context) {
-          if (context.channelState && (context.channelState.boundaryMessageId = plugin.getNewestMessageId(context.channelState.boundaryMessageId, context.highestMessageId), context.shouldInitializeAutoTranslation && (context.channelState.initialized = !0)), context.historicalLoadedPass && typeof plugin.buildInitialHistoricalTranslationSnapshot == "function") {
+          if (context.channelState) {
+            context.channelState.boundaryMessageId = plugin.getNewestMessageId(context.channelState.boundaryMessageId, context.highestMessageId);
+            let hasNewOnlyBaseline = context.receivedScope != "new_only" || !!context.channelState.boundaryMessageId;
+            context.shouldInitializeAutoTranslation && hasNewOnlyBaseline && (context.channelState.initialized = !0);
+          }
+          if (context.historicalLoadedPass && typeof plugin.buildInitialHistoricalTranslationSnapshot == "function") {
             Promise.resolve(plugin.buildInitialHistoricalTranslationSnapshot({
               channelId: context.channelId,
               generation: context.historicalSourceGeneration,
@@ -9271,7 +9280,7 @@ var require_received_translation_runtime = __commonJS({
           return !!(committedView && committedView.translated);
         },
         resolveCheckMessageDisplay(plugin, stream, message, context) {
-          let hadDisplayedTranslation = !!plugin.ensureReceivedDisplayRuntime().getDisplayView(message.id), translation = plugin.getActiveMessageTranslation(message, context.channelId, context.expectedSignature), messageChanged = hadDisplayedTranslation && !translation, canAutoTranslateMessage = plugin.isTranslationEnabled(context.channelId) && !plugin.ensureReceivedDisplayRuntime().isSuppressed(message.id), canAutoTranslateReplyPreviewForBase = canAutoTranslateMessage && !context.skipAutoQueue && (context.historicalLoad ? plugin.isMessageWithinLoadedRange(message) : context.isNewerThanBoundary), cachedTranslation = null, storeCommitted = !1;
+          let previousDisplayView = plugin.ensureReceivedDisplayRuntime().getDisplayView(message.id), hadDisplayedTranslation = !!(previousDisplayView && previousDisplayView.translated), translation = plugin.getActiveMessageTranslation(message, context.channelId, context.expectedSignature), messageChanged = hadDisplayedTranslation && !translation, canAutoTranslateMessage = plugin.isTranslationEnabled(context.channelId) && !plugin.ensureReceivedDisplayRuntime().isSuppressed(message.id), canAutoTranslateReplyPreviewForBase = canAutoTranslateMessage && !context.skipAutoQueue && (context.historicalLoad ? plugin.isMessageWithinLoadedRange(message) : context.isNewerThanBoundary), cachedTranslation = null, storeCommitted = !1;
           canAutoTranslateReplyPreviewForBase && plugin.markAutoTranslationEligibleReplyPreviewMessage(context.channelId, message.id), !translation && canAutoTranslateMessage && !context.skipAutoQueue && (context.historicalLoad || context.forceQueue || messageChanged || context.isNewerThanBoundary) && (cachedTranslation = plugin.getCachedReceivedTranslation(message, context.channelId, context.originalContentData), cachedTranslation && !context.historicalLoad && (storeCommitted = receivedTranslationRuntime.commitCachedDisplayResult(plugin, message, context, cachedTranslation)));
           let storeView = !translation && plugin.getReceivedDisplayRuntimeView(message.id);
           if (translation)
@@ -11779,7 +11788,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "92a9cc910670918d";
+            return "776fc74287e3199d";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);

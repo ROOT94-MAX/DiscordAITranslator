@@ -81,6 +81,8 @@ Manual translation uses the same state and display transaction chain. Manual unt
 
 Mounted and cached snapshots are collected without simulating scroll. Scroll-back arrivals wait for a 500 ms quiet window, then form an immutable channel job. Compatible waiting jobs merge before provider work starts. Valid terminal results enter the store together and one display transaction reveals the batch.
 
+`new_only` has no historical job. During channel-session initialization, `received-translation-runtime.js` seeds the live boundary from the channel model's `lastMessageId`/`last_message_id` before walking the stream. The initial skip is evaluated per row: IDs at or below the frozen boundary are baseline, while an ID above it remains live. An empty stream without any channel boundary stays uninitialised until a real baseline appears. Source capture creates an `idle` display record, but only a previously `translated` view can set `messageChanged`; record existence alone cannot bypass the boundary. Together these rules prevent late virtualized history from entering the live queue. The capsule remains exclusive to `loaded_messages`; showing it in `new_only` would mask a classification defect rather than fix one.
+
 Reply-preview state may commit immediately, but host-row repaint requests collect into a 300 ms channel wave and remain behind the active-scroll gate. Live work remains higher priority than the next historical request.
 
 ### Forwarded Messages

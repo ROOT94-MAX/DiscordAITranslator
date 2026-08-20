@@ -562,6 +562,30 @@ test("a deferred first pass marks the whole stream skipAutoQueue", () => {
 	assert.equal(context.skipInitialLoadedMessages, true);
 });
 
+test("new_only freezes the channel last-message boundary before an empty first stream", () => {
+	const runtime = createRuntime();
+	const plugin = createPlugin({
+		getReceivedAutoTranslateScope: () => "new_only",
+		shouldDeferInitialAutoTranslate: () => true,
+		channelState: {boundaryMessageId: null, initialized: false}
+	});
+	const channel = {id: "channel-new-only", lastMessageId: "500"};
+
+	runtime.processMessages(plugin, createEvent([], channel));
+
+	assert.equal(plugin.channelState.initialized, true);
+	assert.equal(plugin.channelState.boundaryMessageId, "500", "a transient empty stream must not leave the live boundary null");
+
+	const delayedHistory = {id: "400", channel_id: channel.id, content: "old loaded row", attachments: []};
+	runtime.checkMessage(plugin, {content: delayedHistory}, delayedHistory, channel, {autoTranslateBoundaryId: plugin.channelState.boundaryMessageId});
+	assert.equal(plugin.calls.queued.length, 0, "a historical row mounted after initialization cannot enter the live queue");
+
+	const actualNewMessage = {id: "501", channel_id: channel.id, content: "new live row", attachments: []};
+	runtime.checkMessage(plugin, {content: actualNewMessage}, actualNewMessage, channel, {autoTranslateBoundaryId: plugin.channelState.boundaryMessageId});
+	assert.equal(plugin.calls.queued.length, 1);
+	assert.equal(plugin.calls.queued[0][0].id, "501", "a message after the frozen boundary remains live");
+});
+
 test("a non-array channelStream is normalised before the walk", () => {
 	const runtime = createRuntime();
 	const plugin = createPlugin();

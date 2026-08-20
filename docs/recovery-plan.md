@@ -30,6 +30,8 @@ Working rules:
 **Status: ACTIVE DEBUG — automatic collection/count mismatch confirmed.** On installed build `92a9cc910670918d`, one visible foreign-language history message remained original while the capsule reported `93/93`. The screenshot preceded the later manual translation, so the manual cache entry is not evidence about the automatic lane. All translation-cache entries were cleared on 2026-08-20 to reproduce from a clean automatic run.
 
 Do not modify manual display projection or cache-stop flushing for this incident. First capture whether the target message is excluded before collection, enters a historical/live request, receives a provider failure/skip, reaches display state, and is admitted to capsule work identity. The owning transition must be identified before changing code.
+
+A separate `new_only` classification defect is fixed locally and awaits PTB verification: an empty first channel stream was finalized with a null boundary, and a freshly captured `idle` display record was also mistaken for a lost translation; either route could put later-mounted history into the live queue one row at a time while the capsule correctly stayed hidden for that scope. Initialization now freezes the channel model's last message ID, evaluates the initial skip per row, waits when no baseline exists, and treats only a previously translated view as `messageChanged`. Real two-pass regression coverage proves delayed old rows stay out and a post-boundary message still queues live. This does not close the original `93/93` missing-message investigation.
 Other observation contracts remain evidence-gated:
 
 | Contract | Reopen when | Evidence to capture |

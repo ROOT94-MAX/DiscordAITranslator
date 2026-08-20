@@ -519,6 +519,65 @@ test("new-only scope skips the messages that are already loaded when a channel s
 	assert.equal(plugin.getAutoTranslationChannelState("channel-1").boundaryMessageId, "100");
 });
 
+test("new-only scope keeps a delayed historical row out of the live queue after an empty first stream", () => {
+	const plugin = createPluginInstance();
+	plugin.settings.filters.receivedAutoTranslateScope = "new_only";
+	plugin.getCachedReceivedTranslation = () => null;
+	plugin.getCachedReceivedSkipDecision = () => null;
+	const queuedMessageIds = [];
+	plugin.queueAutoTranslateMessage = message => {
+		queuedMessageIds.push(message.id);
+		return true;
+	};
+	const channel = {id: "channel-delayed-history", last_message_id: "500"};
+	const process = channelStream => plugin.processMessages({instance: {props: {channel, channelStream}}});
+
+	process([]);
+	process([{content: {id: "400", channel_id: channel.id, content: "old loaded row", embeds: [], attachments: []}}]);
+
+	assert.deepEqual(queuedMessageIds, []);
+	assert.equal(plugin.getAutoTranslationChannelState(channel.id).boundaryMessageId, "500");
+});
+
+test("new-only scope still queues a real new message present during the first stream walk", () => {
+	const plugin = createPluginInstance();
+	plugin.settings.filters.receivedAutoTranslateScope = "new_only";
+	const queuedMessageIds = [];
+	plugin.queueAutoTranslateMessage = message => {
+		queuedMessageIds.push(message.id);
+		return true;
+	};
+	const channel = {id: "channel-first-live", lastMessageId: "500"};
+
+	plugin.processMessages({instance: {props: {
+		channel,
+		channelStream: [{content: {id: "501", channel_id: channel.id, content: "new live row", embeds: [], attachments: []}}]
+	}}});
+
+	assert.deepEqual(queuedMessageIds, ["501"]);
+	assert.equal(plugin.getAutoTranslationChannelState(channel.id).boundaryMessageId, "501");
+});
+
+test("new-only scope does not finalise an empty session when the channel boundary is unavailable", () => {
+	const plugin = createPluginInstance();
+	plugin.settings.filters.receivedAutoTranslateScope = "new_only";
+	const queuedMessageIds = [];
+	plugin.queueAutoTranslateMessage = message => {
+		queuedMessageIds.push(message.id);
+		return true;
+	};
+	const channel = {id: "channel-no-boundary"};
+	const process = channelStream => plugin.processMessages({instance: {props: {channel, channelStream}}});
+
+	process([]);
+	assert.equal(plugin.getAutoTranslationChannelState(channel.id).initialized, false);
+
+	process([{content: {id: "400", channel_id: channel.id, content: "first loaded baseline", embeds: [], attachments: []}}]);
+	assert.deepEqual(queuedMessageIds, []);
+	assert.equal(plugin.getAutoTranslationChannelState(channel.id).initialized, true);
+	assert.equal(plugin.getAutoTranslationChannelState(channel.id).boundaryMessageId, "400");
+});
+
 test("loaded-messages scope allows the currently loaded messages to enter the auto-translate flow", () => {
 	const plugin = createPluginInstance();
 	plugin.isReceivedAutoTranslationEnabled = () => true;

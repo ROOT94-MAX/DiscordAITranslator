@@ -56,6 +56,7 @@ The channel popout does not contain:
 
 ## Live And Historical Messages
 
+- In `new_only` scope, the current channel's last message ID is frozen as the session boundary before the first message-stream walk. Rows that mount late or after an empty first render remain pre-existing history and never enter the live queue; a message after that boundary remains eligible even when it appears during the first walk. If neither the channel model nor the stream supplies a baseline, initialization remains open instead of accepting a null boundary. This scope has no historical job, so it intentionally has no loaded-history capsule.
 - Live messages use a dedicated high-priority path. The first new message is submitted immediately, without a fixed batching delay, and its translation is displayed as soon as that request returns.
 - A live message shows a fixed-size translation loading icon while its request is pending. Messages arriving in the same event-loop turn may share one request, but the runtime never waits to fill a batch.
 - Historical work is lower priority and never makes a live message wait for the whole historical job. If the provider permits concurrency, one live request and one historical request may run together; otherwise an in-flight request may finish, then the next available request slot always serves live work first.
