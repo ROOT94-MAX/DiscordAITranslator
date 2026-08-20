@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 27a66a9c04c7b371
+ * @buildId abaa550cd78f3382
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -7140,6 +7140,36 @@ var require_message_viewport_store = __commonJS({
   }
 });
 
+// src/viewport/message-viewport-wiring.js
+var require_message_viewport_wiring = __commonJS({
+  "src/viewport/message-viewport-wiring.js"(exports2, module2) {
+    var { createMessageViewportStore } = require_message_viewport_store();
+    function createPluginMessageViewportStore({
+      plugin,
+      BDFDB,
+      getDocument = /* @__PURE__ */ __name(() => typeof document > "u" ? null : document, "getDocument"),
+      requestAnimationFrame: scheduleAnimationFrame = /* @__PURE__ */ __name((callback) => typeof requestAnimationFrame == "function" ? requestAnimationFrame(callback) : setTimeout(callback, 0), "scheduleAnimationFrame"),
+      now = Date.now,
+      escapeSelectorValue = /* @__PURE__ */ __name((value) => typeof CSS < "u" && CSS.escape ? CSS.escape(value) : String(value).replace(/(["\\])/g, "\\$1"), "escapeSelectorValue"),
+      createStore = createMessageViewportStore
+    }) {
+      return createStore({
+        getDocument,
+        setTimeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "setTimeout"),
+        clearTimeout: /* @__PURE__ */ __name((timer) => BDFDB.TimeUtils.clear(timer), "clearTimeout"),
+        requestAnimationFrame: scheduleAnimationFrame,
+        now,
+        getSelectedChannelId: /* @__PURE__ */ __name(() => BDFDB.LibraryStores.SelectedChannelStore.getChannelId(), "getSelectedChannelId"),
+        getMessagesScrollerSelector: /* @__PURE__ */ __name(() => BDFDB.dotCN && BDFDB.dotCN.messagesscroller, "getMessagesScrollerSelector"),
+        escapeSelectorValue,
+        onScrollActivityFinished: /* @__PURE__ */ __name((channelId) => plugin.finishHistoricalTranslationSnapshot(channelId), "onScrollActivityFinished")
+      });
+    }
+    __name(createPluginMessageViewportStore, "createPluginMessageViewportStore");
+    module2.exports = { createPluginMessageViewportStore };
+  }
+});
+
 // src/cache/translation-cache-store.js
 var require_translation_cache_store = __commonJS({
   "src/cache/translation-cache-store.js"(exports2, module2) {
@@ -11921,7 +11951,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createHistoricalSnapshotCadence } = require_historical_snapshot_cadence(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createPluginMessageViewportStore } = require_message_viewport_wiring(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createHistoricalSnapshotCadence } = require_historical_snapshot_cadence(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -11969,7 +11999,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "27a66a9c04c7b371";
+            return "abaa550cd78f3382";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13713,18 +13743,7 @@ __________________ __________________ __________________
             return this.translationCacheStoreInstance || (this.translationCacheStoreInstance = createPluginTranslationCacheStore({ plugin: this, BDFDB })), this.translationCacheStoreInstance;
           }
           ensureMessageViewportStore() {
-            return this.messageViewportStoreInstance || (this.messageViewportStoreInstance = createMessageViewportStore({
-              getDocument: /* @__PURE__ */ __name(() => typeof document > "u" ? null : document, "getDocument"),
-              setTimeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "setTimeout"),
-              clearTimeout: /* @__PURE__ */ __name((timer) => BDFDB.TimeUtils.clear(timer), "clearTimeout"),
-              requestAnimationFrame: /* @__PURE__ */ __name((callback) => typeof requestAnimationFrame == "function" ? requestAnimationFrame(callback) : setTimeout(callback, 0), "requestAnimationFrame"),
-              now: /* @__PURE__ */ __name(() => Date.now(), "now"),
-              getSelectedChannelId: /* @__PURE__ */ __name(() => BDFDB.LibraryStores.SelectedChannelStore.getChannelId(), "getSelectedChannelId"),
-              getMessagesScrollerSelector: /* @__PURE__ */ __name(() => BDFDB.dotCN && BDFDB.dotCN.messagesscroller, "getMessagesScrollerSelector"),
-              escapeSelectorValue: /* @__PURE__ */ __name((value) => typeof CSS < "u" && CSS.escape ? CSS.escape(value) : String(value).replace(/(["\\])/g, "\\$1"), "escapeSelectorValue"),
-              // Closing the user-scroll window is the moment a historical snapshot may commit.
-              onScrollActivityFinished: /* @__PURE__ */ __name((channelId) => this.finishHistoricalTranslationSnapshot(channelId), "onScrollActivityFinished")
-            })), this.messageViewportStoreInstance;
+            return this.messageViewportStoreInstance || (this.messageViewportStoreInstance = createPluginMessageViewportStore({ plugin: this, BDFDB })), this.messageViewportStoreInstance;
           }
           ensureReceivedDisplayRuntime() {
             return this.receivedDisplayRuntimeInstance || (this.receivedDisplayRuntimeInstance = createDisplayRuntime({

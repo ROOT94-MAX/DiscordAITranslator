@@ -34,7 +34,9 @@ const BUDGET = Object.freeze({
 	// into translation-cache-wiring.js; runtime retains only the lazy singleton.
 	// -16 (2026-08-20): provider request, timer, credential and UI callback wiring
 	// moved into provider-client-wiring.js; runtime retains only the lazy singleton.
-	runtimeLines: 3415,
+	// -11 (2026-08-20): viewport document, selector, timer, animation-frame and
+	// historical-idle callback wiring moved into message-viewport-wiring.js.
+	runtimeLines: 3404,
 	moduleLevelVarDeclarators: 2
 });
 
@@ -118,6 +120,15 @@ test("plugin-specific provider client wiring stays out of the legacy runtime", (
 	const ensureMethod = source.match(/\n\t\t\tensureProviderClient \(\) \{[\s\S]*?\n\t\t\t\}/);
 	assert.ok(ensureMethod, "the lazy provider-client singleton boundary remains explicit");
 	assert.doesNotMatch(ensureMethod[0], /BDFDB\.LibraryRequires|BDFDB\.TimeUtils|BDFDB\.NotificationUtils|ensureSettingsStore|setTimeout/, "provider transport and plugin callback wiring belongs to provider-client-wiring.js");
+});
+
+test("plugin-specific message viewport wiring stays out of the legacy runtime", () => {
+	const source = readRuntimeLines().join("\n");
+	assert.match(source, /createPluginMessageViewportStore/);
+	assert.doesNotMatch(source, /\bcreateMessageViewportStore\b/);
+	const ensureMethod = source.match(/\n\t\t\tensureMessageViewportStore \(\) \{[\s\S]*?\n\t\t\t\}/);
+	assert.ok(ensureMethod, "the lazy message-viewport singleton boundary remains explicit");
+	assert.doesNotMatch(ensureMethod[0], /BDFDB\.TimeUtils|SelectedChannelStore|messagesscroller|requestAnimationFrame|finishHistoricalTranslationSnapshot/, "viewport host wiring belongs to message-viewport-wiring.js");
 });
 
 test("the recorded budget matches the current tree, so drift is visible", () => {

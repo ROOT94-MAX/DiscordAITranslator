@@ -10,6 +10,7 @@ const path = require("node:path");
 const runtime = fs.readFileSync(path.resolve(__dirname, "..", "src", "legacy", "runtime.js"), "utf8");
 const translationCacheWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "cache", "translation-cache-wiring.js"), "utf8");
 const providerClientWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "providers", "provider-client-wiring.js"), "utf8");
+const messageViewportWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "viewport", "message-viewport-wiring.js"), "utf8");
 
 function dependencyBlock(factoryName) {
 	const start = runtime.indexOf(factoryName + "({");
@@ -22,8 +23,7 @@ function dependencyBlock(factoryName) {
 // Every module that schedules work on the plugin's behalf. The provider client is here
 // too: its retry timers are managed, and only its backoff sleep is deliberately raw.
 const TIMER_OWNING_FACTORIES = [
-	"createDisplayRepaintScheduler",
-	"createMessageViewportStore"
+	"createDisplayRepaintScheduler"
 ];
 
 test("modules that schedule work are handed BDFDB timers, never the globals", () => {
@@ -33,6 +33,9 @@ test("modules that schedule work are handed BDFDB timers, never the globals", ()
 	}, {
 		name: "createPluginProviderClient",
 		source: providerClientWiring
+	}, {
+		name: "createPluginMessageViewportStore",
+		source: messageViewportWiring
 	});
 	for (const owner of owners) {
 		assert.match(owner.source, /setTimeout:\s*\(callback, delay\) => BDFDB\.TimeUtils\.timeout\(callback, delay\)/, `${owner.name} must receive the managed timer`);

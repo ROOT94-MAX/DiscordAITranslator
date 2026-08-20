@@ -75,7 +75,7 @@ module.exports = (_ => {
 		const loadedStatusPosition = require("../ui/loaded-status-position");
 		const {createLoadedStatusCapsuleController} = require("../ui/loaded-status-capsule");
 		const {createChannelTitleStore} = require("../channel-title/channel-title-store");
-		const {createMessageViewportStore} = require("../viewport/message-viewport-store");
+		const {createPluginMessageViewportStore} = require("../viewport/message-viewport-wiring");
 		const {createLoadedTranslationStatusStore} = require("../status/loaded-translation-status-store");
 		const {createPluginTranslationCacheStore} = require("../cache/translation-cache-wiring");
 		const {translationEngines, enginePortals} = require("../providers/provider-client");
@@ -2538,18 +2538,7 @@ module.exports = (_ => {
 			}
 
 			ensureMessageViewportStore () {
-				if (!this.messageViewportStoreInstance) this.messageViewportStoreInstance = createMessageViewportStore({
-					getDocument: () => typeof document == "undefined" ? null : document,
-					setTimeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay),
-					clearTimeout: timer => BDFDB.TimeUtils.clear(timer),
-					requestAnimationFrame: callback => typeof requestAnimationFrame == "function" ? requestAnimationFrame(callback) : setTimeout(callback, 0),
-					now: () => Date.now(),
-					getSelectedChannelId: () => BDFDB.LibraryStores.SelectedChannelStore.getChannelId(),
-					getMessagesScrollerSelector: () => BDFDB.dotCN && BDFDB.dotCN.messagesscroller,
-					escapeSelectorValue: value => typeof CSS != "undefined" && CSS.escape ? CSS.escape(value) : String(value).replace(/(["\\])/g, "\\$1"),
-					// Closing the user-scroll window is the moment a historical snapshot may commit.
-					onScrollActivityFinished: channelId => this.finishHistoricalTranslationSnapshot(channelId)
-				});
+				if (!this.messageViewportStoreInstance) this.messageViewportStoreInstance = createPluginMessageViewportStore({plugin: this, BDFDB});
 				return this.messageViewportStoreInstance;
 			}
 
