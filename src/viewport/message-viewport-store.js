@@ -68,6 +68,8 @@ function createMessageViewportStore({
 	let inputActivityHandler = null;
 	let manualScrollAnchor = null;
 	let manualScrollLockTimer = null;
+	let rememberedHistoryScrollerState = null;
+	let rememberedHistoryChannelId = "";
 
 	function normalizeChannelId(channelId) {
 		return channelId == null ? "" : String(channelId);
@@ -293,6 +295,41 @@ function createMessageViewportStore({
 		return !!(scrollerState && !scrollerState.keepBottom);
 	}
 
+	function rememberHistoryScrollerState(channelId = null) {
+		const key = normalizeChannelId(channelId || getSelectedChannelId());
+		let scrollerState = null;
+		try {scrollerState = captureScrollerState();}
+		catch (error) {return false;}
+		if (!key || !scrollerState || scrollerState.keepBottom) {
+			rememberedHistoryScrollerState = null;
+			rememberedHistoryChannelId = "";
+			return false;
+		}
+		rememberedHistoryScrollerState = scrollerState;
+		rememberedHistoryChannelId = key;
+		return true;
+	}
+
+	// A new live row can make Discord snap a virtualized history view to newest before
+	// the row commits. The queue calls this from the render pass: capture the current
+	// reading line when it still exists, or reuse the last user-scroll capture if the
+	// host already moved to bottom. restoreScrollerState retains the newer-gesture veto.
+	function preserveHistoryOnLiveMessage(channelId) {
+		const key = normalizeChannelId(channelId);
+		if (!key || key !== normalizeChannelId(getSelectedChannelId())) return false;
+		let currentState = null;
+		try {currentState = captureScrollerState();}
+		catch (error) {currentState = null;}
+		if (currentState && !currentState.keepBottom) {
+			rememberedHistoryScrollerState = currentState;
+			rememberedHistoryChannelId = key;
+		}
+		const historyState = rememberedHistoryChannelId === key ? rememberedHistoryScrollerState : null;
+		if (!historyState) return false;
+		restoreScrollerState(historyState);
+		return true;
+	}
+
 	function clearScrollIntent() {
 		if (scrollIntentTimer) clearTimeout(scrollIntentTimer);
 		scrollIntentTimer = null;
@@ -345,18 +382,22 @@ function createMessageViewportStore({
 		if (timestamp - programmaticScrollWriteTime < AUTO_TRANSLATION_PROGRAMMATIC_SCROLL_GRACE) return;
 		const channelId = getSelectedChannelId();
 		const key = normalizeChannelId(channelId);
+		let recognizedUserScroll = false;
 		if (scrollIntentPending) {
 			clearScrollIntent();
 			userScrollChannelId = key;
 			userScrollTime = timestamp;
 			scheduleScrollIdleFinish(channelId);
+			recognizedUserScroll = true;
 		}
 		// Momentum scrolling keeps firing scroll events long after the gesture ended;
 		// they extend an already open window but may not open a new one.
 		else if (key && userScrollChannelId === key && userScrollTime && timestamp - userScrollTime < AUTO_TRANSLATION_SCROLL_IDLE_DELAY) {
 			userScrollTime = timestamp;
 			scheduleScrollIdleFinish(channelId);
+			recognizedUserScroll = true;
 		}
+		if (recognizedUserScroll) rememberHistoryScrollerState(channelId);
 	}
 
 	function attachScrollWatcher() {
@@ -391,6 +432,8 @@ function createMessageViewportStore({
 		clearScrollIntent();
 		userScrollTime = 0;
 		userScrollChannelId = "";
+		rememberedHistoryScrollerState = null;
+		rememberedHistoryChannelId = "";
 		if (scrollWatcherElement) {
 			if (scrollActivityHandler) scrollWatcherElement.removeEventListener("scroll", scrollActivityHandler);
 			if (scrollEndHandler) scrollWatcherElement.removeEventListener("scrollend", scrollEndHandler);
@@ -451,6 +494,8 @@ function createMessageViewportStore({
 	// historical translation from repainting mid-jump.
 	function pauseForNavigation(duration = 1800) {
 		const channelId = getSelectedChannelId();
+		rememberedHistoryScrollerState = null;
+		rememberedHistoryChannelId = "";
 		userScrollChannelId = normalizeChannelId(channelId);
 		userScrollTime = now() + Math.max(0, duration - AUTO_TRANSLATION_SCROLL_IDLE_DELAY);
 		if (channelId) scheduleScrollIdleFinish(channelId, duration);
@@ -495,6 +540,7 @@ function createMessageViewportStore({
 			return applyScrollerState(scrollerState);
 		},
 		isViewingMessageHistory,
+		preserveHistoryOnLiveMessage,
 		attachScrollWatcher,
 		detachScrollWatcher,
 		markScrollIntent,

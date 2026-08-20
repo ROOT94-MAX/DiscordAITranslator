@@ -46,6 +46,7 @@ function createLiveTranslationQueue({
 	clearChannelTranslationQueue = () => {},
 	onChannelSessionLeft = () => {},
 	onChannelSessionStarted = () => {},
+	onLiveMessageQueued = () => {},
 	onLiveTurnStarted = () => {},
 	onReservedLiveRequestConsumed = () => {},
 	onReservedLiveRequestRetired = () => {},
@@ -220,6 +221,11 @@ function createLiveTranslationQueue({
 		const channelId = channel && channel.id || getMessageChannelId(message);
 		queueItem.liveRequest = requestRegistry.createRequest(message, channelId, queueItem.originalContentData);
 		if (!queueItem.liveRequest) return false;
+		// The queue is reached from the message-list render pass, before Discord commits
+		// the appended live row. Give the viewport owner one chance to preserve a
+		// history reader before the host can snap the virtualized list to newest.
+		try {onLiveMessageQueued(channelId, String(message.id));}
+		catch (error) {}
 		requestRegistry.markMessageQueued(message.id, queueItem.liveRequest);
 		const pendingMark = markDisplayPending({
 			messageId: message.id,

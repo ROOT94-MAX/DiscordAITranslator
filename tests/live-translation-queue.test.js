@@ -38,6 +38,7 @@ function createHarness(overrides = {}) {
 		burstCommits: [],
 		cachedCommits: [],
 		sessionStarts: [],
+		liveQueued: [],
 		clearedChannels: [],
 		loadedResets: [],
 		eligibleClears: [],
@@ -96,6 +97,7 @@ function createHarness(overrides = {}) {
 		},
 		onChannelSessionLeft: channelId => log.leftChannels.push(channelId),
 		onChannelSessionStarted: channelId => log.sessionStarts.push(channelId),
+		onLiveMessageQueued: (channelId, messageId) => log.liveQueued.push({channelId, messageId}),
 		getBatchEngineKey: () => state.batchEngine,
 		createBurstContext: channelId => {
 			log.burstContexts.push(channelId);
@@ -690,6 +692,17 @@ test("queueMessage sends a historical item to the collector and never to the liv
 	harness.state.withinLoadedRange = false;
 	assert.equal(harness.queue.queueMessage(createMessage("m2"), {id: "c1"}, null, {historicalLoad: true}), false);
 	assert.equal(harness.log.historical.length, 1);
+});
+
+test("an accepted live message protects the history viewport before processing starts", () => {
+	const harness = createHarness();
+	const message = createMessage("m1");
+
+	assert.equal(harness.queue.queueMessage(message, {id: "c1"}), true);
+	assert.deepEqual(harness.log.liveQueued, [{channelId: "c1", messageId: "m1"}]);
+
+	harness.queue.queueMessage(createMessage("history"), {id: "c1"}, null, {historicalLoad: true});
+	assert.deepEqual(harness.log.liveQueued, [{channelId: "c1", messageId: "m1"}], "historical intake never arms the live-message viewport guard");
 });
 
 test("queueMessage refuses a message with no resolvable channel", () => {

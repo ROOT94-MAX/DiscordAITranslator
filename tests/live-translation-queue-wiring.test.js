@@ -9,7 +9,7 @@ const EXPECTED_PORTS = [
 	"getDisplayCommitGeneration", "getMessageChannelId", "isMessageWithinLoadedRange",
 	"isProviderBackoffActive", "isRuntimeActive", "isTranslationEnabled", "markDisplayPending",
 	"onChannelSessionLeft", "onChannelSessionStarted", "onReservedLiveRequestConsumed",
-	"onReservedLiveRequestRetired", "prepareBurstItem", "releaseDisplayPending",
+	"onReservedLiveRequestRetired", "onLiveMessageQueued", "prepareBurstItem", "releaseDisplayPending",
 	"requestBurstTranslation", "resetLoadedMessageTracking", "resolveBurstItemResult",
 	"scheduleDisplayFlush", "setTimeout", "shouldAutoTranslateMessage", "translateSingleItem"
 ].sort();
@@ -18,6 +18,7 @@ function createHarness(overrides = {}) {
 	const calls = [];
 	const store = {getLanguage: choice => ({choice})};
 	const display = {pruneChannel: channelId => calls.push(["pruneChannel", channelId])};
+	const viewport = {preserveHistoryOnLiveMessage: channelId => calls.push(["preserveHistoryOnLiveMessage", channelId])};
 	const plugin = Object.assign({
 		isTranslationEnabled: channelId => (calls.push(["isTranslationEnabled", channelId]), true),
 		extractOriginalContentData: message => (calls.push(["extractOriginalContentData", message]), {content: message.content}),
@@ -34,6 +35,7 @@ function createHarness(overrides = {}) {
 		clearAutoTranslationEligibleReplyPreviewMessages: channelId => calls.push(["clearEligibleReplyPreviewMessages", channelId]),
 		clearAutoTranslationQueue: channelId => calls.push(["clearChannelTranslationQueue", channelId]),
 		ensureReceivedDisplayRuntime: () => display,
+		ensureMessageViewportStore: () => viewport,
 		getReceivedAutoTranslateScope: () => "new_only",
 		clearDisplayedAutoTranslations: channelId => calls.push(["clearDisplayedAutoTranslations", channelId]),
 		resumeQueuedHistoricalTranslationJobs: (...args) => calls.push(["resumeHistorical", ...args]),
@@ -95,6 +97,7 @@ test("live queue wiring preserves session, display, historical handoff and singl
 	const original = {content: "hello"};
 	const request = {id: "request-a"};
 	captured.scheduleDisplayFlush("channel-a", "message-a");
+	captured.onLiveMessageQueued("channel-a");
 	captured.resetLoadedMessageTracking("channel-a");
 	captured.onChannelSessionLeft("channel-a");
 	captured.onChannelSessionStarted("channel-a");
@@ -105,6 +108,7 @@ test("live queue wiring preserves session, display, historical handoff and singl
 	assert.equal(captured.translateSingleItem({message, channel, originalContentData: original, liveRequest: request}), "single");
 	assert.deepEqual(calls, [
 		["scheduleDisplayFlush", "channel-a", "message-a", null, null, "live"],
+		["preserveHistoryOnLiveMessage", "channel-a"],
 		["resetSeen", "channel-a"],
 		["pruneChannel", "channel-a"],
 		["clearDisplayedAutoTranslations", "channel-a"],

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed: 用户上滚阅读历史时，新实时消息到达不再把虚拟消息列表推到最新位置；Live Queue 在新行提交前通知 Viewport Store，后者优先捕获当前阅读线，并在 Discord 已经跳底时回用最近一次用户历史滚动快照。恢复仍服从更新的用户手势否决，主动回到底部不会被旧锚点拉回
 - Refactor: Slice 5d 第十个 composition-root 切片把 Live Translation Queue 的运行时/频道判断、显示提交、历史交接、频道会话、批量翻译结果策略和单条回退接线迁入 `live-translation-queue-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,329 行降至 3,260 行，实时消息优先、同频道批量、历史让位和频道隔离策略保持不变
 - Lifecycle: Live Translation Queue 的 900ms 重试计时器改由 wiring 显式接入 BDFDB 托管 `timeout/clear`，插件停止或热重载时不再依赖全局计时器存活；新增完整 30 项端口、托管计时器、会话/历史交接、跳过/重试/缓存提交契约
 - Refactor: Slice 5d 第九个 composition-root 切片把 Display Repaint Scheduler 的显示事务入口、历史显示结果回报、Discord 页面状态判断、生命周期整区重绘和 BDFDB 托管计时器接线迁入 `repaint-scheduler-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,339 行降至 3,329 行，重绘合并、延迟、重试、来源归因和输入/设置/滚动门保持不变

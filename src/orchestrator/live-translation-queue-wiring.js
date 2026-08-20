@@ -35,6 +35,7 @@ function createPluginLiveTranslationQueue({
 		// new_only hides what is already on screen, so a fresh session drops the
 		// automatic records the previous session painted.
 		onChannelSessionStarted: channelId => plugin.getReceivedAutoTranslateScope() == "new_only" && plugin.clearDisplayedAutoTranslations(channelId),
+		onLiveMessageQueued: channelId => plugin.ensureMessageViewportStore().preserveHistoryOnLiveMessage(channelId),
 		onReservedLiveRequestConsumed: (channelId, handoffTicket) => plugin.resumeQueuedHistoricalTranslationJobs(channelId, handoffTicket),
 		onReservedLiveRequestRetired: (channelId, handoffTicket) => plugin.resumeQueuedHistoricalTranslationJobs(channelId, handoffTicket, {retired: true}),
 		getBatchEngineKey: channelId => plugin.getHistoricalAiBatchEngineKey(channelId),

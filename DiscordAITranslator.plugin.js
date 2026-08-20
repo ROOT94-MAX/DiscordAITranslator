@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId fe6085ad52351072
+ * @buildId c0b27e1479677971
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -6977,7 +6977,7 @@ var require_message_viewport_store = __commonJS({
       onScrollActivityFinished = /* @__PURE__ */ __name(() => {
       }, "onScrollActivityFinished")
     } = {}) {
-      let userScrollTime = 0, userScrollChannelId = "", userScrollIntentSequence = 0, programmaticScrollWriteTime = 0, scrollWatcherAttached = !1, scrollWatcherElement = null, scrollActivityHandler = null, scrollIntentHandler = null, scrollIntentEndHandler = null, scrollEndHandler = null, scrollIntentPending = !1, scrollIntentTimer = null, scrollIdleTimer = null, inputActivityTime = 0, inputActivityHandler = null, manualScrollAnchor = null, manualScrollLockTimer = null;
+      let userScrollTime = 0, userScrollChannelId = "", userScrollIntentSequence = 0, programmaticScrollWriteTime = 0, scrollWatcherAttached = !1, scrollWatcherElement = null, scrollActivityHandler = null, scrollIntentHandler = null, scrollIntentEndHandler = null, scrollEndHandler = null, scrollIntentPending = !1, scrollIntentTimer = null, scrollIdleTimer = null, inputActivityTime = 0, inputActivityHandler = null, manualScrollAnchor = null, manualScrollLockTimer = null, rememberedHistoryScrollerState = null, rememberedHistoryChannelId = "";
       function normalizeChannelId(channelId) {
         return channelId == null ? "" : String(channelId);
       }
@@ -7138,6 +7138,30 @@ var require_message_viewport_store = __commonJS({
         return !!(scrollerState && !scrollerState.keepBottom);
       }
       __name(isViewingMessageHistory, "isViewingMessageHistory");
+      function rememberHistoryScrollerState(channelId = null) {
+        let key = normalizeChannelId(channelId || getSelectedChannelId()), scrollerState = null;
+        try {
+          scrollerState = captureScrollerState();
+        } catch {
+          return !1;
+        }
+        return !key || !scrollerState || scrollerState.keepBottom ? (rememberedHistoryScrollerState = null, rememberedHistoryChannelId = "", !1) : (rememberedHistoryScrollerState = scrollerState, rememberedHistoryChannelId = key, !0);
+      }
+      __name(rememberHistoryScrollerState, "rememberHistoryScrollerState");
+      function preserveHistoryOnLiveMessage(channelId) {
+        let key = normalizeChannelId(channelId);
+        if (!key || key !== normalizeChannelId(getSelectedChannelId())) return !1;
+        let currentState = null;
+        try {
+          currentState = captureScrollerState();
+        } catch {
+          currentState = null;
+        }
+        currentState && !currentState.keepBottom && (rememberedHistoryScrollerState = currentState, rememberedHistoryChannelId = key);
+        let historyState = rememberedHistoryChannelId === key ? rememberedHistoryScrollerState : null;
+        return historyState ? (restoreScrollerState(historyState), !0) : !1;
+      }
+      __name(preserveHistoryOnLiveMessage, "preserveHistoryOnLiveMessage");
       function clearScrollIntent() {
         scrollIntentTimer && clearTimeout2(scrollIntentTimer), scrollIntentTimer = null, scrollIntentPending = !1;
       }
@@ -7172,8 +7196,8 @@ var require_message_viewport_store = __commonJS({
       function handleScrollActivity() {
         let timestamp = now();
         if (timestamp - programmaticScrollWriteTime < 150) return;
-        let channelId = getSelectedChannelId(), key = normalizeChannelId(channelId);
-        scrollIntentPending ? (clearScrollIntent(), userScrollChannelId = key, userScrollTime = timestamp, scheduleScrollIdleFinish(channelId)) : key && userScrollChannelId === key && userScrollTime && timestamp - userScrollTime < 900 && (userScrollTime = timestamp, scheduleScrollIdleFinish(channelId));
+        let channelId = getSelectedChannelId(), key = normalizeChannelId(channelId), recognizedUserScroll = !1;
+        scrollIntentPending ? (clearScrollIntent(), userScrollChannelId = key, userScrollTime = timestamp, scheduleScrollIdleFinish(channelId), recognizedUserScroll = !0) : key && userScrollChannelId === key && userScrollTime && timestamp - userScrollTime < 900 && (userScrollTime = timestamp, scheduleScrollIdleFinish(channelId), recognizedUserScroll = !0), recognizedUserScroll && rememberHistoryScrollerState(channelId);
       }
       __name(handleScrollActivity, "handleScrollActivity");
       function attachScrollWatcher() {
@@ -7193,7 +7217,7 @@ var require_message_viewport_store = __commonJS({
       }
       __name(attachScrollWatcher, "attachScrollWatcher");
       function detachScrollWatcher() {
-        if (scrollIdleTimer && clearTimeout2(scrollIdleTimer), scrollIdleTimer = null, clearScrollIntent(), userScrollTime = 0, userScrollChannelId = "", scrollWatcherElement) {
+        if (scrollIdleTimer && clearTimeout2(scrollIdleTimer), scrollIdleTimer = null, clearScrollIntent(), userScrollTime = 0, userScrollChannelId = "", rememberedHistoryScrollerState = null, rememberedHistoryChannelId = "", scrollWatcherElement) {
           if (scrollActivityHandler && scrollWatcherElement.removeEventListener("scroll", scrollActivityHandler), scrollEndHandler && scrollWatcherElement.removeEventListener("scrollend", scrollEndHandler), scrollIntentHandler) for (let eventName of SCROLL_INTENT_EVENTS) scrollWatcherElement.removeEventListener(eventName, scrollIntentHandler);
           if (scrollIntentEndHandler) for (let eventName of SCROLL_INTENT_END_EVENTS) scrollWatcherElement.removeEventListener(eventName, scrollIntentEndHandler);
         }
@@ -7243,7 +7267,7 @@ var require_message_viewport_store = __commonJS({
       __name(isChannelTextAreaFocused, "isChannelTextAreaFocused");
       function pauseForNavigation(duration = 1800) {
         let channelId = getSelectedChannelId();
-        userScrollChannelId = normalizeChannelId(channelId), userScrollTime = now() + Math.max(0, duration - 900), channelId && scheduleScrollIdleFinish(channelId, duration);
+        rememberedHistoryScrollerState = null, rememberedHistoryChannelId = "", userScrollChannelId = normalizeChannelId(channelId), userScrollTime = now() + Math.max(0, duration - 900), channelId && scheduleScrollIdleFinish(channelId, duration);
       }
       return __name(pauseForNavigation, "pauseForNavigation"), Object.freeze({
         getMessagesScroller,
@@ -7281,6 +7305,7 @@ var require_message_viewport_store = __commonJS({
             return scrollerState.manualAnchor ? restoreAnchorPosition(scrollerState.manualAnchor) : applyScrollerState(scrollerState);
         },
         isViewingMessageHistory,
+        preserveHistoryOnLiveMessage,
         attachScrollWatcher,
         detachScrollWatcher,
         markScrollIntent,
@@ -7965,6 +7990,8 @@ var require_live_translation_queue = __commonJS({
       }, "onChannelSessionLeft"),
       onChannelSessionStarted = /* @__PURE__ */ __name(() => {
       }, "onChannelSessionStarted"),
+      onLiveMessageQueued = /* @__PURE__ */ __name(() => {
+      }, "onLiveMessageQueued"),
       onLiveTurnStarted = /* @__PURE__ */ __name(() => {
       }, "onLiveTurnStarted"),
       onReservedLiveRequestConsumed = /* @__PURE__ */ __name(() => {
@@ -8087,6 +8114,10 @@ var require_live_translation_queue = __commonJS({
         if (queueItem.historicalLoad) return collectHistoricalMessage(queueItem);
         let channelId = channel && channel.id || getMessageChannelId(message);
         if (queueItem.liveRequest = requestRegistry.createRequest(message, channelId, queueItem.originalContentData), !queueItem.liveRequest) return !1;
+        try {
+          onLiveMessageQueued(channelId, String(message.id));
+        } catch {
+        }
         requestRegistry.markMessageQueued(message.id, queueItem.liveRequest);
         let pendingMark = markDisplayPending({
           messageId: message.id,
@@ -8357,6 +8388,7 @@ var require_live_translation_queue_wiring = __commonJS({
         // new_only hides what is already on screen, so a fresh session drops the
         // automatic records the previous session painted.
         onChannelSessionStarted: /* @__PURE__ */ __name((channelId) => plugin.getReceivedAutoTranslateScope() == "new_only" && plugin.clearDisplayedAutoTranslations(channelId), "onChannelSessionStarted"),
+        onLiveMessageQueued: /* @__PURE__ */ __name((channelId) => plugin.ensureMessageViewportStore().preserveHistoryOnLiveMessage(channelId), "onLiveMessageQueued"),
         onReservedLiveRequestConsumed: /* @__PURE__ */ __name((channelId, handoffTicket) => plugin.resumeQueuedHistoricalTranslationJobs(channelId, handoffTicket), "onReservedLiveRequestConsumed"),
         onReservedLiveRequestRetired: /* @__PURE__ */ __name((channelId, handoffTicket) => plugin.resumeQueuedHistoricalTranslationJobs(channelId, handoffTicket, { retired: !0 }), "onReservedLiveRequestRetired"),
         getBatchEngineKey: /* @__PURE__ */ __name((channelId) => plugin.getHistoricalAiBatchEngineKey(channelId), "getBatchEngineKey"),
@@ -12284,7 +12316,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "fe6085ad52351072";
+            return "c0b27e1479677971";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);

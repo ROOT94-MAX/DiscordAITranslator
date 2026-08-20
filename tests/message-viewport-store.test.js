@@ -268,6 +268,26 @@ test("a scroll without a gesture in front of it stays programmatic", () => {
 	assert.equal(harness.store.isUserActivelyScrolling("chan-1"), false, "content growth must not look like the user scrolling");
 });
 
+test("a new live message restores the remembered history position after Discord jumps to newest", () => {
+	const harness = createHarness({scrollTop: 500, scrollHeight: 2000, clientHeight: 800});
+	harness.store.attachScrollWatcher();
+	scrollAsUser(harness);
+	assert.equal(harness.store.isViewingMessageHistory(), true, "setup: the reader is above the bottom");
+
+	// Discord appends the new row and snaps the virtualized list to the bottom before
+	// the plugin's queue callback runs. The old eye-line row is no longer mounted, so
+	// the guard must use the remembered raw offset rather than silently accepting the
+	// new bottom position.
+	harness.messageElements.length = 0;
+	harness.scroller.scrollTop = 1200;
+	const writesBeforeGuard = harness.scroller.writes.length;
+
+	assert.equal(harness.store.preserveHistoryOnLiveMessage("chan-1"), true);
+	harness.flushFrames();
+
+	assert.deepEqual(harness.scroller.writes.slice(writesBeforeGuard), [500], "new live traffic must not strand a history reader at newest");
+});
+
 test("a gesture arms user-scroll detection for exactly the intent window", () => {
 	const inside = createHarness();
 	inside.store.attachScrollWatcher();
