@@ -160,6 +160,12 @@ This section preserves the order in which the failures were reported and correct
 | Manual/cancel/disable restore failed | Branches and archive restore used parent body | Shared source/read/paint/restore helpers for automatic and manual paths | Do not add another forward side map |
 | Translation displayed two originals | Parent and snapshot both owned presentation; custom marker was normalized away | Snapshot sole display ownership and normalization-aware dedupe | Do not depend on unknown marker fields surviving normalization |
 
+### Automatic Collection Scope
+
+| Symptom | Proven cause | Current fix / contract | Field evidence |
+| --- | --- | --- | --- |
+| `new_only` translated delayed history one row at a time while its capsule correctly stayed hidden | A transient empty first stream finalized a null boundary, and a freshly captured `idle` display record was mistaken for a lost translation | Freeze the channel-model boundary, evaluate the first walk per row, keep a boundaryless empty stream uninitialised, and treat only a previously translated view as `messageChanged` | PTB build `776fc74287e3199d` was confirmed on 2026-08-20: historical rows stayed original and a genuine new message translated automatically |
+
 ## Rejected or Superseded Approaches
 
 - Full-document native-hint scans: flicker, false positives, and unstable geometry.
@@ -188,7 +194,6 @@ This section preserves the order in which the failures were reported and correct
 7. Oversized modules and generated-bundle size remain architecture debt. Split by ownership after contracts exist; do not split merely to reduce a line count.
 8. Automatic multi-page history fetching is parked after field rollback. Clean-stop cache flush is complete; provider physical cancellation and broader lifecycle consolidation are observation-gated, while message-delete subscription remains only for bulk-delete PTB closure.
 9. Active automatic-lane debug: on build `92a9cc910670918d`, one visible foreign-language history message stayed original while the capsule read `93/93`. The screenshot was taken before a later manual translation, so the cached manual result does not prove an automatic display failure. The full cache was cleared to distinguish collection, provider, display, and counter ownership on a clean run.
-10. `new_only` field incident: after a lifecycle reset, a transient empty first stream could mark the channel initialized while leaving its boundary null. A second defect treated the `idle` record created by source capture as proof that a translation had disappeared, bypassing even a valid boundary. Delayed historical rows therefore entered the live queue, appeared one by one, and caused repeated paint pressure; the capsule was absent because it is intentionally gated to `loaded_messages`. The owning correction freezes the channel last-message boundary, gates the first walk per row, keeps a boundaryless empty session open, and requires a previously translated view before setting `messageChanged`. Do not “fix” this by showing the historical capsule in `new_only` or changing repaint cadence.
 
 ## Regression and Evidence Map
 
