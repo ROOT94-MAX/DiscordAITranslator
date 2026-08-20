@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 65a775c63d76dffa
+ * @buildId fe6085ad52351072
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -8321,6 +8321,95 @@ var require_live_translation_queue = __commonJS({
   }
 });
 
+// src/orchestrator/live-translation-queue-wiring.js
+var require_live_translation_queue_wiring = __commonJS({
+  "src/orchestrator/live-translation-queue-wiring.js"(exports2, module2) {
+    var { createLiveTranslationQueue } = require_live_translation_queue();
+    function createPluginLiveTranslationQueue({
+      plugin,
+      BDFDB,
+      loadedTranslationStatusStore,
+      getRuntimeActive = /* @__PURE__ */ __name(() => !0, "getRuntimeActive"),
+      languageTypes,
+      messageTypes,
+      createQueue = createLiveTranslationQueue
+    }) {
+      return createQueue({
+        setTimeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "setTimeout"),
+        clearTimeout: /* @__PURE__ */ __name((timer) => BDFDB.TimeUtils.clear(timer), "clearTimeout"),
+        isRuntimeActive: getRuntimeActive,
+        isTranslationEnabled: /* @__PURE__ */ __name((channelId) => plugin.isTranslationEnabled(channelId), "isTranslationEnabled"),
+        extractOriginalContentData: /* @__PURE__ */ __name((message) => plugin.extractOriginalContentData(message), "extractOriginalContentData"),
+        createTranslationSignature: /* @__PURE__ */ __name((message, channelId, originalContentData) => plugin.createReceivedTranslationSignature(message, channelId, originalContentData), "createTranslationSignature"),
+        getMessageChannelId: /* @__PURE__ */ __name((message) => plugin.getMessageChannelId(message), "getMessageChannelId"),
+        isProviderBackoffActive: /* @__PURE__ */ __name(() => plugin.ensureProviderClient().isBackoffActive(), "isProviderBackoffActive"),
+        shouldAutoTranslateMessage: /* @__PURE__ */ __name((message, channel, originalContentData, ignoreQueued) => plugin.shouldAutoTranslateReceivedMessage(message, channel, originalContentData, ignoreQueued), "shouldAutoTranslateMessage"),
+        isMessageWithinLoadedRange: /* @__PURE__ */ __name((message) => plugin.isMessageWithinLoadedRange(message), "isMessageWithinLoadedRange"),
+        getDisplayCommitGeneration: /* @__PURE__ */ __name((channelId) => plugin.getReceivedDisplayCommitGeneration(channelId), "getDisplayCommitGeneration"),
+        markDisplayPending: /* @__PURE__ */ __name((record, options) => plugin.markReceivedDisplayPending(record, options), "markDisplayPending"),
+        releaseDisplayPending: /* @__PURE__ */ __name((record) => plugin.releaseReceivedDisplayPending(record), "releaseDisplayPending"),
+        scheduleDisplayFlush: /* @__PURE__ */ __name((channelId, messageId, source) => plugin.scheduleReceivedDisplayFlush(channelId, messageId, null, null, source || "live"), "scheduleDisplayFlush"),
+        collectHistoricalMessage: /* @__PURE__ */ __name((queueItem) => plugin.collectHistoricalTranslationMessage(queueItem), "collectHistoricalMessage"),
+        resetLoadedMessageTracking: /* @__PURE__ */ __name((channelId = null) => loadedTranslationStatusStore.resetSeen(channelId), "resetLoadedMessageTracking"),
+        clearEligibleReplyPreviewMessages: /* @__PURE__ */ __name((channelId) => plugin.clearAutoTranslationEligibleReplyPreviewMessages(channelId), "clearEligibleReplyPreviewMessages"),
+        clearChannelTranslationQueue: /* @__PURE__ */ __name((channelId) => plugin.clearAutoTranslationQueue(channelId), "clearChannelTranslationQueue"),
+        onChannelSessionLeft: /* @__PURE__ */ __name((channelId) => plugin.ensureReceivedDisplayRuntime().pruneChannel(channelId), "onChannelSessionLeft"),
+        // new_only hides what is already on screen, so a fresh session drops the
+        // automatic records the previous session painted.
+        onChannelSessionStarted: /* @__PURE__ */ __name((channelId) => plugin.getReceivedAutoTranslateScope() == "new_only" && plugin.clearDisplayedAutoTranslations(channelId), "onChannelSessionStarted"),
+        onReservedLiveRequestConsumed: /* @__PURE__ */ __name((channelId, handoffTicket) => plugin.resumeQueuedHistoricalTranslationJobs(channelId, handoffTicket), "onReservedLiveRequestConsumed"),
+        onReservedLiveRequestRetired: /* @__PURE__ */ __name((channelId, handoffTicket) => plugin.resumeQueuedHistoricalTranslationJobs(channelId, handoffTicket, { retired: !0 }), "onReservedLiveRequestRetired"),
+        getBatchEngineKey: /* @__PURE__ */ __name((channelId) => plugin.getHistoricalAiBatchEngineKey(channelId), "getBatchEngineKey"),
+        createBurstContext: /* @__PURE__ */ __name((channelId) => ({
+          engineKey: plugin.getHistoricalAiBatchEngineKey(channelId),
+          input: Object.assign({}, plugin.ensureSettingsStore().getLanguage(plugin.getLanguageChoice(languageTypes.INPUT, messageTypes.RECEIVED, channelId)) || {}),
+          output: Object.assign({}, plugin.ensureSettingsStore().getLanguage(plugin.getLanguageChoice(languageTypes.OUTPUT, messageTypes.RECEIVED, channelId)) || {})
+        }), "createBurstContext"),
+        prepareBurstItem: /* @__PURE__ */ __name((queueItem, channelId, context) => plugin.prepareHistoricalAiBatchQueueItem(queueItem, channelId, context.input, context.output), "prepareBurstItem"),
+        requestBurstTranslation: /* @__PURE__ */ __name((context, prepared) => plugin.requestAiBatchTranslationDetailed(context.engineKey, prepared), "requestBurstTranslation"),
+        // Translation identity and result policy stay at the plugin seam; the queue
+        // learns only whether the item completed, skipped, or needs a single retry.
+        resolveBurstItemResult: /* @__PURE__ */ __name((preparedItem, resultMap, channelId) => {
+          let messageId = String(preparedItem.message.id), rawTranslation = resultMap && Object.prototype.hasOwnProperty.call(resultMap, messageId) ? resultMap[messageId] : null;
+          if (rawTranslation != null && plugin.isSkipTranslationSignal(rawTranslation))
+            return plugin.persistReceivedSkipDecision(messageId, preparedItem.signature, "ai_skip_signal", preparedItem.protectedText), { status: "skipped", result: { sourceSignature: preparedItem.signature, status: "skipped", reason: "ai_skip_signal" } };
+          let validation = { ok: !1 };
+          try {
+            validation = plugin.validateHistoricalTranslationJobResult(preparedItem, rawTranslation, { channelId }) || { ok: !1 };
+          } catch {
+            validation = { ok: !1 };
+          }
+          if (!validation.ok) return { status: "retry" };
+          try {
+            plugin.persistTranslationCacheEntry(messageId, preparedItem.signature, validation.translation);
+          } catch {
+          }
+          return { status: "translated", result: { sourceSignature: preparedItem.signature, status: "translated", translation: validation.translation } };
+        }, "resolveBurstItemResult"),
+        commitBurstResult: /* @__PURE__ */ __name((queueItem, channelId, result) => plugin.commitReceivedDisplayResult(plugin.createReceivedDisplayCommitResult(queueItem.message, channelId, result), { refresh: !1 }), "commitBurstResult"),
+        commitCachedResult: /* @__PURE__ */ __name((queueItem, channelId) => {
+          let storedTranslation = plugin.refreshTranslationDisplay(Object.assign({ channelId, auto: !0 }, queueItem.cachedTranslation));
+          return plugin.commitReceivedDisplayResult(plugin.createReceivedDisplayCommitResult(queueItem.message, channelId, {
+            sourceSignature: storedTranslation.signature != null ? String(storedTranslation.signature) : plugin.createReceivedTranslationSignature(queueItem.message, channelId, queueItem.originalContentData),
+            requestIdentity: queueItem.liveRequest ? String(queueItem.liveRequest.id) : null,
+            status: "translated",
+            translation: storedTranslation
+          }), { refresh: !1 });
+        }, "commitCachedResult"),
+        translateSingleItem: /* @__PURE__ */ __name((queueItem) => plugin.translateMessage(queueItem.message, queueItem.channel, {
+          auto: !0,
+          silent: !0,
+          trackBusy: !1,
+          originalContentData: queueItem.originalContentData,
+          liveRequest: queueItem.liveRequest
+        }), "translateSingleItem")
+      });
+    }
+    __name(createPluginLiveTranslationQueue, "createPluginLiveTranslationQueue");
+    module2.exports = { createPluginLiveTranslationQueue };
+  }
+});
+
 // src/orchestrator/historical-handoff-runtime.js
 var require_historical_handoff_runtime = __commonJS({
   "src/orchestrator/historical-handoff-runtime.js"(exports2, module2) {
@@ -12147,7 +12236,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createPluginReceivedDisplayRuntime } = require_display_runtime_wiring(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createPluginDisplayRepaintScheduler } = require_repaint_scheduler_wiring(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), { createPluginLoadedStatusCapsuleController, positionPluginLoadedStatusElement } = require_loaded_status_capsule_wiring(), { createChannelTitleStore } = require_channel_title_store(), { createPluginMessageViewportStore } = require_message_viewport_wiring(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createPluginHistoricalSnapshotCadence } = require_historical_snapshot_cadence_wiring(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createPluginReceivedDisplayRuntime } = require_display_runtime_wiring(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createPluginDisplayRepaintScheduler } = require_repaint_scheduler_wiring(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), { createPluginLoadedStatusCapsuleController, positionPluginLoadedStatusElement } = require_loaded_status_capsule_wiring(), { createChannelTitleStore } = require_channel_title_store(), { createPluginMessageViewportStore } = require_message_viewport_wiring(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createPluginLiveTranslationQueue } = require_live_translation_queue_wiring(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createPluginHistoricalSnapshotCadence } = require_historical_snapshot_cadence_wiring(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -12195,7 +12284,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "65a775c63d76dffa";
+            return "fe6085ad52351072";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13821,74 +13910,7 @@ __________________ __________________ __________________
             return this.messageDeletionLifecycleInstance || (this.messageDeletionLifecycleInstance = createPluginMessageDeletionLifecycle({ plugin: this, BDFDB })), this.messageDeletionLifecycleInstance;
           }
           ensureLiveTranslationQueue() {
-            return this.liveTranslationQueueInstance || (this.liveTranslationQueueInstance = createLiveTranslationQueue({
-              isRuntimeActive: /* @__PURE__ */ __name(() => pluginRuntimeActive, "isRuntimeActive"),
-              isTranslationEnabled: /* @__PURE__ */ __name((channelId) => this.isTranslationEnabled(channelId), "isTranslationEnabled"),
-              extractOriginalContentData: /* @__PURE__ */ __name((message) => this.extractOriginalContentData(message), "extractOriginalContentData"),
-              createTranslationSignature: /* @__PURE__ */ __name((message, channelId, originalContentData) => this.createReceivedTranslationSignature(message, channelId, originalContentData), "createTranslationSignature"),
-              getMessageChannelId: /* @__PURE__ */ __name((message) => this.getMessageChannelId(message), "getMessageChannelId"),
-              isProviderBackoffActive: /* @__PURE__ */ __name(() => this.ensureProviderClient().isBackoffActive(), "isProviderBackoffActive"),
-              shouldAutoTranslateMessage: /* @__PURE__ */ __name((message, channel, originalContentData, ignoreQueued) => this.shouldAutoTranslateReceivedMessage(message, channel, originalContentData, ignoreQueued), "shouldAutoTranslateMessage"),
-              isMessageWithinLoadedRange: /* @__PURE__ */ __name((message) => this.isMessageWithinLoadedRange(message), "isMessageWithinLoadedRange"),
-              getDisplayCommitGeneration: /* @__PURE__ */ __name((channelId) => this.getReceivedDisplayCommitGeneration(channelId), "getDisplayCommitGeneration"),
-              markDisplayPending: /* @__PURE__ */ __name((record, options) => this.markReceivedDisplayPending(record, options), "markDisplayPending"),
-              releaseDisplayPending: /* @__PURE__ */ __name((record) => this.releaseReceivedDisplayPending(record), "releaseDisplayPending"),
-              scheduleDisplayFlush: /* @__PURE__ */ __name((channelId, messageId, source) => this.scheduleReceivedDisplayFlush(channelId, messageId, null, null, source || "live"), "scheduleDisplayFlush"),
-              collectHistoricalMessage: /* @__PURE__ */ __name((queueItem) => this.collectHistoricalTranslationMessage(queueItem), "collectHistoricalMessage"),
-              resetLoadedMessageTracking: /* @__PURE__ */ __name((channelId = null) => loadedTranslationStatusStore.resetSeen(channelId), "resetLoadedMessageTracking"),
-              clearEligibleReplyPreviewMessages: /* @__PURE__ */ __name((channelId) => this.clearAutoTranslationEligibleReplyPreviewMessages(channelId), "clearEligibleReplyPreviewMessages"),
-              clearChannelTranslationQueue: /* @__PURE__ */ __name((channelId) => this.clearAutoTranslationQueue(channelId), "clearChannelTranslationQueue"),
-              onChannelSessionLeft: /* @__PURE__ */ __name((channelId) => this.ensureReceivedDisplayRuntime().pruneChannel(channelId), "onChannelSessionLeft"),
-              // new_only hides what is already on screen, so a fresh session drops the automatic records the previous one painted.
-              onChannelSessionStarted: /* @__PURE__ */ __name((channelId) => this.getReceivedAutoTranslateScope() == "new_only" && this.clearDisplayedAutoTranslations(channelId), "onChannelSessionStarted"),
-              onReservedLiveRequestConsumed: /* @__PURE__ */ __name((channelId, handoffTicket) => this.resumeQueuedHistoricalTranslationJobs(channelId, handoffTicket), "onReservedLiveRequestConsumed"),
-              onReservedLiveRequestRetired: /* @__PURE__ */ __name((channelId, handoffTicket) => this.resumeQueuedHistoricalTranslationJobs(channelId, handoffTicket, { retired: !0 }), "onReservedLiveRequestRetired"),
-              getBatchEngineKey: /* @__PURE__ */ __name((channelId) => this.getHistoricalAiBatchEngineKey(channelId), "getBatchEngineKey"),
-              createBurstContext: /* @__PURE__ */ __name((channelId) => ({
-                engineKey: this.getHistoricalAiBatchEngineKey(channelId),
-                input: Object.assign({}, this.ensureSettingsStore().getLanguage(this.getLanguageChoice(languageTypes.INPUT, messageTypes.RECEIVED, channelId)) || {}),
-                output: Object.assign({}, this.ensureSettingsStore().getLanguage(this.getLanguageChoice(languageTypes.OUTPUT, messageTypes.RECEIVED, channelId)) || {})
-              }), "createBurstContext"),
-              prepareBurstItem: /* @__PURE__ */ __name((queueItem, channelId, context) => this.prepareHistoricalAiBatchQueueItem(queueItem, channelId, context.input, context.output), "prepareBurstItem"),
-              requestBurstTranslation: /* @__PURE__ */ __name((context, prepared) => this.requestAiBatchTranslationDetailed(context.engineKey, prepared), "requestBurstTranslation"),
-              // Skip detection, validation and caching are translation policy and stay here;
-              // the queue only learns whether the item is done, done-as-skipped, or must be
-              // retried alone.
-              resolveBurstItemResult: /* @__PURE__ */ __name((preparedItem, resultMap, channelId) => {
-                let messageId = String(preparedItem.message.id), rawTranslation = resultMap && Object.prototype.hasOwnProperty.call(resultMap, messageId) ? resultMap[messageId] : null;
-                if (rawTranslation != null && this.isSkipTranslationSignal(rawTranslation))
-                  return this.persistReceivedSkipDecision(messageId, preparedItem.signature, "ai_skip_signal", preparedItem.protectedText), { status: "skipped", result: { sourceSignature: preparedItem.signature, status: "skipped", reason: "ai_skip_signal" } };
-                let validation = { ok: !1 };
-                try {
-                  validation = this.validateHistoricalTranslationJobResult(preparedItem, rawTranslation, { channelId }) || { ok: !1 };
-                } catch {
-                  validation = { ok: !1 };
-                }
-                if (!validation.ok) return { status: "retry" };
-                try {
-                  this.persistTranslationCacheEntry(messageId, preparedItem.signature, validation.translation);
-                } catch {
-                }
-                return { status: "translated", result: { sourceSignature: preparedItem.signature, status: "translated", translation: validation.translation } };
-              }, "resolveBurstItemResult"),
-              commitBurstResult: /* @__PURE__ */ __name((queueItem, channelId, result) => this.commitReceivedDisplayResult(this.createReceivedDisplayCommitResult(queueItem.message, channelId, result), { refresh: !1 }), "commitBurstResult"),
-              commitCachedResult: /* @__PURE__ */ __name((queueItem, channelId) => {
-                let storedTranslation = this.refreshTranslationDisplay(Object.assign({ channelId, auto: !0 }, queueItem.cachedTranslation));
-                return this.commitReceivedDisplayResult(this.createReceivedDisplayCommitResult(queueItem.message, channelId, {
-                  sourceSignature: storedTranslation.signature != null ? String(storedTranslation.signature) : this.createReceivedTranslationSignature(queueItem.message, channelId, queueItem.originalContentData),
-                  requestIdentity: queueItem.liveRequest ? String(queueItem.liveRequest.id) : null,
-                  status: "translated",
-                  translation: storedTranslation
-                }), { refresh: !1 });
-              }, "commitCachedResult"),
-              translateSingleItem: /* @__PURE__ */ __name((queueItem) => this.translateMessage(queueItem.message, queueItem.channel, {
-                auto: !0,
-                silent: !0,
-                trackBusy: !1,
-                originalContentData: queueItem.originalContentData,
-                liveRequest: queueItem.liveRequest
-              }), "translateSingleItem")
-            })), this.liveTranslationQueueInstance;
+            return this.liveTranslationQueueInstance || (this.liveTranslationQueueInstance = createPluginLiveTranslationQueue({ plugin: this, BDFDB, loadedTranslationStatusStore, getRuntimeActive: /* @__PURE__ */ __name(() => pluginRuntimeActive, "getRuntimeActive"), languageTypes, messageTypes })), this.liveTranslationQueueInstance;
           }
           ensureSentTranslationStore() {
             return this.sentTranslationStoreInstance || (this.sentTranslationStoreInstance = createSentTranslationStore({

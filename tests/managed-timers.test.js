@@ -12,6 +12,7 @@ const providerClientWiring = fs.readFileSync(path.resolve(__dirname, "..", "src"
 const messageViewportWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "viewport", "message-viewport-wiring.js"), "utf8");
 const historicalSnapshotCadenceWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "orchestrator", "historical-snapshot-cadence-wiring.js"), "utf8");
 const repaintSchedulerWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "display", "repaint-scheduler-wiring.js"), "utf8");
+const liveTranslationQueueWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "orchestrator", "live-translation-queue-wiring.js"), "utf8");
 
 // Every module that schedules work on the plugin's behalf. The provider client is here
 // too: its retry timers are managed, and only its backoff sleep is deliberately raw.
@@ -28,6 +29,9 @@ test("modules that schedule work are handed BDFDB timers, never the globals", ()
 	}, {
 		name: "createPluginMessageViewportStore",
 		source: messageViewportWiring
+	}, {
+		name: "createPluginLiveTranslationQueue",
+		source: liveTranslationQueueWiring
 	}];
 	for (const owner of owners) {
 		assert.match(owner.source, /setTimeout:\s*\(callback, delay\) => BDFDB\.TimeUtils\.timeout\(callback, delay\)/, `${owner.name} must receive the managed timer`);

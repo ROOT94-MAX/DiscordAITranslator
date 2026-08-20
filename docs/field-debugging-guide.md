@@ -194,7 +194,7 @@ This section preserves the order in which the failures were reported and correct
 
 1. Some whole-chat rebuild fallbacks remain (`R` lane/diagnostic), so the composer/input can still refresh when row confirmation fails, preview hosts require a broad paint, or lifecycle settings change. Build `65a775c63d76dffa` reproduced this existing behavior; the user explicitly parked it for later.
 2. Scrollbar thumb size/position can move when translated rows change total height. Reopen only when the center reading-line message itself is lost or the view is stranded at newest.
-3. Slice 5d is not finished: `src/legacy/runtime.js` is still a 3,329-line composition root with two module-level shared declarators. Continue ownership extraction only behind contract tests; do not call the refactor complete merely because many modules exist.
+3. Slice 5d is not finished: `src/legacy/runtime.js` is still a 3,260-line composition root with two module-level shared declarators. Continue ownership extraction only behind contract tests; do not call the refactor complete merely because many modules exist.
 4. Oversized modules and generated-bundle size remain architecture debt. Split by ownership after contracts exist; do not split merely to reduce a line count.
 5. Automatic multi-page history fetching is parked after field rollback. Clean-stop cache flush is complete, while provider physical cancellation and broader lifecycle consolidation remain observation-gated.
 

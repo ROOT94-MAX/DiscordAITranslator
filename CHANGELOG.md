@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refactor: Slice 5d 第十个 composition-root 切片把 Live Translation Queue 的运行时/频道判断、显示提交、历史交接、频道会话、批量翻译结果策略和单条回退接线迁入 `live-translation-queue-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,329 行降至 3,260 行，实时消息优先、同频道批量、历史让位和频道隔离策略保持不变
+- Lifecycle: Live Translation Queue 的 900ms 重试计时器改由 wiring 显式接入 BDFDB 托管 `timeout/clear`，插件停止或热重载时不再依赖全局计时器存活；新增完整 30 项端口、托管计时器、会话/历史交接、跳过/重试/缓存提交契约
 - Refactor: Slice 5d 第九个 composition-root 切片把 Display Repaint Scheduler 的显示事务入口、历史显示结果回报、Discord 页面状态判断、生命周期整区重绘和 BDFDB 托管计时器接线迁入 `repaint-scheduler-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,339 行降至 3,329 行，重绘合并、延迟、重试、来源归因和输入/设置/滚动门保持不变
 - Test: 新增 Repaint Scheduler 全部 9 项端口透传契约；既有调度策略、实时吞吐、滚动门、设置/输入门、整区回退和显示归属测试继续通过
 - Refactor: Slice 5d 第八个 composition-root 切片把 Received Display Runtime 的 Flux dispatcher、Message/Channel Store、浏览器 DOM/RAF、BDFDB 托管计时器、胶囊计数和视口恢复接线迁入 `display-runtime-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,369 行降至 3,339 行，显示状态、单行重绘、整区回退和滚动恢复策略保持不变

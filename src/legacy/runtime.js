@@ -80,7 +80,7 @@ module.exports = (_ => {
 		const {translationEngines, enginePortals} = require("../providers/provider-client");
 		const {createPluginProviderClient} = require("../providers/provider-client-wiring");
 		const {createSentTranslationStore} = require("../sent/sent-translation-store");
-		const {createLiveTranslationQueue} = require("../orchestrator/live-translation-queue");
+		const {createPluginLiveTranslationQueue} = require("../orchestrator/live-translation-queue-wiring");
 		const {resumeHistoricalHandoff} = require("../orchestrator/historical-handoff-runtime");
 		const {createHistoricalJobRegistry} = require("../orchestrator/historical-job-registry");
 		const channelToggleOperations = require("../orchestrator/channel-toggle-operations").createChannelToggleOperations();
@@ -2405,76 +2405,7 @@ module.exports = (_ => {
 				return this.messageDeletionLifecycleInstance;
 			}
 			ensureLiveTranslationQueue () {
-				if (!this.liveTranslationQueueInstance) this.liveTranslationQueueInstance = createLiveTranslationQueue({
-					isRuntimeActive: () => pluginRuntimeActive,
-					isTranslationEnabled: channelId => this.isTranslationEnabled(channelId),
-					extractOriginalContentData: message => this.extractOriginalContentData(message),
-					createTranslationSignature: (message, channelId, originalContentData) => this.createReceivedTranslationSignature(message, channelId, originalContentData),
-					getMessageChannelId: message => this.getMessageChannelId(message),
-					isProviderBackoffActive: () => this.ensureProviderClient().isBackoffActive(),
-					shouldAutoTranslateMessage: (message, channel, originalContentData, ignoreQueued) => this.shouldAutoTranslateReceivedMessage(message, channel, originalContentData, ignoreQueued),
-					isMessageWithinLoadedRange: message => this.isMessageWithinLoadedRange(message),
-					getDisplayCommitGeneration: channelId => this.getReceivedDisplayCommitGeneration(channelId),
-					markDisplayPending: (record, options) => this.markReceivedDisplayPending(record, options),
-					releaseDisplayPending: record => this.releaseReceivedDisplayPending(record),
-					scheduleDisplayFlush: (channelId, messageId, source) => this.scheduleReceivedDisplayFlush(channelId, messageId, null, null, source || "live"),
-					collectHistoricalMessage: queueItem => this.collectHistoricalTranslationMessage(queueItem),
-					resetLoadedMessageTracking: (channelId = null) => loadedTranslationStatusStore.resetSeen(channelId),
-					clearEligibleReplyPreviewMessages: channelId => this.clearAutoTranslationEligibleReplyPreviewMessages(channelId),
-					clearChannelTranslationQueue: channelId => this.clearAutoTranslationQueue(channelId),
-					onChannelSessionLeft: channelId => this.ensureReceivedDisplayRuntime().pruneChannel(channelId),
-					// new_only hides what is already on screen, so a fresh session drops the automatic records the previous one painted.
-					onChannelSessionStarted: channelId => this.getReceivedAutoTranslateScope() == "new_only" && this.clearDisplayedAutoTranslations(channelId),
-					onReservedLiveRequestConsumed: (channelId, handoffTicket) => this.resumeQueuedHistoricalTranslationJobs(channelId, handoffTicket),
-					onReservedLiveRequestRetired: (channelId, handoffTicket) => this.resumeQueuedHistoricalTranslationJobs(channelId, handoffTicket, {retired: true}),
-					getBatchEngineKey: channelId => this.getHistoricalAiBatchEngineKey(channelId),
-					createBurstContext: channelId => ({
-					engineKey: this.getHistoricalAiBatchEngineKey(channelId),
-					input: Object.assign({}, this.ensureSettingsStore().getLanguage(this.getLanguageChoice(languageTypes.INPUT, messageTypes.RECEIVED, channelId)) || {}),
-					output: Object.assign({}, this.ensureSettingsStore().getLanguage(this.getLanguageChoice(languageTypes.OUTPUT, messageTypes.RECEIVED, channelId)) || {})
-					}),
-					prepareBurstItem: (queueItem, channelId, context) => this.prepareHistoricalAiBatchQueueItem(queueItem, channelId, context.input, context.output),
-					requestBurstTranslation: (context, prepared) => this.requestAiBatchTranslationDetailed(context.engineKey, prepared),
-					// Skip detection, validation and caching are translation policy and stay here;
-					// the queue only learns whether the item is done, done-as-skipped, or must be
-					// retried alone.
-					resolveBurstItemResult: (preparedItem, resultMap, channelId) => {
-					const messageId = String(preparedItem.message.id);
-					const rawTranslation = resultMap && Object.prototype.hasOwnProperty.call(resultMap, messageId) ? resultMap[messageId] : null;
-					// An explicit skip verdict is a terminal answer, not a failure: paying for a
-					// second full-price request to reach the same verdict is waste.
-					if (rawTranslation != null && this.isSkipTranslationSignal(rawTranslation)) {
-					this.persistReceivedSkipDecision(messageId, preparedItem.signature, "ai_skip_signal", preparedItem.protectedText);
-					return {status: "skipped", result: {sourceSignature: preparedItem.signature, status: "skipped", reason: "ai_skip_signal"}};
-					}
-					let validation = {ok: false};
-					try {validation = this.validateHistoricalTranslationJobResult(preparedItem, rawTranslation, {channelId}) || {ok: false};}
-					catch (error) {validation = {ok: false};}
-					if (!validation.ok) return {status: "retry"};
-					// The result is paid for and valid, so it is cached even when the live request
-					// went stale; a retry then hits the cache instead of the provider.
-					try {this.persistTranslationCacheEntry(messageId, preparedItem.signature, validation.translation);}
-					catch (error) {}
-					return {status: "translated", result: {sourceSignature: preparedItem.signature, status: "translated", translation: validation.translation}};
-					},
-					commitBurstResult: (queueItem, channelId, result) => this.commitReceivedDisplayResult(this.createReceivedDisplayCommitResult(queueItem.message, channelId, result), {refresh: false}),
-					commitCachedResult: (queueItem, channelId) => {
-					const storedTranslation = this.refreshTranslationDisplay(Object.assign({channelId, auto: true}, queueItem.cachedTranslation));
-					return this.commitReceivedDisplayResult(this.createReceivedDisplayCommitResult(queueItem.message, channelId, {
-					sourceSignature: storedTranslation.signature != null ? String(storedTranslation.signature) : this.createReceivedTranslationSignature(queueItem.message, channelId, queueItem.originalContentData),
-					requestIdentity: queueItem.liveRequest ? String(queueItem.liveRequest.id) : null,
-					status: "translated",
-					translation: storedTranslation
-					}), {refresh: false});
-					},
-					translateSingleItem: queueItem => this.translateMessage(queueItem.message, queueItem.channel, {
-					auto: true,
-					silent: true,
-					trackBusy: false,
-					originalContentData: queueItem.originalContentData,
-					liveRequest: queueItem.liveRequest
-					})
-				});
+				if (!this.liveTranslationQueueInstance) this.liveTranslationQueueInstance = createPluginLiveTranslationQueue({plugin: this, BDFDB, loadedTranslationStatusStore, getRuntimeActive: () => pluginRuntimeActive, languageTypes, messageTypes});
 				return this.liveTranslationQueueInstance;
 			}
 

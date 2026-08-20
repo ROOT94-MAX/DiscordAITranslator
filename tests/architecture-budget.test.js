@@ -46,7 +46,9 @@ const BUDGET = Object.freeze({
 	// viewport wiring moved into display-runtime-wiring.js.
 	// -10 (2026-08-21): repaint render/outcome, Discord-state predicates,
 	// lifecycle repaint and managed timers moved into repaint-scheduler-wiring.js.
-	runtimeLines: 3329,
+	// -69 (2026-08-21): live queue policy, display/history handoff, channel-session
+	// and managed retry timer wiring moved into live-translation-queue-wiring.js.
+	runtimeLines: 3260,
 	moduleLevelVarDeclarators: 2
 });
 
@@ -184,6 +186,15 @@ test("plugin-specific display repaint scheduler wiring stays out of the legacy r
 	const ensureMethod = source.match(/\n\t\t\tensureReceivedDisplayRepaintScheduler \(\) \{[\s\S]*?\n\t\t\t\}/);
 	assert.ok(ensureMethod, "the lazy display-repaint scheduler singleton boundary remains explicit");
 	assert.doesNotMatch(ensureMethod[0], /ensureReceivedDisplayRuntime|canRepaintReceivedDisplayNow|isViewingMessageHistory|isTranslatorSettingsSurfaceOpen|isChannelTextAreaFocused|rerenderMessagesWithScrollPreserved|BDFDB\.TimeUtils/, "repaint policy host wiring belongs to repaint-scheduler-wiring.js");
+});
+
+test("plugin-specific live translation queue wiring stays out of the legacy runtime", () => {
+	const source = readRuntimeLines().join("\n");
+	assert.match(source, /createPluginLiveTranslationQueue/);
+	assert.doesNotMatch(source, /\bcreateLiveTranslationQueue\b/);
+	const ensureMethod = source.match(/\n\t\t\tensureLiveTranslationQueue \(\) \{[\s\S]*?\n\t\t\t\}/);
+	assert.ok(ensureMethod, "the lazy live-translation queue singleton boundary remains explicit");
+	assert.doesNotMatch(ensureMethod[0], /extractOriginalContentData|shouldAutoTranslateReceivedMessage|collectHistoricalTranslationMessage|resumeQueuedHistoricalTranslationJobs|prepareHistoricalAiBatchQueueItem|requestAiBatchTranslationDetailed|validateHistoricalTranslationJobResult|persistTranslationCacheEntry|translateMessage/, "live queue plugin/policy wiring belongs to live-translation-queue-wiring.js");
 });
 
 test("the recorded budget matches the current tree, so drift is visible", () => {
