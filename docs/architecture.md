@@ -8,7 +8,7 @@ This document describes the current runtime boundaries and migration rules. User
 
 - Release line: v0.3.39.
 - Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
-- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased master build ID: `530b6d5ac4b47c18`.
+- Published v0.3.39 build ID: `08e2b0182796eded`; current unreleased master build ID: `776fc74287e3199d`.
 - Legacy composition-root ratchet: 3,476 lines and two module-level shared declarators.
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
 - Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
@@ -163,7 +163,7 @@ npm run verify
 
 - `src/legacy/runtime.js` remains a 3,476-line composition root.
 - Whole-chat fallback diagnostics (`R`) can still correspond to occasional composer flicker.
-- Provider abort support and lifecycle task registry cleanup remain open in `recovery-plan.md`; automatic multi-page history fetching is parked after field rollback, while direct Store message-delete subscription awaits only its bulk-delete observation.
+- Provider abort support and lifecycle task registry cleanup remain observation-gated in `recovery-plan.md`; automatic multi-page history fetching is parked after field rollback, while direct Store message-delete subscriptions are field-closed.
 - Discord internal store and snapshot shapes require re-observation after client updates.
 - Some modules remain large and should split only when ownership contracts and regression tests exist.
 

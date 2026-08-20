@@ -166,6 +166,12 @@ This section preserves the order in which the failures were reported and correct
 | --- | --- | --- | --- |
 | `new_only` translated delayed history one row at a time while its capsule correctly stayed hidden | A transient empty first stream finalized a null boundary, and a freshly captured `idle` display record was mistaken for a lost translation | Freeze the channel-model boundary, evaluate the first walk per row, keep a boundaryless empty stream uninitialised, and treat only a previously translated view as `messageChanged` | PTB build `776fc74287e3199d` was confirmed on 2026-08-20: historical rows stayed original and a genuine new message translated automatically |
 
+### Field Closure Record
+
+- On 2026-08-20 the user closed the remaining automatic collection/count mismatch; no further `93/93` capture is required.
+- Direct Store subscriptions are field-closed for both single and bulk message deletion.
+- Forwarded one-original display and enabling automatic translation while reading old history are field-closed; the former screenshot-only confirmation gates are retired.
+
 ## Rejected or Superseded Approaches
 
 - Full-document native-hint scans: flicker, false positives, and unstable geometry.
@@ -187,13 +193,9 @@ This section preserves the order in which the failures were reported and correct
 
 1. Some whole-chat rebuild fallbacks remain (`R` lane/diagnostic), so occasional composer-icon flicker can still occur when row confirmation fails, preview hosts require a broad paint, or lifecycle settings change.
 2. Scrollbar thumb size/position can move when translated rows change total height. Reopen only when the center reading-line message itself is lost or the view is stranded at newest.
-3. Message deletion now uses direct Store dispatcher subscriptions with no global dispatch patch. Installed build `d8af59cf7ce43f9c` passed a real single-delete observation on 2026-08-20: the message disappeared and its dependent view updated normally. Automated start/stop/rollback and cleanup coverage passes; only a real bulk-delete event-shape observation remains before closure.
-4. Forwarded one-original rendering and forwarded-row DOM confirmation remain under PTB observation because the latest normalization-aware dedupe has test evidence but the user did not explicitly close that exact screenshot case after the final implementation, and Discord may change the snapshot render tree.
-5. The history-preserving auto-enable correction has regression coverage but still needs a focused PTB repeat at an old date; capsule cumulative behavior and native-hint alignment should also be rechecked after Discord UI changes.
-6. Slice 5d is not finished: `src/legacy/runtime.js` is still a 3,476-line composition root with two module-level shared declarators. Continue ownership extraction only behind contract tests; do not call the refactor complete merely because many modules exist.
-7. Oversized modules and generated-bundle size remain architecture debt. Split by ownership after contracts exist; do not split merely to reduce a line count.
-8. Automatic multi-page history fetching is parked after field rollback. Clean-stop cache flush is complete; provider physical cancellation and broader lifecycle consolidation are observation-gated, while message-delete subscription remains only for bulk-delete PTB closure.
-9. Active automatic-lane debug: on build `92a9cc910670918d`, one visible foreign-language history message stayed original while the capsule read `93/93`. The screenshot was taken before a later manual translation, so the cached manual result does not prove an automatic display failure. The full cache was cleared to distinguish collection, provider, display, and counter ownership on a clean run.
+3. Slice 5d is not finished: `src/legacy/runtime.js` is still a 3,476-line composition root with two module-level shared declarators. Continue ownership extraction only behind contract tests; do not call the refactor complete merely because many modules exist.
+4. Oversized modules and generated-bundle size remain architecture debt. Split by ownership after contracts exist; do not split merely to reduce a line count.
+5. Automatic multi-page history fetching is parked after field rollback. Clean-stop cache flush is complete, while provider physical cancellation and broader lifecycle consolidation remain observation-gated.
 
 ## Regression and Evidence Map
 

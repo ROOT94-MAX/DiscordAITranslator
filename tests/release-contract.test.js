@@ -103,29 +103,30 @@ test("architecture and field handoff provide complete Chinese companion entry po
 	assert.match(index, /field-debugging-guide\.zh-CN\.md/);
 });
 
-test("the recovery plan separates completed baseline from active work and keeps superseded UI planning outside Git", () => {
+test("the recovery plan keeps closed field work out and names the next executable slice", () => {
 	assert.equal(fs.existsSync(path.join(root, "docs", "ui-redesign-plan.md")), false);
 	const recovery = read("docs/recovery-plan.md");
 	const headings = [
 		"## Verified Completed Baseline (Not TODO)",
-		"## Priority 0: Field Observation",
-		"## Priority 1: Message Deletion Dispatcher",
-		"## Priority 2: Historical Source Completeness",
-		"## Priority 3: Lifecycle And Cancellation",
-		"## Priority 4: Render Truth",
-		"## Priority 5: Architecture",
+		"## Parked: Historical Source Completeness",
+		"## Observation-Gated: Lifecycle And Cancellation",
+		"## Observation-Gated: Render Truth",
+		"## Next Executable Slice: Architecture",
 		"## Parked UI Redesign",
 		"## Delivery Gate"
 	];
 	for (const heading of headings) assert.match(recovery, new RegExp(`^${escapeRegex(heading)}$`, "m"));
 	for (const status of [
-		"ACTIVE DEBUG",
-		"Status: OPEN.",
 		"PARTIALLY COMPLETE",
 		"OPEN WITH PARTIAL FOUNDATIONS",
+		"ACTIVE PLANNING",
 		"PARKED",
 		"PROCESS RULES"
 	]) assert.match(recovery, new RegExp(escapeRegex(status)));
+	assert.doesNotMatch(recovery, /Priority 0: Field Observation|Priority 1: Message Deletion Dispatcher|ACTIVE DEBUG|bulk-delete observation pending/);
+	assert.match(recovery, /Slice 5d composition root/);
+	assert.match(read("docs/field-debugging-guide.md"), /^### Field Closure Record$/m);
+	assert.match(read("docs/field-debugging-guide.zh-CN.md"), /^### 现场关闭记录$/m);
 	assert.ok(recovery.split("\n").length <= 140, "recovery-plan keeps only the executable active backlog");
 	assert.ok(recovery.length <= 15000, "incident history belongs in field-debugging-guide, not recovery-plan");
 	assert.doesNotMatch(recovery, /Σ47|Atomic rebuild RETIRED|codex\/display-unification|Shipped by v0\.3\.38/);
