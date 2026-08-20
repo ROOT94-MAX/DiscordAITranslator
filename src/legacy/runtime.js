@@ -60,7 +60,7 @@ module.exports = (_ => {
 		// constructed in the state block below.
 		const {createPluginReceivedDisplayRuntime} = require("../display/display-runtime-wiring");
 		const {createTranslationDisplayLogic} = require("../display/translation-display-logic");
-		const {createDisplayRepaintScheduler} = require("../display/repaint-scheduler");
+		const {createPluginDisplayRepaintScheduler} = require("../display/repaint-scheduler-wiring");
 		const {createHistoricalDisplayTracker} = require("../display/historical-display-tracker");
 		const {createTranslatorStyles} = require("../ui/styles");
 		const {renderSettingsPanel} = require("../ui/settings-panel");
@@ -2572,17 +2572,7 @@ module.exports = (_ => {
 			}
 
 			ensureReceivedDisplayRepaintScheduler () {
-				if (!this.receivedDisplayRepaintSchedulerInstance) this.receivedDisplayRepaintSchedulerInstance = createDisplayRepaintScheduler({
-					renderMessages: (messageIds, meta) => this.ensureReceivedDisplayRuntime().renderMessages(messageIds, meta),
-					onRenderOutcome: report => historicalDisplayTracker.handle(report),
-					canRepaintNow: () => this.canRepaintReceivedDisplayNow(),
-					isViewingHistory: () => this.isViewingMessageHistory(),
-					isSettingsSurfaceOpen: () => this.isTranslatorSettingsSurfaceOpen(),
-					isTextAreaFocused: () => this.isChannelTextAreaFocused(),
-					repaintAll: () => this.rerenderMessagesWithScrollPreserved(),
-					setTimeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay),
-					clearTimeout: timer => BDFDB.TimeUtils.clear(timer)
-				});
+				if (!this.receivedDisplayRepaintSchedulerInstance) this.receivedDisplayRepaintSchedulerInstance = createPluginDisplayRepaintScheduler({plugin: this, BDFDB, onRenderOutcome: report => historicalDisplayTracker.handle(report)});
 				return this.receivedDisplayRepaintSchedulerInstance;
 			}
 

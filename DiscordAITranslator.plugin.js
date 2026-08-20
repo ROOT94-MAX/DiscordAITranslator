@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 143512968d82fab2
+ * @buildId 65a775c63d76dffa
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -1854,6 +1854,34 @@ var require_repaint_scheduler = __commonJS({
       BUSY_RETRY_DELAY_MS: 450,
       createDisplayRepaintScheduler
     };
+  }
+});
+
+// src/display/repaint-scheduler-wiring.js
+var require_repaint_scheduler_wiring = __commonJS({
+  "src/display/repaint-scheduler-wiring.js"(exports2, module2) {
+    var { createDisplayRepaintScheduler } = require_repaint_scheduler();
+    function createPluginDisplayRepaintScheduler({
+      plugin,
+      BDFDB,
+      onRenderOutcome = /* @__PURE__ */ __name(() => {
+      }, "onRenderOutcome"),
+      createScheduler = createDisplayRepaintScheduler
+    }) {
+      return createScheduler({
+        renderMessages: /* @__PURE__ */ __name((messageIds, meta) => plugin.ensureReceivedDisplayRuntime().renderMessages(messageIds, meta), "renderMessages"),
+        onRenderOutcome,
+        canRepaintNow: /* @__PURE__ */ __name(() => plugin.canRepaintReceivedDisplayNow(), "canRepaintNow"),
+        isViewingHistory: /* @__PURE__ */ __name(() => plugin.isViewingMessageHistory(), "isViewingHistory"),
+        isSettingsSurfaceOpen: /* @__PURE__ */ __name(() => plugin.isTranslatorSettingsSurfaceOpen(), "isSettingsSurfaceOpen"),
+        isTextAreaFocused: /* @__PURE__ */ __name(() => plugin.isChannelTextAreaFocused(), "isTextAreaFocused"),
+        repaintAll: /* @__PURE__ */ __name(() => plugin.rerenderMessagesWithScrollPreserved(), "repaintAll"),
+        setTimeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "setTimeout"),
+        clearTimeout: /* @__PURE__ */ __name((timer) => BDFDB.TimeUtils.clear(timer), "clearTimeout")
+      });
+    }
+    __name(createPluginDisplayRepaintScheduler, "createPluginDisplayRepaintScheduler");
+    module2.exports = { createPluginDisplayRepaintScheduler };
   }
 });
 
@@ -12119,7 +12147,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createPluginReceivedDisplayRuntime } = require_display_runtime_wiring(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), { createPluginLoadedStatusCapsuleController, positionPluginLoadedStatusElement } = require_loaded_status_capsule_wiring(), { createChannelTitleStore } = require_channel_title_store(), { createPluginMessageViewportStore } = require_message_viewport_wiring(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createPluginHistoricalSnapshotCadence } = require_historical_snapshot_cadence_wiring(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createPluginReceivedDisplayRuntime } = require_display_runtime_wiring(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createPluginDisplayRepaintScheduler } = require_repaint_scheduler_wiring(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), { createPluginLoadedStatusCapsuleController, positionPluginLoadedStatusElement } = require_loaded_status_capsule_wiring(), { createChannelTitleStore } = require_channel_title_store(), { createPluginMessageViewportStore } = require_message_viewport_wiring(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { translationEngines, enginePortals } = require_provider_client(), { createPluginProviderClient } = require_provider_client_wiring(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createPluginHistoricalSnapshotCadence } = require_historical_snapshot_cadence_wiring(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -12167,7 +12195,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "143512968d82fab2";
+            return "65a775c63d76dffa";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13933,17 +13961,7 @@ __________________ __________________ __________________
             return !this.isTranslatorSettingsSurfaceOpen() && !(this.isViewingMessageHistory() && this.isUserActivelyScrollingMessages());
           }
           ensureReceivedDisplayRepaintScheduler() {
-            return this.receivedDisplayRepaintSchedulerInstance || (this.receivedDisplayRepaintSchedulerInstance = createDisplayRepaintScheduler({
-              renderMessages: /* @__PURE__ */ __name((messageIds, meta) => this.ensureReceivedDisplayRuntime().renderMessages(messageIds, meta), "renderMessages"),
-              onRenderOutcome: /* @__PURE__ */ __name((report) => historicalDisplayTracker.handle(report), "onRenderOutcome"),
-              canRepaintNow: /* @__PURE__ */ __name(() => this.canRepaintReceivedDisplayNow(), "canRepaintNow"),
-              isViewingHistory: /* @__PURE__ */ __name(() => this.isViewingMessageHistory(), "isViewingHistory"),
-              isSettingsSurfaceOpen: /* @__PURE__ */ __name(() => this.isTranslatorSettingsSurfaceOpen(), "isSettingsSurfaceOpen"),
-              isTextAreaFocused: /* @__PURE__ */ __name(() => this.isChannelTextAreaFocused(), "isTextAreaFocused"),
-              repaintAll: /* @__PURE__ */ __name(() => this.rerenderMessagesWithScrollPreserved(), "repaintAll"),
-              setTimeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "setTimeout"),
-              clearTimeout: /* @__PURE__ */ __name((timer) => BDFDB.TimeUtils.clear(timer), "clearTimeout")
-            })), this.receivedDisplayRepaintSchedulerInstance;
+            return this.receivedDisplayRepaintSchedulerInstance || (this.receivedDisplayRepaintSchedulerInstance = createPluginDisplayRepaintScheduler({ plugin: this, BDFDB, onRenderOutcome: /* @__PURE__ */ __name((report) => historicalDisplayTracker.handle(report), "onRenderOutcome") })), this.receivedDisplayRepaintSchedulerInstance;
           }
           scheduleReceivedDisplayFlush(channelId, messageId, delay = null, trackingKey = null, source = null) {
             this.ensureReceivedDisplayRepaintScheduler().schedule(channelId, messageId, delay, 1, trackingKey, source);

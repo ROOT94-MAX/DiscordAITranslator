@@ -44,7 +44,9 @@ const BUDGET = Object.freeze({
 	// retry callback wiring moved into loaded-status-capsule-wiring.js.
 	// -30 (2026-08-21): received-display Flux, Store, browser, timer, capsule and
 	// viewport wiring moved into display-runtime-wiring.js.
-	runtimeLines: 3339,
+	// -10 (2026-08-21): repaint render/outcome, Discord-state predicates,
+	// lifecycle repaint and managed timers moved into repaint-scheduler-wiring.js.
+	runtimeLines: 3329,
 	moduleLevelVarDeclarators: 2
 });
 
@@ -173,6 +175,15 @@ test("plugin-specific received display runtime wiring stays out of the legacy ru
 	const ensureMethod = source.match(/\n\t\t\tensureReceivedDisplayRuntime \(\) \{[\s\S]*?\n\t\t\t\}/);
 	assert.ok(ensureMethod, "the lazy received-display singleton boundary remains explicit");
 	assert.doesNotMatch(ensureMethod[0], /BDFDB\.dotCN|MessageStore|ChannelStore|resolveStoreDispatcher|captureDisplayTransactionScrollState|restoreDisplayTransactionScrollState|requestAnimationFrame/, "display host, Flux and viewport wiring belongs to display-runtime-wiring.js");
+});
+
+test("plugin-specific display repaint scheduler wiring stays out of the legacy runtime", () => {
+	const source = readRuntimeLines().join("\n");
+	assert.match(source, /createPluginDisplayRepaintScheduler/);
+	assert.doesNotMatch(source, /\bcreateDisplayRepaintScheduler\b/);
+	const ensureMethod = source.match(/\n\t\t\tensureReceivedDisplayRepaintScheduler \(\) \{[\s\S]*?\n\t\t\t\}/);
+	assert.ok(ensureMethod, "the lazy display-repaint scheduler singleton boundary remains explicit");
+	assert.doesNotMatch(ensureMethod[0], /ensureReceivedDisplayRuntime|canRepaintReceivedDisplayNow|isViewingMessageHistory|isTranslatorSettingsSurfaceOpen|isChannelTextAreaFocused|rerenderMessagesWithScrollPreserved|BDFDB\.TimeUtils/, "repaint policy host wiring belongs to repaint-scheduler-wiring.js");
 });
 
 test("the recorded budget matches the current tree, so drift is visible", () => {

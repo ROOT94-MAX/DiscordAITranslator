@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refactor: Slice 5d 第九个 composition-root 切片把 Display Repaint Scheduler 的显示事务入口、历史显示结果回报、Discord 页面状态判断、生命周期整区重绘和 BDFDB 托管计时器接线迁入 `repaint-scheduler-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,339 行降至 3,329 行，重绘合并、延迟、重试、来源归因和输入/设置/滚动门保持不变
+- Test: 新增 Repaint Scheduler 全部 9 项端口透传契约；既有调度策略、实时吞吐、滚动门、设置/输入门、整区回退和显示归属测试继续通过
 - Refactor: Slice 5d 第八个 composition-root 切片把 Received Display Runtime 的 Flux dispatcher、Message/Channel Store、浏览器 DOM/RAF、BDFDB 托管计时器、胶囊计数和视口恢复接线迁入 `display-runtime-wiring.js`；`runtime.js` 仅保留延迟单例入口，架构约束从 3,369 行降至 3,339 行，显示状态、单行重绘、整区回退和滚动恢复策略保持不变
 - Test: 新增 Received Display Runtime 的完整宿主/插件端口、Store 异常收敛和 best-effort 视口恢复契约；显示生命周期、吞吐、Flux、手动锚点与 `flushSync` 既有契约继续通过
 - Refactor: Slice 5d 第七个 composition-root 切片把已加载状态胶囊的 SelectedChannel Store、浏览器定位、运行时存活门、滚动/重试及 DOM 生命周期回调接线迁入 `loaded-status-capsule-wiring.js`；`runtime.js` 仅保留延迟单例和兼容定位入口，架构约束从 3,391 行降至 3,369 行，累计计数、频道隔离和胶囊定位行为保持不变
