@@ -286,7 +286,7 @@ module.exports = (_ => {
 				this.clearChannelTitleTranslations();
 				this.detachAutoTranslationInputActivityWatcher();
 				this.detachAutoTranslationScrollWatcher();
-				this.ensureTranslationCacheStore().cancelPendingSave();
+				this.ensureTranslationCacheStore().flushPendingSave();
 				this.ensureReceivedDisplayRepaintScheduler().cancelFullRepaintTimers();
 				this.ensureLiveTranslationQueue().cancelQueueRetry();
 				this.ensureMessageViewportStore().clearManualScrollLock();

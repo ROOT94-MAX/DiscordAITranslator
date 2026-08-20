@@ -137,7 +137,7 @@ Runtime queues, display state, viewport state, counters, probes, and generations
 
 Disabling a channel advances its generation, cancels pending automatic work, restores automatic and manual message/preview/embed/title display for that channel, and starts one channel-scoped display transaction. Manual translation remains available afterward. A late result from an older generation cannot repaint the channel.
 
-Stopping applies the same restoration to every channel before patches and managed tasks are released. Editing a message captures a new source signature and invalidates old pending/display results. Channel-session pruning keeps only state still needed for an active request, unconfirmed restore, manual suppression, or source archive.
+Stopping applies the same restoration to every channel before patches and managed tasks are released. The cache owner flushes one pending debounced write first; the runtime never reaches into its timer or cache object. Editing a message captures a new source signature and invalidates old pending/display results. Channel-session pruning keeps only state still needed for an active request, unconfirmed restore, manual suppression, or source archive.
 
 ## Diagnostics and Privacy
 

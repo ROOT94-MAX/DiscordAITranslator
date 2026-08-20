@@ -92,6 +92,19 @@ function createTranslationCacheStore({
 		saveTimer = null;
 	}
 
+	function flushPendingSave() {
+		if (!saveTimer) return false;
+		clearTimeout(saveTimer);
+		saveTimer = null;
+		try {
+			saveCache(cache);
+			return true;
+		}
+		catch (error) {
+			return false;
+		}
+	}
+
 	// Runs after the insert, so the entry just written is the newest and survives.
 	function evictOldestBeyondLimit() {
 		const cacheKeys = Object.keys(cache);
@@ -224,8 +237,9 @@ function createTranslationCacheStore({
 			return messageId && cache[messageId] || null;
 		},
 		scheduleSave,
-		// Used when the plugin stops: the pending save is abandoned, not flushed, which
-		// is what the legacy shutdown did.
+		flushPendingSave,
+		// Retained for owners that intentionally abandon a pending write rather than
+		// performing the clean-stop flush.
 		cancelPendingSave,
 		loadPersisted,
 		hashSignature,

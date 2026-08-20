@@ -1,5 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const {
 	MAX_TRANSLATION_CACHE_ENTRIES,
 	RECEIVED_SKIP_CACHE_POLICY_VERSION,
@@ -315,6 +317,42 @@ test("cancelling a pending save abandons it rather than flushing it", () => {
 	store.persistTranslation("m2", "sig-2", {translatedContent: "二"});
 	advance(TRANSLATION_CACHE_SAVE_DEBOUNCE_MS);
 	assert.equal(saves.length, 1, "the store still works after a cancel");
+});
+
+test("flushing a pending save writes exactly once and disarms the debounce timer", () => {
+	const {store, saves, advance, pendingTimerCount} = createHarness();
+	store.persistTranslation("m1", "sig-1", {translatedContent: "一"});
+	store.persistTranslation("m2", "sig-2", {translatedContent: "二"});
+
+	assert.equal(store.flushPendingSave(), true);
+	assert.equal(pendingTimerCount(), 0);
+	assert.equal(saves.length, 1);
+	assert.deepEqual(saves[0].keys, ["m1", "m2"]);
+	advance(10000);
+	assert.equal(saves.length, 1, "the cancelled debounce callback cannot save again");
+	assert.equal(store.flushPendingSave(), false, "there is no second pending write");
+});
+
+test("a failing stop-time cache save is contained after the timer is disarmed", () => {
+	let clears = 0;
+	const store = createTranslationCacheStore({
+		setTimeout: () => 7,
+		clearTimeout: () => {clears += 1;},
+		saveCache: () => {throw new Error("disk unavailable");}
+	});
+	store.persistTranslation("m1", "sig-1", {translatedContent: "一"});
+
+	assert.doesNotThrow(() => assert.equal(store.flushPendingSave(), false));
+	assert.equal(clears, 1);
+	assert.equal(store.flushPendingSave(), false);
+});
+
+test("plugin stop flushes the cache owner instead of reaching into or abandoning its timer", () => {
+	const runtime = fs.readFileSync(path.join(__dirname, "..", "src", "legacy", "runtime.js"), "utf8");
+	const stopBody = runtime.match(/onStop \(\) \{([\s\S]*?)\n\t\t\t\}/);
+	assert.ok(stopBody, "onStop must remain inspectable");
+	assert.match(stopBody[1], /ensureTranslationCacheStore\(\)\.flushPendingSave\(\)/);
+	assert.doesNotMatch(stopBody[1], /ensureTranslationCacheStore\(\)\.cancelPendingSave\(\)/);
 });
 
 test("clearing an entry schedules a save, clearing a missing one does not", () => {

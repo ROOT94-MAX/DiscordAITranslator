@@ -12,6 +12,7 @@ The primary user is not expected to understand provider APIs or repository inter
 - Right-clicking the translator icon toggles automatic translation only for the current channel.
 - Turning a channel off cancels automatic sent/received work and restores every displayed received-message translation, reply preview, embed, and translated thread title in that channel, including translations previously shown by a manual action.
 - Turning a channel off retains valid translation-cache entries and sent-message original/edit metadata. Manual message translation remains available after the channel is off.
+- A clean plugin stop flushes one pending debounced translation-cache write before shutdown. It does not start new translation work; it only persists cache entries already committed in memory.
 - Channel state never changes another channel or the global backup provider.
 
 ## Approved Channel Popout

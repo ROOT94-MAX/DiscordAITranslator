@@ -55,17 +55,9 @@ Do not reintroduce automatic multi-page history fetching from this backlog item.
 
 ## Priority 3: Lifecycle And Cancellation
 
-**Status: PARTIALLY COMPLETE.** Historical prefetch already has an `AbortController`, and `MessageStateStore.pruneChannel` already releases its final channel generation when no retained state needs it. The remaining work is narrower:
-Consolidate asynchronous ownership without changing user-visible translation policy:
+**Status: PARTIALLY COMPLETE — remaining work is observation-gated.** Historical prefetch already has an `AbortController`; `MessageStateStore.pruneChannel` releases unused channel generations; direct deletion subscriptions have exact start/stop ownership; and clean stop now flushes one pending cache debounce inside `translation-cache-store.js` instead of abandoning it.
 
-- one runtime-owned registry for workers, provider abort controllers, timers, animation frames, preview waves, and delayed viewport checks;
-- physical cancellation for translation-provider requests where the transport supports it; historical prefetch cancellation is already implemented;
-- cache flush on clean stop instead of abandoning the final debounce window;
-- audit and deep-clone any remaining ordinary-message/embed restore sources that still share nested render objects;
-- release remaining visited-channel maps outside `MessageStateStore`; its record index and generation pruning are already covered;
-- stop/start tests proving an older worker cannot clear or overwrite a newer runtime epoch.
-
-Split this priority into small lifecycle slices; do not land one global cancellation rewrite.
+The 2026-08-20 lifecycle audit found no evidence supporting one global task-registry rewrite. Keep provider physical cancellation, display/viewport delayed-callback consolidation, deep restore-source cloning, remaining map pruning, and a broader runtime epoch parked until a concrete quota, stale-callback, memory-growth, or source-mutation reproduction identifies the owning module. Continue only as independent TDD slices; do not add a parallel lifecycle state table.
 
 ## Priority 4: Render Truth
 

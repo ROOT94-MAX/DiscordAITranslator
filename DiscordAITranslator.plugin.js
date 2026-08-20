@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId d8af59cf7ce43f9c
+ * @buildId 92a9cc910670918d
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -7175,6 +7175,16 @@ var require_translation_cache_store = __commonJS({
         saveTimer && clearTimeout2(saveTimer), saveTimer = null;
       }
       __name(cancelPendingSave, "cancelPendingSave");
+      function flushPendingSave() {
+        if (!saveTimer) return !1;
+        clearTimeout2(saveTimer), saveTimer = null;
+        try {
+          return saveCache(cache), !0;
+        } catch {
+          return !1;
+        }
+      }
+      __name(flushPendingSave, "flushPendingSave");
       function evictOldestBeyondLimit() {
         let cacheKeys = Object.keys(cache);
         cacheKeys.length <= 500 || cacheKeys.sort((keyA, keyB) => (cache[keyA].cachedAt || 0) - (cache[keyB].cachedAt || 0)).slice(0, cacheKeys.length - 500).forEach((key) => delete cache[key]);
@@ -7254,8 +7264,9 @@ var require_translation_cache_store = __commonJS({
           return messageId && cache[messageId] || null;
         },
         scheduleSave,
-        // Used when the plugin stops: the pending save is abandoned, not flushed, which
-        // is what the legacy shutdown did.
+        flushPendingSave,
+        // Retained for owners that intentionally abandon a pending write rather than
+        // performing the clean-stop flush.
         cancelPendingSave,
         loadPersisted,
         hashSignature,
@@ -11768,7 +11779,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "d8af59cf7ce43f9c";
+            return "92a9cc910670918d";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -11818,7 +11829,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             }, "after") }), this.forceUpdateAll();
           }
           onStop() {
-            pluginRuntimeActive = !1, channelToggleOperations.reset(), messageUpdateProbe && messageUpdateProbe.stop(), messageUpdateExperiment && messageUpdateExperiment.stop(), this.ensureMessageDeletionLifecycle().stop(), this.invalidateLiveTranslationRequests(), this.invalidateSentAutomaticTranslationRequests(), this.ensureSentTranslationStore().clearPendingOriginals(), this.ensureHistoricalJobRegistry().advanceRuntimeGeneration(), channelTitleStore.invalidateInFlight(), this.cancelHistoricalTranslationJobs(null, "plugin-stopped"), this.clearChannelTitleTranslations(), this.detachAutoTranslationInputActivityWatcher(), this.detachAutoTranslationScrollWatcher(), this.ensureTranslationCacheStore().cancelPendingSave(), this.ensureReceivedDisplayRepaintScheduler().cancelFullRepaintTimers(), this.ensureLiveTranslationQueue().cancelQueueRetry(), this.ensureMessageViewportStore().clearManualScrollLock(), this.clearReceivedDisplayFlushQueue(), this.restoreAllReceivedDisplay({ refresh: !1 }), this.clearDisplayedTranslations(), this.ensureHistoricalJobRegistry().clearFailedSnapshots(), this.ensureSentTranslationStore().clearManualRequests(), this.ensureReceivedDisplayRuntime().clearAllSuppression(), this.ensureLiveTranslationQueue().clearAllQueuedMessages(), this.ensureReceivedDisplayRuntime().clearPreviews(null), this.ensureReceivedDisplayRuntime().clearPreviewEligibility(null), this.ensureLiveTranslationQueue().setBusyTranslating(!1), this.ensureLiveTranslationQueue().setLiveAutoTranslating(!1), this.clearLoadedAutoTranslationStatus(), BDFDB.MessageUtils.rerenderAll(!0);
+            pluginRuntimeActive = !1, channelToggleOperations.reset(), messageUpdateProbe && messageUpdateProbe.stop(), messageUpdateExperiment && messageUpdateExperiment.stop(), this.ensureMessageDeletionLifecycle().stop(), this.invalidateLiveTranslationRequests(), this.invalidateSentAutomaticTranslationRequests(), this.ensureSentTranslationStore().clearPendingOriginals(), this.ensureHistoricalJobRegistry().advanceRuntimeGeneration(), channelTitleStore.invalidateInFlight(), this.cancelHistoricalTranslationJobs(null, "plugin-stopped"), this.clearChannelTitleTranslations(), this.detachAutoTranslationInputActivityWatcher(), this.detachAutoTranslationScrollWatcher(), this.ensureTranslationCacheStore().flushPendingSave(), this.ensureReceivedDisplayRepaintScheduler().cancelFullRepaintTimers(), this.ensureLiveTranslationQueue().cancelQueueRetry(), this.ensureMessageViewportStore().clearManualScrollLock(), this.clearReceivedDisplayFlushQueue(), this.restoreAllReceivedDisplay({ refresh: !1 }), this.clearDisplayedTranslations(), this.ensureHistoricalJobRegistry().clearFailedSnapshots(), this.ensureSentTranslationStore().clearManualRequests(), this.ensureReceivedDisplayRuntime().clearAllSuppression(), this.ensureLiveTranslationQueue().clearAllQueuedMessages(), this.ensureReceivedDisplayRuntime().clearPreviews(null), this.ensureReceivedDisplayRuntime().clearPreviewEligibility(null), this.ensureLiveTranslationQueue().setBusyTranslating(!1), this.ensureLiveTranslationQueue().setLiveAutoTranslating(!1), this.clearLoadedAutoTranslationStatus(), BDFDB.MessageUtils.rerenderAll(!0);
           }
           getSettingsPanel(collapseStates = {}) {
             return renderSettingsPanel(this, collapseStates, { BDFDB });
