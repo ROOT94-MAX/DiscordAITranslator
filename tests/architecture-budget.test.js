@@ -30,7 +30,9 @@ const BUDGET = Object.freeze({
 	// global dispatch patch while sharing the active Store dispatcher resolver.
 	// -28 (2026-08-20): plugin/BDFDB settings persistence wiring moved into
 	// settings-store-wiring.js; runtime retains only the lazy singleton boundary.
-	runtimeLines: 3448,
+	// -17 (2026-08-20): translation-cache persistence, timer and policy wiring moved
+	// into translation-cache-wiring.js; runtime retains only the lazy singleton.
+	runtimeLines: 3431,
 	moduleLevelVarDeclarators: 2
 });
 
@@ -96,6 +98,15 @@ test("plugin-specific settings persistence wiring stays out of the legacy runtim
 	const ensureMethod = source.match(/\n\t\t\tensureSettingsStore \(\) \{[\s\S]*?\n\t\t\t\}/);
 	assert.ok(ensureMethod, "the lazy settings-store singleton boundary remains explicit");
 	assert.doesNotMatch(ensureMethod[0], /BDFDB\.DataUtils|settings\.choices/, "persistence-key wiring belongs to settings-store-wiring.js");
+});
+
+test("plugin-specific translation cache wiring stays out of the legacy runtime", () => {
+	const source = readRuntimeLines().join("\n");
+	assert.match(source, /createPluginTranslationCacheStore/);
+	assert.doesNotMatch(source, /\bcreateTranslationCacheStore\b/);
+	const ensureMethod = source.match(/\n\t\t\tensureTranslationCacheStore \(\) \{[\s\S]*?\n\t\t\t\}/);
+	assert.ok(ensureMethod, "the lazy translation-cache singleton boundary remains explicit");
+	assert.doesNotMatch(ensureMethod[0], /BDFDB\.DataUtils|BDFDB\.TimeUtils|["']translationCache["']/, "cache persistence and timer wiring belongs to translation-cache-wiring.js");
 });
 
 test("the recorded budget matches the current tree, so drift is visible", () => {

@@ -77,7 +77,7 @@ module.exports = (_ => {
 		const {createChannelTitleStore} = require("../channel-title/channel-title-store");
 		const {createMessageViewportStore} = require("../viewport/message-viewport-store");
 		const {createLoadedTranslationStatusStore} = require("../status/loaded-translation-status-store");
-		const {createTranslationCacheStore} = require("../cache/translation-cache-store");
+		const {createPluginTranslationCacheStore} = require("../cache/translation-cache-wiring");
 		const {createProviderClient, translationEngines, enginePortals} = require("../providers/provider-client");
 		const {createSentTranslationStore} = require("../sent/sent-translation-store");
 		const {createLiveTranslationQueue} = require("../orchestrator/live-translation-queue");
@@ -2549,24 +2549,7 @@ module.exports = (_ => {
 			}
 
 			ensureTranslationCacheStore () {
-				if (!this.translationCacheStoreInstance) this.translationCacheStoreInstance = createTranslationCacheStore({
-					now: () => Date.now(),
-					setTimeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay),
-					clearTimeout: timer => BDFDB.TimeUtils.clear(timer),
-					loadCache: () => BDFDB.DataUtils.load(this, "translationCache"),
-					saveCache: cache => BDFDB.DataUtils.save(cache, this, "translationCache"),
-					extractOriginalContentData: message => this.extractOriginalContentData(message),
-					createSignature: (message, channelId, sourceData) => this.createReceivedTranslationSignature(message, channelId, sourceData),
-					normalizeStoredTranslation: translation => this.normalizeStoredTranslationData(translation),
-					extractLegacyDisplayedParts: content => this.extractLegacyDisplayedTranslationParts(content),
-					// Policy and display stay in the received-translation runtime; a cache lookup
-					// asks whether an old entry still passes today's guards, it does not decide.
-					refreshTranslationDisplay: translation => this.refreshTranslationDisplay(translation),
-					isTranslationResultTooSimilar: translation => this.isTranslationResultTooSimilar(translation),
-					shouldSkipBeforeRequest: (sourceData, channelId) => this.shouldSkipReceivedTranslationBeforeRequest(sourceData, channelId),
-					shouldKeepAutoTranslatedResult: (translation, channelId) => this.shouldKeepAutoTranslatedResult(translation, channelId),
-					getSkipPreviewText: text => this.getLoadedAutoTranslationPreviewText(text)
-				});
+				if (!this.translationCacheStoreInstance) this.translationCacheStoreInstance = createPluginTranslationCacheStore({plugin: this, BDFDB});
 				return this.translationCacheStoreInstance;
 			}
 

@@ -8,6 +8,7 @@ const path = require("node:path");
 // own plugin instance, so after a reload the dead instance keeps firing - and for the
 // repaint scheduler each of those firings is a full-list repaint racing the live one.
 const runtime = fs.readFileSync(path.resolve(__dirname, "..", "src", "legacy", "runtime.js"), "utf8");
+const translationCacheWiring = fs.readFileSync(path.resolve(__dirname, "..", "src", "cache", "translation-cache-wiring.js"), "utf8");
 
 function dependencyBlock(factoryName) {
 	const start = runtime.indexOf(factoryName + "({");
@@ -21,16 +22,18 @@ function dependencyBlock(factoryName) {
 // too: its retry timers are managed, and only its backoff sleep is deliberately raw.
 const TIMER_OWNING_FACTORIES = [
 	"createDisplayRepaintScheduler",
-	"createTranslationCacheStore",
 	"createMessageViewportStore",
 	"createProviderClient"
 ];
 
 test("modules that schedule work are handed BDFDB timers, never the globals", () => {
-	for (const factoryName of TIMER_OWNING_FACTORIES) {
-		const block = dependencyBlock(factoryName);
-		assert.match(block, /setTimeout:\s*\(callback, delay\) => BDFDB\.TimeUtils\.timeout\(callback, delay\)/, `${factoryName} must receive the managed timer`);
-		assert.match(block, /clearTimeout:\s*timer => BDFDB\.TimeUtils\.clear\(timer\)/, `${factoryName} must receive the managed clear`);
+	const owners = TIMER_OWNING_FACTORIES.map(factoryName => ({name: factoryName, source: dependencyBlock(factoryName)})).concat({
+		name: "createPluginTranslationCacheStore",
+		source: translationCacheWiring
+	});
+	for (const owner of owners) {
+		assert.match(owner.source, /setTimeout:\s*\(callback, delay\) => BDFDB\.TimeUtils\.timeout\(callback, delay\)/, `${owner.name} must receive the managed timer`);
+		assert.match(owner.source, /clearTimeout:\s*timer => BDFDB\.TimeUtils\.clear\(timer\)/, `${owner.name} must receive the managed clear`);
 	}
 });
 

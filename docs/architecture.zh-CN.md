@@ -8,8 +8,8 @@
 
 - 发布版本：v0.3.39。
 - 分发产物：由 `src/` 确定性生成的一份可读 `DiscordAITranslator.plugin.js`。
-- 已发布 v0.3.39 构建 ID：`08e2b0182796eded`；当前未发布 master 构建 ID：`0f5736827fe85656`。
-- 旧运行时组合根约束：3,448 行、两个模块级共享声明。
+- 已发布 v0.3.39 构建 ID：`08e2b0182796eded`；当前未发布构建 ID：`64ea246abd086f70`。
+- 旧运行时组合根约束：3,431 行、两个模块级共享声明。
 - 发布验证：`npm run verify` 统一执行确定性构建、语法、发布契约和完整 Node 测试。
 - 显示策略：已挂载消息先尝试频道级 Flux `MESSAGE_UPDATE` 合并；整聊天区重建只作为确认后的回退，而不是每个结果的默认路径。
 
@@ -48,6 +48,7 @@ src/plugin/index.js
 | 转发内容投影 | `src/display/translation-display-logic.js`、`src/received/received-translation-runtime.js` | 快照原文、显示、回声判断、单份原文组合和恢复 |
 | 输入框与菜单 | `src/ui/composer-wiring.js`、`src/ui/context-menu-wiring.js` | 频道发送拦截、输入框图标和手动操作 |
 | 设置结构与持久化接线 | `src/settings/plugin-defaults.js`、`src/settings/settings-store.js`、`src/settings/settings-store-wiring.js`、`src/ui/settings-panel.js` | 全局和频道设置只有一套结构归属；一个 BDFDB 适配器拥有既有持久化键 |
+| 翻译缓存与持久化接线 | `src/cache/translation-cache-store.js`、`src/cache/translation-cache-wiring.js` | 有界付费结果/付费跳过缓存；一个适配器拥有 BDFDB 键、托管防抖计时器和调用方策略/显示端口 |
 | 剩余组合职责 | `src/legacy/runtime.js` | 插件生命周期、BDFDB 补丁外壳和依赖接线；只能缩小，不能增长 |
 
 ## 架构不变量
@@ -167,7 +168,7 @@ npm run verify
 
 ## 已知债务
 
-- `src/legacy/runtime.js` 仍是 3,448 行组合根。
+- `src/legacy/runtime.js` 仍是 3,431 行组合根。
 - 整聊天区回退诊断 `R` 仍可能对应偶发输入框图标闪烁。
 - 供应商物理中止和生命周期任务注册表继续在 `recovery-plan.md` 中由证据触发；自动多页历史读取已在现场回退后暂停，Store 消息删除直接订阅已经完成现场确认。
 - Discord 内部 Store 和快照结构在客户端更新后需要重新观察。

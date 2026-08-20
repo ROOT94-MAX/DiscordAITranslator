@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.39
- * @buildId 662eda15be5567e6
+ * @buildId 64ea246abd086f70
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -7302,6 +7302,38 @@ var require_translation_cache_store = __commonJS({
   }
 });
 
+// src/cache/translation-cache-wiring.js
+var require_translation_cache_wiring = __commonJS({
+  "src/cache/translation-cache-wiring.js"(exports2, module2) {
+    var { createTranslationCacheStore } = require_translation_cache_store();
+    function createPluginTranslationCacheStore({
+      plugin,
+      BDFDB,
+      now = Date.now,
+      createStore = createTranslationCacheStore
+    }) {
+      return createStore({
+        now,
+        setTimeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "setTimeout"),
+        clearTimeout: /* @__PURE__ */ __name((timer) => BDFDB.TimeUtils.clear(timer), "clearTimeout"),
+        loadCache: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(plugin, "translationCache"), "loadCache"),
+        saveCache: /* @__PURE__ */ __name((cache) => BDFDB.DataUtils.save(cache, plugin, "translationCache"), "saveCache"),
+        extractOriginalContentData: /* @__PURE__ */ __name((message) => plugin.extractOriginalContentData(message), "extractOriginalContentData"),
+        createSignature: /* @__PURE__ */ __name((message, channelId, sourceData) => plugin.createReceivedTranslationSignature(message, channelId, sourceData), "createSignature"),
+        normalizeStoredTranslation: /* @__PURE__ */ __name((translation) => plugin.normalizeStoredTranslationData(translation), "normalizeStoredTranslation"),
+        extractLegacyDisplayedParts: /* @__PURE__ */ __name((content) => plugin.extractLegacyDisplayedTranslationParts(content), "extractLegacyDisplayedParts"),
+        refreshTranslationDisplay: /* @__PURE__ */ __name((translation) => plugin.refreshTranslationDisplay(translation), "refreshTranslationDisplay"),
+        isTranslationResultTooSimilar: /* @__PURE__ */ __name((translation) => plugin.isTranslationResultTooSimilar(translation), "isTranslationResultTooSimilar"),
+        shouldSkipBeforeRequest: /* @__PURE__ */ __name((sourceData, channelId) => plugin.shouldSkipReceivedTranslationBeforeRequest(sourceData, channelId), "shouldSkipBeforeRequest"),
+        shouldKeepAutoTranslatedResult: /* @__PURE__ */ __name((translation, channelId) => plugin.shouldKeepAutoTranslatedResult(translation, channelId), "shouldKeepAutoTranslatedResult"),
+        getSkipPreviewText: /* @__PURE__ */ __name((text) => plugin.getLoadedAutoTranslationPreviewText(text), "getSkipPreviewText")
+      });
+    }
+    __name(createPluginTranslationCacheStore, "createPluginTranslationCacheStore");
+    module2.exports = { createPluginTranslationCacheStore };
+  }
+});
+
 // src/sent/sent-translation-store.js
 var require_sent_translation_store = __commonJS({
   "src/sent/sent-translation-store.js"(exports2, module2) {
@@ -11854,7 +11886,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
         }
       } : (([Plugin, BDFDB]) => {
         var _a;
-        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createTranslationCacheStore } = require_translation_cache_store(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createHistoricalSnapshotCadence } = require_historical_snapshot_cadence(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
+        let { createDisplayRuntime } = require_display_runtime(), { createTranslationDisplayLogic } = require_translation_display_logic(), { createDisplayRepaintScheduler } = require_repaint_scheduler(), { createHistoricalDisplayTracker } = require_historical_display_tracker(), { createTranslatorStyles } = require_styles(), { renderSettingsPanel } = require_settings_panel(), { createTranslateComponents, translateIcon, translateIconUntranslate } = require_translate_components(), { createComposerWiring } = require_composer_wiring(), { createTranslationPipeline } = require_translation_pipeline(), { createSpecialCaseCodecs } = require_special_case_codecs(), { createContextMenuWiring } = require_context_menu_wiring(), { createDiscordMarkupRenderer } = require_discord_markup_renderer(), { createPluginDefaults, MODULE_PATCHES } = require_plugin_defaults(), { createReplyPreviewQueue } = require_reply_preview_queue(), loadedStatusPosition = require_loaded_status_position(), { createLoadedStatusCapsuleController } = require_loaded_status_capsule(), { createChannelTitleStore } = require_channel_title_store(), { createMessageViewportStore } = require_message_viewport_store(), { createLoadedTranslationStatusStore } = require_loaded_translation_status_store(), { createPluginTranslationCacheStore } = require_translation_cache_wiring(), { createProviderClient, translationEngines, enginePortals } = require_provider_client(), { createSentTranslationStore } = require_sent_translation_store(), { createLiveTranslationQueue } = require_live_translation_queue(), { resumeHistoricalHandoff } = require_historical_handoff_runtime(), { createHistoricalJobRegistry } = require_historical_job_registry(), channelToggleOperations = require_channel_toggle_operations().createChannelToggleOperations(), { HistoricalTranslationJob, HISTORICAL_TERMINAL_ITEM_STATES, HISTORICAL_AI_BATCH_ITEM_LIMIT_MAX } = require_historical_translation_job(), { createHistoricalSnapshotCadence } = require_historical_snapshot_cadence(), { runChunkedHistoricalBatch } = require_historical_provider_chunking(), { createProtectionLogic, TRANSLATION_PROTECTION_SIGNATURE_VERSION } = require_protection_logic(), { parseStoredEmbedTranslations } = require_embed_translation_parser(), {
           foreignLanguageDecisionRuntime,
           receivedMessageFilterRuntime,
           createReceivedTranslationRuntime
@@ -11902,7 +11934,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "662eda15be5567e6";
+            return "64ea246abd086f70";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -13660,24 +13692,7 @@ __________________ __________________ __________________
             })), this.providerClientInstance;
           }
           ensureTranslationCacheStore() {
-            return this.translationCacheStoreInstance || (this.translationCacheStoreInstance = createTranslationCacheStore({
-              now: /* @__PURE__ */ __name(() => Date.now(), "now"),
-              setTimeout: /* @__PURE__ */ __name((callback, delay) => BDFDB.TimeUtils.timeout(callback, delay), "setTimeout"),
-              clearTimeout: /* @__PURE__ */ __name((timer) => BDFDB.TimeUtils.clear(timer), "clearTimeout"),
-              loadCache: /* @__PURE__ */ __name(() => BDFDB.DataUtils.load(this, "translationCache"), "loadCache"),
-              saveCache: /* @__PURE__ */ __name((cache) => BDFDB.DataUtils.save(cache, this, "translationCache"), "saveCache"),
-              extractOriginalContentData: /* @__PURE__ */ __name((message) => this.extractOriginalContentData(message), "extractOriginalContentData"),
-              createSignature: /* @__PURE__ */ __name((message, channelId, sourceData) => this.createReceivedTranslationSignature(message, channelId, sourceData), "createSignature"),
-              normalizeStoredTranslation: /* @__PURE__ */ __name((translation) => this.normalizeStoredTranslationData(translation), "normalizeStoredTranslation"),
-              extractLegacyDisplayedParts: /* @__PURE__ */ __name((content) => this.extractLegacyDisplayedTranslationParts(content), "extractLegacyDisplayedParts"),
-              // Policy and display stay in the received-translation runtime; a cache lookup
-              // asks whether an old entry still passes today's guards, it does not decide.
-              refreshTranslationDisplay: /* @__PURE__ */ __name((translation) => this.refreshTranslationDisplay(translation), "refreshTranslationDisplay"),
-              isTranslationResultTooSimilar: /* @__PURE__ */ __name((translation) => this.isTranslationResultTooSimilar(translation), "isTranslationResultTooSimilar"),
-              shouldSkipBeforeRequest: /* @__PURE__ */ __name((sourceData, channelId) => this.shouldSkipReceivedTranslationBeforeRequest(sourceData, channelId), "shouldSkipBeforeRequest"),
-              shouldKeepAutoTranslatedResult: /* @__PURE__ */ __name((translation, channelId) => this.shouldKeepAutoTranslatedResult(translation, channelId), "shouldKeepAutoTranslatedResult"),
-              getSkipPreviewText: /* @__PURE__ */ __name((text) => this.getLoadedAutoTranslationPreviewText(text), "getSkipPreviewText")
-            })), this.translationCacheStoreInstance;
+            return this.translationCacheStoreInstance || (this.translationCacheStoreInstance = createPluginTranslationCacheStore({ plugin: this, BDFDB })), this.translationCacheStoreInstance;
           }
           ensureMessageViewportStore() {
             return this.messageViewportStoreInstance || (this.messageViewportStoreInstance = createMessageViewportStore({
