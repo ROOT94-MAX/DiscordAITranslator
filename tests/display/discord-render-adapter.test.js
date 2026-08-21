@@ -26,6 +26,7 @@ function createHarness({
 	availableMessageIds = ["m1", "m2"],
 	messageNodeDefinitions = null,
 	confirmRevisions = [["m1", 11], ["m2", 12]],
+	confirmOwnerRevisions = [],
 	rerenderError = null,
 	rerenderScrollTop = null,
 	stopDuringUpdate = false,
@@ -36,6 +37,7 @@ function createHarness({
 	liveRepaintBehavior = null
 } = {}) {
 	const visibleRevisions = new Map(alreadyPainted);
+	const visibleOwnerRevisions = new Map();
 	const scroller = {scrollTop: 240};
 	const calls = {animationFrames: 0, capture: 0, forceUpdate: 0, rerenderAll: 0, rerenderArgs: [], restored: 0, restoredNow: 0, liveRepaints: 0, sequence: []};
 	const nodeDefinitions = messageNodeDefinitions || availableMessageIds.map(messageId => ({
@@ -48,7 +50,9 @@ function createHarness({
 		"data-list-item-id": dataListItemId,
 		querySelector(selector) {
 			const match = selector.match(/^\[data-translator-revision="(\d+)"\]$/);
-			return match && visibleRevisions.get(key) === Number(match[1]) ? {} : null;
+			if (match) return visibleRevisions.get(key) === Number(match[1]) ? {} : null;
+			const ownerMatch = selector.match(/^\[data-translator-preview-revision="(\d+)"\]$/);
+			return ownerMatch && visibleOwnerRevisions.get(key) === Number(ownerMatch[1]) ? {} : null;
 		}
 	}));
 	let userIntentSequence = 7;
@@ -101,12 +105,14 @@ function createHarness({
 		if (confirmOnRebuild) for (const [messageId, revision] of confirmRevisions) {
 			if (nodeDefinitions.some(definition => definition.key === messageId)) visibleRevisions.set(messageId, revision);
 		}
+		for (const [messageId, revision] of confirmOwnerRevisions) if (nodeDefinitions.some(definition => definition.key === messageId)) visibleOwnerRevisions.set(messageId, revision);
 	};
 	const liveRowRepaint = liveRepaintBehavior == null ? null : {
 		repaintRows(messageIds) {
 			if (liveRepaintBehavior === "noop") return [];
+			if (liveRepaintBehavior === "throw") throw new Error("targeted repaint failed");
 			calls.liveRepaints++;
-			paintLikeRebuild();
+			if (liveRepaintBehavior === "paint") paintLikeRebuild();
 			return messageIds.slice();
 		}
 	};
@@ -118,6 +124,7 @@ function createHarness({
 			calls.animationFrames++;
 			calls.sequence.push("frame");
 			if (userScrollDuringUpdate && liveRepaintBehavior === "paint" && calls.animationFrames === 1) userIntentSequence++;
+			if (stopDuringUpdate && liveRepaintBehavior && calls.animationFrames === 1) runtimeActive = false;
 			callback();
 		},
 		getUserScrollIntentSequence: () => userIntentSequence,
@@ -148,16 +155,17 @@ const request = {
 	views: [{messageId: "m1", revision: 11}, {messageId: "m2", revision: 12}]
 };
 
-test("a special host fallback rebuilds the chat layer once and confirms exact revisions", async () => {
-	const {adapter, calls} = createHarness();
-	const outcome = await adapter.refreshMessages({...request, ownerMessageIds: ["m1"]});
+test("ordinary and preview surfaces confirm inside one targeted transaction", async () => {
+	const {adapter, calls} = createHarness({liveRepaintBehavior: "paint", confirmOwnerRevisions: [["m1", 31]]});
+	const outcome = await adapter.refreshMessages({...request, ownerMessageIds: ["m1"], ownerViews: [{messageId: "m1", revision: 31}]});
 
-	assert.equal(calls.rerenderAll, 1, "one transaction costs exactly one chat-layer rebuild");
-	assert.deepEqual(calls.rerenderArgs, [true], "the rebuild must be the instant variant");
+	assert.equal(calls.liveRepaints, 1);
+	assert.equal(calls.rerenderAll, 0);
 	assert.equal(calls.forceUpdate, 0);
 	assert.equal(calls.capture, 1);
 	assert.equal(calls.restored, 1);
 	assert.deepEqual(outcome.confirmedIds, ["m1", "m2"]);
+	assert.deepEqual(outcome.confirmedOwnerIds, ["m1"]);
 	assert.deepEqual(outcome.missingIds, []);
 	assert.equal(outcome.fallbackUsed, false);
 });
@@ -203,20 +211,22 @@ test("a mounted row among virtualised ones repaints only the mounted row and def
 	assert.deepEqual(outcome.missingIds, []);
 });
 
-test("a host-only reply row still gets the one rebuild it needs", async () => {
-	// Reply-preview hosts carry no revision marker of their own; a mounted host is
-	// reason enough to rebuild so the preview repaints with the list.
-	const {adapter, calls} = createHarness({availableMessageIds: ["m2"], confirmRevisions: []});
+test("a host-only reply row repaints through its surface-specific targeted revision", async () => {
+	const {adapter, calls} = createHarness({availableMessageIds: ["m2"], confirmRevisions: [], confirmOwnerRevisions: [["m2", 21]], liveRepaintBehavior: "paint"});
 	const outcome = await adapter.refreshMessages({
 		transactionId: 1,
 		channelId: "c1",
 		messageIds: [],
 		ownerMessageIds: ["m2"],
+		ownerViews: [{messageId: "m2", revision: 21}],
 		views: []
 	});
 
-	assert.equal(calls.rerenderAll, 1);
+	assert.equal(calls.liveRepaints, 1);
+	assert.equal(calls.rerenderAll, 0);
 	assert.deepEqual(outcome.confirmedIds, []);
+	assert.deepEqual(outcome.confirmedOwnerIds, ["m2"]);
+	assert.deepEqual(outcome.missingOwnerIds, []);
 	assert.deepEqual(outcome.missingIds, []);
 	assert.deepEqual(outcome.deferredIds, []);
 });
@@ -235,15 +245,17 @@ test("an unmounted host row does not trigger a rebuild", async () => {
 	assert.deepEqual(outcome.confirmedIds, []);
 });
 
-test("a rebuild that does not confirm re-checks after another paint but never rebuilds twice", async () => {
-	const {adapter, calls} = createHarness({confirmOnRebuild: false});
-	const outcome = await adapter.refreshMessages({...request, ownerMessageIds: ["m1"]});
+test("an attempted targeted transaction re-checks twice without widening either surface", async () => {
+	const {adapter, calls} = createHarness({confirmOnRebuild: false, liveRepaintBehavior: "attempt"});
+	const outcome = await adapter.refreshMessages({...request, ownerMessageIds: ["m1"], ownerViews: [{messageId: "m1", revision: 31}]});
 
-	assert.equal(calls.rerenderAll, 1, "a transaction must never remount the chat twice");
+	assert.equal(calls.rerenderAll, 0);
 	assert.ok(calls.animationFrames >= 4, "the adapter waits a second paint before giving up");
 	assert.deepEqual(outcome.confirmedIds, []);
 	assert.deepEqual(outcome.missingIds, ["m1", "m2"]);
 	assert.deepEqual(outcome.retryIds, ["m1", "m2"], "mounted unconfirmed rows enter the bounded scheduler retry path");
+	assert.deepEqual(outcome.missingOwnerIds, ["m1"]);
+	assert.deepEqual(outcome.retryOwnerIds, ["m1"]);
 	assert.equal(outcome.fallbackUsed, false);
 });
 
@@ -268,24 +280,24 @@ test("an already-stopped runtime cannot rebuild the chat at all", async () => {
 	assert.deepEqual(outcome.retryIds, []);
 });
 
-test("a runtime stopped during the rebuild defers everything and restores nothing", async () => {
-	const {adapter, calls, scroller} = createHarness({confirmOnRebuild: false, stopDuringUpdate: true});
+test("a runtime stopped during targeted repaint defers both surfaces and restores nothing", async () => {
+	const {adapter, calls, scroller} = createHarness({confirmOnRebuild: false, stopDuringUpdate: true, liveRepaintBehavior: "attempt"});
 	scroller.scrollTop = 640;
-	const outcome = await adapter.refreshMessages({...request, ownerMessageIds: ["m1"]});
+	const outcome = await adapter.refreshMessages({...request, ownerMessageIds: ["m1"], ownerViews: [{messageId: "m1", revision: 31}]});
 
-	assert.equal(calls.rerenderAll, 1);
+	assert.equal(calls.rerenderAll, 0);
 	assert.equal(calls.restored, 0);
 	assert.deepEqual(outcome.deferredIds, ["m1", "m2"]);
+	assert.deepEqual(outcome.deferredOwnerIds, ["m1"]);
 	assert.deepEqual(outcome.retryIds, [], "a dead plugin instance must not schedule more repaint work");
 });
 
-test("a rerenderAll error restores unchanged scroll and preserves the render error", async () => {
-	const renderError = new Error("rerenderAll failed");
-	const {adapter, calls, scroller} = createHarness({rerenderScrollTop: 910, rerenderError: renderError, confirmOnRebuild: false});
+test("a targeted repaint error restores unchanged scroll and preserves the render error", async () => {
+	const {adapter, calls, scroller} = createHarness({liveRepaintBehavior: "throw", confirmOnRebuild: false});
 	scroller.scrollTop = 510;
 
-	await assert.rejects(adapter.refreshMessages({...request, ownerMessageIds: ["m1"]}), error => error === renderError);
-	assert.equal(calls.rerenderAll, 1);
+	await assert.rejects(adapter.refreshMessages({...request, ownerMessageIds: ["m1"], ownerViews: [{messageId: "m1", revision: 31}]}), /targeted repaint failed/);
+	assert.equal(calls.rerenderAll, 0);
 	assert.equal(calls.restored, 1);
 	assert.equal(scroller.scrollTop, 510);
 });
@@ -438,41 +450,37 @@ test("ordinary rows the targeted repaint cannot confirm stay targeted and enter 
 	assert.deepEqual(stats, {live: 0, rebuild: 0, rebuildsBySource: {}, recentRebuilds: []});
 });
 
-test("a reply-preview host still requires the rebuild, so the live path steps aside", async () => {
-	const {adapter, calls} = createHarness({liveRepaintBehavior: "paint"});
-	const outcome = await adapter.refreshMessages(Object.assign({}, request, {ownerMessageIds: ["m1"]}));
+test("a reply-preview host joins an ordinary message inside the same targeted wave", async () => {
+	const {adapter, calls} = createHarness({liveRepaintBehavior: "paint", confirmOwnerRevisions: [["m1", 31]]});
+	const outcome = await adapter.refreshMessages(Object.assign({}, request, {ownerMessageIds: ["m1"], ownerViews: [{messageId: "m1", revision: 31}]}));
 
-	assert.equal(calls.liveRepaints, 0, "preview hosts have no per-row paint yet");
-	assert.equal(calls.rerenderAll, 1);
+	assert.equal(calls.liveRepaints, 1);
+	assert.equal(calls.rerenderAll, 0);
 	assert.deepEqual(outcome.confirmedIds, ["m1", "m2"]);
+	assert.deepEqual(outcome.confirmedOwnerIds, ["m1"]);
 });
 
-test("the special-host rebuild step uses BDFDB's established whole-chat fallback", async () => {
-	const {adapter, calls} = createHarness();
-	const outcome = await adapter.refreshMessages({...request, ownerMessageIds: ["m1"]});
+test("an unconfirmed preview host stays targeted instead of using whole-chat fallback", async () => {
+	const {adapter, calls} = createHarness({liveRepaintBehavior: "attempt"});
+	const outcome = await adapter.refreshMessages({channelId: "c1", messageIds: [], views: [], ownerMessageIds: ["m1"], ownerViews: [{messageId: "m1", revision: 31}]});
 
-	assert.equal(calls.rerenderAll, 1, "the rebuild goes through BDFDB's deferred, self-merging primitive");
-	assert.deepEqual(outcome.confirmedIds, ["m1", "m2"]);
+	assert.equal(calls.rerenderAll, 0);
+	assert.deepEqual(outcome.missingOwnerIds, ["m1"]);
+	assert.deepEqual(outcome.retryOwnerIds, ["m1"]);
 	const stats = adapter.getRebuildStats();
 	assert.equal(stats.live, 0);
-	assert.equal(stats.rebuild, 1);
+	assert.equal(stats.rebuild, 0);
 });
 
-test("a special-host rebuild attributes itself to the transaction's trigger sources", async () => {
-	// Cadence audit 2026-08-19: the settings counters must answer WHICH lane is
-	// rebuilding (live, cached, historical, manual, retry), not just how often. The
-	// transaction carries its source counts and the adapter books the rebuild once
-	// per source present, plus a small ring for later inspection.
-	const {adapter} = createHarness({liveRepaintBehavior: "noop"});
-	await adapter.refreshMessages(Object.assign({}, request, {ownerMessageIds: ["m1"], sources: {historical: 2}}));
+test("a targeted preview wave books no rebuild source", async () => {
+	const {adapter} = createHarness({liveRepaintBehavior: "paint", confirmOwnerRevisions: [["m1", 31]]});
+	await adapter.refreshMessages({channelId: "c1", messageIds: [], views: [], ownerMessageIds: ["m1"], ownerViews: [{messageId: "m1", revision: 31}], sources: {preview: 1}});
 
 	const stats = adapter.getRebuildStats();
-	assert.equal(stats.rebuild, 1);
-	assert.deepEqual(stats.rebuildsBySource, {historical: 1}, "one transaction books once per source present");
-	assert.equal(stats.recentRebuilds.length, 1);
-	assert.equal(stats.recentRebuilds[0].size, 2);
-	assert.deepEqual(stats.recentRebuilds[0].sources, {historical: 2});
-	assert.equal(typeof stats.recentRebuilds[0].at, "number");
+	assert.equal(stats.live, 1);
+	assert.equal(stats.rebuild, 0);
+	assert.deepEqual(stats.rebuildsBySource, {});
+	assert.deepEqual(stats.recentRebuilds, []);
 });
 
 test("a transaction the live path satisfies attributes no rebuild source", async () => {

@@ -558,9 +558,10 @@ test("processMessageReply projects the stored translation into the reply preview
 	plugin.settings.general.showOriginalInReplyPreview = true;
 	plugin.display.previewCandidates.set("m1", [{translatedContent: "Hello", originalContent: "Hallo"}]);
 	plugin.display.projections.set("m1", {translation: {translatedContent: "Hello", originalContent: "Hallo", auto: true, channelId: "c1"}});
+	plugin.display.getPreviewHostRenderRevision = (channelId, hostMessageId) => channelId == "c1" && hostMessageId == "m2" ? 7 : null;
 	const referencedMessage = {id: "m1", channel_id: "c1", content: "Hallo"};
 	const originalReferenced = {message: referencedMessage};
-	const e = {instance: {props: {referencedMessage: originalReferenced, baseMessage: {id: "m2", channel_id: "c1"}}}};
+	const e = {instance: {props: {referencedMessage: originalReferenced, baseMessage: {id: "m2", channel_id: "c1"}}}, returnvalue: {props: {children: []}}};
 
 	logic.processMessageReply(plugin, e);
 	assert.notEqual(e.instance.props.referencedMessage, originalReferenced, "the props wrapper is replaced, not mutated");
@@ -568,6 +569,7 @@ test("processMessageReply projects the stored translation into the reply preview
 	assert.equal(referencedMessage.content, "Hallo", "the referenced message itself is untouched");
 	assert.ok(plugin.calls.some(call => call[0] == "markReplyPreviewRenderMessage" && call[1] == "m1"));
 	assert.deepEqual(plugin.calls.find(call => call[0] == "markReplyPreviewRenderMessage")[2], {channelId: "c1", hostMessageId: "m2"});
+	assert.equal(e.returnvalue.props["data-translator-preview-revision"], "7", "the host surface exposes its own confirmation marker");
 	assert.equal(plugin.calls.some(call => call[0] == "queueReplyPreviewTranslation"), false, "an existing translation is not requeued");
 });
 

@@ -405,6 +405,12 @@ function createTranslationDisplayLogic({BDFDB} = {}) {
 			e.instance.props.referencedMessage.message = previewMessage;
 			if (e.returnvalue && e.returnvalue.props) {
 				e.returnvalue = plugin.wrapReplyPreviewJumpPause(plugin.stripTranslatorStylingFromReplyPreviewNode(e.returnvalue));
+				const hostMessageId = baseMessage && baseMessage.id;
+				const hostRevision = hostMessageId && plugin.ensureReceivedDisplayRuntime().getPreviewHostRenderRevision(channelId, hostMessageId);
+				if (e.returnvalue && e.returnvalue.props) {
+					if (hostRevision != null) e.returnvalue.props["data-translator-preview-revision"] = String(hostRevision);
+					else delete e.returnvalue.props["data-translator-preview-revision"];
+				}
 			}
 		},
 		resolveLoadedMessageContentTranslation(plugin, message, channelId) {

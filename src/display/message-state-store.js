@@ -132,8 +132,13 @@ function createMessageStateStore({journal = null, onTranslationDisplayed = () =>
 	// Preview translations are keyed by the referenced message, but React paints them in
 	// every replying message row that quotes it. Keep that one-to-many ownership separate.
 	const previewHostsByChannel = new Map();
+	// Surface-command revisions live beside preview host ownership, not on the
+	// referenced message record: one referenced preview may repaint several host rows,
+	// and a clear/delete still needs a marker after the active preview is gone.
+	const previewHostRenderRevisions = new Map();
 	let revision = 0;
 	let previewPendingSequence = 0;
+	let previewHostRenderRevision = 0;
 
 	function recordTransition(record, transition) {
 		// The one exit every display commit passes through - single, batch, and manual
@@ -299,6 +304,32 @@ function createMessageStateStore({journal = null, onTranslationDisplayed = () =>
 		return [...hostIds];
 	}
 
+	function beginPreviewHostRefresh(channelId, hostMessageIds = []) {
+		const normalizedChannelId = normalizeIdentity(channelId);
+		const hostIds = [...new Set(hostMessageIds.map(normalizeIdentity).filter(Boolean))];
+		if (!normalizedChannelId || !hostIds.length) return [];
+		if (!previewHostRenderRevisions.has(normalizedChannelId)) previewHostRenderRevisions.set(normalizedChannelId, new Map());
+		const revisions = previewHostRenderRevisions.get(normalizedChannelId);
+		const commandRevision = ++previewHostRenderRevision;
+		for (const hostMessageId of hostIds) revisions.set(hostMessageId, commandRevision);
+		return hostIds.map(messageId => Object.freeze({messageId, revision: commandRevision, attempt: 1}));
+	}
+
+	function getPreviewHostRenderRevision(channelId, hostMessageId) {
+		const revisions = previewHostRenderRevisions.get(normalizeIdentity(channelId));
+		return revisions && revisions.get(normalizeIdentity(hostMessageId)) || null;
+	}
+
+	function retirePreviewHostRefresh(channelId, hostMessageIds = []) {
+		const normalizedChannelId = normalizeIdentity(channelId);
+		const revisions = previewHostRenderRevisions.get(normalizedChannelId);
+		if (!revisions) return [];
+		const retired = [];
+		for (const hostMessageId of hostMessageIds.map(normalizeIdentity).filter(Boolean)) if (revisions.delete(hostMessageId)) retired.push(hostMessageId);
+		if (!revisions.size) previewHostRenderRevisions.delete(normalizedChannelId);
+		return retired;
+	}
+
 	function clearPreviewHostMappings(channelId = null, referencedMessageIds = null) {
 		if (channelId === null || channelId === undefined) return previewHostsByChannel.clear();
 		const normalizedChannelId = normalizeIdentity(channelId);
@@ -340,6 +371,7 @@ function createMessageStateStore({journal = null, onTranslationDisplayed = () =>
 			deleted = true;
 			if (!eligible.size) previewEligibility.delete(normalizedChannelId);
 		}
+		retirePreviewHostRefresh(normalizedChannelId, [normalizedMessageId]);
 		if (record && deleteRecord(record)) deleted = true;
 		if (!channelMessageIds.has(normalizedChannelId)) channelGenerations.delete(normalizedChannelId);
 		return deleted;
@@ -454,6 +486,7 @@ function createMessageStateStore({journal = null, onTranslationDisplayed = () =>
 			}).filter(deleteRecord);
 			previewEligibility.delete(normalizedChannelId);
 			clearPreviewHostMappings(normalizedChannelId);
+			previewHostRenderRevisions.delete(normalizedChannelId);
 			if (!channelMessageIds.has(normalizedChannelId)) {
 				channelGenerations.delete(normalizedChannelId);
 			}
@@ -749,6 +782,10 @@ function createMessageStateStore({journal = null, onTranslationDisplayed = () =>
 			return true;
 		},
 		getPreviewHostMessageIds,
+		beginPreviewHostRefresh,
+		getPreviewHostRenderRevision,
+		acknowledgePreviewHostRefresh: retirePreviewHostRefresh,
+		retirePreviewHostRefresh,
 		markPreviewEligible(channelId, messageId) {
 			const normalizedChannelId = normalizeIdentity(channelId);
 			const normalizedMessageId = normalizeIdentity(messageId);

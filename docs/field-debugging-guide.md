@@ -43,7 +43,7 @@ The refactor was intentionally bottom-up. A top-down rewrite of the composition 
 | Field-era ownership cleanup (`1b8f565`, `8ff33bf`) | Forward content projection and duplicate direct-original display still leaked through the runtime | Moved content-view projection into display ownership and removed the obsolete direct-original React/CSS/settings branch | Ratchet reached 3,479 in that slice; retired-code cleanup lowered it to 3,478 and direct Store deletion subscriptions to 3,476. `showOriginalMessage` is the sole received-original setting |
 | Resumed display wiring (`04ea458`, `aa3057f`) | Display-runtime and repaint-scheduler host wiring still lived in the composition root | Moved Flux/Store/browser/viewport and repaint gate/timer/outcome ports into their owning wiring modules | Build `65a775c63d76dffa` passed active-scroll veto and stable post-scroll completion. Whole-chat fallback still refreshed the composer/input, matching the existing render debt; the user parked that issue for later |
 | Live queue wiring and arrival guard (`8580478`, `e3039d7`) | Live queue policy/session/handoff wiring remained in the composition root; a live row could strand a history reader at newest | Extracted the 31 queue ports with managed retry timers; the queue now arms a viewport reading-line guard before the host commits the live row | Build `c0b27e1479677971` passed live priority, channel isolation, History Guard, 1,311 tests, and installed configuration parity |
-| Composer-isolation recon and ordinary-row cut | The ownership test stopped at controller entry points and missed adapter `rerenderAll`; current-client Composer identity around Store updates was also unmeasured | Added a debug-only list/content render counter plus Composer/active-input/row/scroller identity evidence; ordinary unresolved rows now remain bounded targeted retries | Probe build `1eb82dee729eaf05` recorded list projection `+1` with Composer/input/row/scroller preserved; the ordinary-row candidate awaits its PTB display gate |
+| Composer-isolation recon, ordinary-row and preview-host cuts | The ownership test stopped at controller entry points and missed adapter `rerenderAll`; reply previews also lacked surface-specific confirmation | Added Composer-boundary evidence; ordinary unresolved rows remain targeted; preview hosts now carry Store surface revisions, DOM markers, and three bounded 300 ms attempts | Probe `1eb82dee729eaf05` preserved the boundary. Ordinary candidate `3cd42fa098e0f7a4` reported `4L/5R(prev 5)·full 2`, proving the ordinary route and isolating preview rebuilds; the preview candidate awaits PTB |
 
 ### What the refactor did and did not accomplish
 
@@ -60,7 +60,7 @@ Therefore, “module extracted” never means “field behavior solved.” Futur
 
 - `src/display/message-state-store.js` is the state authority for automatic and manual received translations, source snapshots, reply previews, revisions, and restore state.
 - `src/display/translation-display-controller.js` commits display transactions. Historical results commit as one batch; reply-preview hosts are wave-coalesced.
-- `src/display/flux-row-repaint.js` uses the internal `MESSAGE_UPDATE` merge path for mounted message rows. `src/display/discord-render-adapter.js` confirms DOM revisions and keeps unresolved ordinary rows on bounded targeted retry. Reply hosts still retain their separate whole-chat fallback.
+- `src/display/flux-row-repaint.js` uses the internal `MESSAGE_UPDATE` merge path for mounted rows. `src/display/discord-render-adapter.js` confirms body and reply-host DOM revisions independently; unresolved surfaces remain bounded targeted retries.
 - `src/orchestrator/historical-snapshot-cadence.js` waits for a 500 ms quiet window. `src/orchestrator/historical-translation-job.js` owns immutable jobs and absorbs compatible sealed work before start, so a scroll-back session does not become one provider/display transaction per render tick.
 - `src/viewport/message-viewport-store.js` is the sole owner of reading-line anchors, user-scroll intent, bottom rescue, raw-offset fallback, and 180/600 ms settle checks.
 - `src/ui/loaded-status-capsule.js`, `src/ui/loaded-status-position.js`, and `src/status/loaded-translation-status-store.js` own capsule DOM, geometry, and cumulative channel counts.
@@ -125,7 +125,7 @@ This section preserves the order in which the failures were reported and correct
 
 | Symptom | Proven cause | Current fix / contract | Do not repeat |
 | --- | --- | --- | --- |
-| Composer icon blinked whenever translations appeared | Whole-chat rebuild unmounted the composer | Ordinary messages use Store targeting plus bounded retry; preview hosts and lifecycle are separate cuts | Do not treat a faster rebuild as a row repaint or widen an unconfirmed ordinary row |
+| Composer icon blinked whenever translations appeared | Whole-chat rebuild unmounted the composer | Ordinary messages and preview hosts use Store targeting with separate revisions; lifecycle is the remaining cut | Do not treat a faster rebuild as a row repaint or widen any message surface |
 | Historical messages appeared one by one and each caused a rebuild | Snapshot micro-jobs sealed per render tick; provider and preview completions added separate transactions | 500 ms history quiet window, waiting-job absorption, 300 ms preview waves, one historical batch commit | Do not make cumulative counting drive per-message presentation |
 | Atomic rebuild made scrolling worse | Once handles were wired, synchronous blank/remount forced every transaction to rebuild | Retired implementation and adapter seam removed; BDFDB rebuild is fallback only | Do not restore synchronous blank/remount |
 | Instance registry stayed at `0L` | Function components appeared as synthetic `{props}` objects without an updater | Registry remains opportunistic; Flux store merge is the working row path | Do not force-update the synthetic instance |
@@ -193,7 +193,7 @@ This section preserves the order in which the failures were reported and correct
 
 ## Open or Observation Items
 
-1. Ordinary row confirmation failure no longer enters whole-chat fallback. With reply-host and lifecycle-setting `R` diagnostics, the composer/input can still refresh; each needs its own host confirmation and trigger evidence before change.
+1. Ordinary rows and reply hosts no longer enter whole-chat fallback. With lifecycle-setting `full` diagnostics, the composer/input can still refresh; channel enable, provider change, and plugin stop need separate trigger evidence.
 2. Scrollbar thumb size/position can move when translated rows change total height. Reopen only when the center reading-line message itself is lost or the view is stranded at newest.
 3. Slice 5d composition-root extraction is complete; the current ratchet is 3,248 lines, two module-level mutable declarators, and 19 compact lazy singleton boundaries. Further facade shrinkage requires a new bounded ownership contract rather than continuing this closed plan.
 4. Oversized modules and generated-bundle size remain architecture debt. Split by ownership after contracts exist; do not split merely to reduce a line count.

@@ -33,15 +33,14 @@ function createEmptyOutcome(additions) {
 	};
 }
 
-// The deferred-wave coalescer. Two producers use it: reply previews always (they are
-// decoration, nothing pins them to the 200ms display contract, and painting one
-// whole-layer rebuild per commit was the dominant unattributed rebuild lane in the
-// field - repaint "other 69" vs "hist 8", 2026-08-19), and historical batch commits
-// whenever the repaint gate is closed (a rebuild landing mid-scroll remounts the
-// list at the bottom under the user's gesture - the stranded-at-newest report).
+// The deferred-wave coalescer. Reply previews keep their 300 ms channel wave because
+// the field measured 69 preview callbacks against 8 historical waves. Historical
+// batch commits also wait while the repaint gate is closed so no layout write lands
+// under an active user gesture.
 // Commits write the store immediately; only the paint waits, collected per channel
 // and flushed as ONE tagged transaction per window once the gate is open.
 const DEFERRED_REFRESH_DELAY_MS = 300;
+const MAX_OWNER_REPAINT_ATTEMPTS = 3;
 
 function createTranslationDisplayController({
 	store,
@@ -59,7 +58,7 @@ function createTranslationDisplayController({
 
 	function getPendingRefresh(channelId) {
 		const key = String(channelId);
-		if (!pendingRefreshByChannel.has(key)) pendingRefreshByChannel.set(key, {messageIds: new Set(), hostMessageIds: new Set()});
+		if (!pendingRefreshByChannel.has(key)) pendingRefreshByChannel.set(key, {messageIds: new Set(), hostMessageIds: new Set(), hostViews: new Map()});
 		return pendingRefreshByChannel.get(key);
 	}
 
@@ -80,8 +79,8 @@ function createTranslationDisplayController({
 				const records = [...wave.messageIds].map(messageId => store.getDisplayState(messageId)).filter(Boolean);
 				const sources = {};
 				if (records.length) sources.historical = records.length;
-				if (wave.hostMessageIds.size) sources.preview = wave.hostMessageIds.size;
-				try {await refreshRecords(records, {channelId, ownerMessageIds: [...wave.hostMessageIds], sources});}
+				if (wave.hostMessageIds.size || wave.hostViews.size) sources.preview = new Set([].concat([...wave.hostMessageIds], [...wave.hostViews.keys()])).size;
+				try {await refreshRecords(records, {channelId, ownerMessageIds: [...wave.hostMessageIds], ownerViews: [...wave.hostViews.values()], sources});}
 				catch (error) {}
 			}
 		}, deferredRefreshDelayMs);
@@ -92,21 +91,25 @@ function createTranslationDisplayController({
 		journal.append({channelId: view.channelId, messageId: view.messageId, revision: view.revision, transition});
 	}
 
-	async function refreshRecords(records, {channelId = null, ownerMessageIds = [], sources = null} = {}) {
-		if (!records.length && !ownerMessageIds.length) return createEmptyOutcome();
+	async function refreshRecords(records, {channelId = null, ownerMessageIds = [], ownerViews = [], sources = null} = {}) {
+		if (!records.length && !ownerMessageIds.length && !ownerViews.length) return createEmptyOutcome();
 		const views = records.map(record => createDisplayView(store.getDisplayState(record.messageId)));
 		if (views.some(view => !view)) throw new Error("A display transaction requires one view per record");
 		const channelIds = new Set(views.map(view => view.channelId));
 		if (channelId != null) channelIds.add(String(channelId));
 		if (channelIds.size !== 1) throw new Error("A display transaction cannot span channels");
 		const transactionChannelId = channelIds.values().next().value;
+		const requestedOwnerViews = ownerViews.length ? ownerViews.map(view => Object.freeze({...view, messageId: String(view.messageId), attempt: Math.max(1, view.attempt || 1)})) : store.beginPreviewHostRefresh(transactionChannelId, [...new Set(ownerMessageIds.map(String))]);
+		const requestedOwnerMessageIds = requestedOwnerViews.map(view => view.messageId);
+		const requestedOwnerViewsById = new Map(requestedOwnerViews.map(view => [view.messageId, view]));
 		const requestedViews = new Map(views.map(view => [String(view.messageId), view]));
 		for (const view of views) recordRenderTransition(view, "render-requested");
 		const outcome = await renderAdapter.refreshMessages({
 			transactionId: ++transactionSequence,
 			channelId: transactionChannelId,
 			messageIds: views.map(view => view.messageId),
-			ownerMessageIds,
+			ownerMessageIds: requestedOwnerMessageIds,
+			ownerViews: requestedOwnerViews,
 			views,
 			// Which lanes asked for this paint (cadence audit 2026-08-19); the adapter
 			// books its rebuild attribution from these counts.
@@ -134,6 +137,29 @@ function createTranslationDisplayController({
 		const missingIds = filterCurrentIds(rawOutcome.missingIds);
 		const deferredIds = filterCurrentIds(rawOutcome.deferredIds);
 		const retryIds = filterCurrentIds(rawOutcome.retryIds);
+		function filterCurrentOwnerIds(messageIds) {
+			return (Array.isArray(messageIds) ? messageIds : []).map(String).filter(messageId => {
+				const view = requestedOwnerViewsById.get(messageId);
+				return !!(view && store.getPreviewHostRenderRevision(transactionChannelId, messageId) === view.revision);
+			});
+		}
+		const confirmedOwnerIds = filterCurrentOwnerIds(rawOutcome.confirmedOwnerIds);
+		const missingOwnerIds = filterCurrentOwnerIds(rawOutcome.missingOwnerIds);
+		const deferredOwnerIds = filterCurrentOwnerIds(rawOutcome.deferredOwnerIds);
+		const retryOwnerIds = filterCurrentOwnerIds(rawOutcome.retryOwnerIds);
+		if (confirmedOwnerIds.length) store.acknowledgePreviewHostRefresh(transactionChannelId, confirmedOwnerIds);
+		const ownerRetrySet = new Set(retryOwnerIds.concat(missingOwnerIds));
+		for (const messageId of ownerRetrySet) {
+			const view = requestedOwnerViewsById.get(messageId);
+			if (!view) continue;
+			if (view.attempt >= MAX_OWNER_REPAINT_ATTEMPTS) {
+				store.retirePreviewHostRefresh(transactionChannelId, [messageId]);
+				continue;
+			}
+			const wave = getPendingRefresh(transactionChannelId);
+			wave.hostViews.set(messageId, Object.freeze({...view, attempt: view.attempt + 1}));
+			armDeferredFlush();
+		}
 		for (const messageId of confirmedIds) recordRenderTransition(requestedViews.get(String(messageId)), "render-confirmed");
 		for (const messageId of missingIds) recordRenderTransition(requestedViews.get(String(messageId)), "render-unconfirmed");
 		store.markRenderOutcome({confirmedIds, missingIds});
@@ -147,6 +173,20 @@ function createTranslationDisplayController({
 		else delete filteredOutcome.deferredIds;
 		if (retryIds.length) filteredOutcome.retryIds = retryIds;
 		else delete filteredOutcome.retryIds;
+		if (requestedOwnerViews.length) {
+			filteredOutcome.confirmedOwnerIds = confirmedOwnerIds;
+			filteredOutcome.missingOwnerIds = missingOwnerIds;
+			if (deferredOwnerIds.length) filteredOutcome.deferredOwnerIds = deferredOwnerIds;
+			else delete filteredOutcome.deferredOwnerIds;
+			if (retryOwnerIds.length) filteredOutcome.retryOwnerIds = retryOwnerIds;
+			else delete filteredOutcome.retryOwnerIds;
+		}
+		else {
+			delete filteredOutcome.confirmedOwnerIds;
+			delete filteredOutcome.missingOwnerIds;
+			delete filteredOutcome.deferredOwnerIds;
+			delete filteredOutcome.retryOwnerIds;
+		}
 		if (staleIds.length) filteredOutcome.staleIds = staleIds;
 		return filteredOutcome;
 	}
