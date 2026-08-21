@@ -19,8 +19,12 @@ function createMessageUpdateExperiment({
 	getSelectedChannelId = () => null,
 	getStoreMessage = () => null,
 	getGuildId = () => null,
+	listCandidateMessages = null,
 	listTranslatedCandidates = () => [],
 	isViewTranslated = () => false,
+	getMessageRenderCount = () => 0,
+	getParentRenderCount = () => 0,
+	getUiSnapshot = () => null,
 	sink = null,
 	log = () => {},
 	now = Date.now,
@@ -52,21 +56,60 @@ function createMessageUpdateExperiment({
 		};
 	}
 
+	function captureUiSnapshot(channelId, messageId) {
+		try {return getUiSnapshot(channelId, messageId) || null;}
+		catch (error) {return null;}
+	}
+
+	function getElementTextLength(element) {
+		if (!element) return null;
+		if (typeof element.value == "string") return element.value.length;
+		return typeof element.textContent == "string" ? element.textContent.length : null;
+	}
+
+	function summarizeUiSnapshot(snapshot) {
+		const composer = snapshot && snapshot.composerElement;
+		const scroller = snapshot && snapshot.scrollerElement;
+		const message = snapshot && snapshot.messageElement;
+		return {
+			composerPresent: !!composer,
+			scrollerPresent: !!scroller,
+			messagePresent: !!message,
+			activeElementIsComposer: !!(composer && snapshot.activeElement === composer),
+			composerTextLength: getElementTextLength(composer),
+			composerSelectionStart: composer && typeof composer.selectionStart == "number" ? composer.selectionStart : null,
+			composerSelectionEnd: composer && typeof composer.selectionEnd == "number" ? composer.selectionEnd : null,
+			scrollTop: scroller && typeof scroller.scrollTop == "number" ? scroller.scrollTop : null,
+			scrollHeight: scroller && typeof scroller.scrollHeight == "number" ? scroller.scrollHeight : null,
+			clientHeight: scroller && typeof scroller.clientHeight == "number" ? scroller.clientHeight : null
+		};
+	}
+
+	function uiBoundaryIsReady(snapshot) {
+		return !!(snapshot && snapshot.composerElement && snapshot.scrollerElement && snapshot.messageElement);
+	}
+
 	function runOnce() {
 		evidence.attempts++;
 		const channelId = getSelectedChannelId();
-		const allCandidates = listTranslatedCandidates() || [];
+		const allCandidates = (typeof listCandidateMessages == "function" ? listCandidateMessages() : listTranslatedCandidates()) || [];
 		const inChannel = channelId ? allCandidates.filter(entry => entry && String(entry.channelId) === String(channelId)) : [];
 		const withStoreRecord = inChannel.filter(entry => getStoreMessage(channelId, entry.messageId));
+		let uiBefore = null;
+		const candidate = withStoreRecord.find(entry => {
+			const snapshot = captureUiSnapshot(channelId, entry.messageId);
+			if (!uiBoundaryIsReady(snapshot)) return false;
+			uiBefore = snapshot;
+			return true;
+		});
 		// Overwritten every attempt: the first field round gave up with ZERO detail
 		// about WHICH precondition failed (selected channel, candidates, store handle).
-		evidence.lastDiagnostics = {at: now(), selectedChannelId: channelId ? String(channelId) : null, translatedTotal: allCandidates.length, translatedInChannel: inChannel.length, withStoreRecord: withStoreRecord.length};
+		evidence.lastDiagnostics = {at: now(), selectedChannelId: channelId ? String(channelId) : null, candidateTotal: allCandidates.length, candidatesInChannel: inChannel.length, withStoreRecord: withStoreRecord.length, withMountedUiBoundary: candidate ? 1 : 0};
 		if (evidence.attempts > maxAttempts) {
-			evidence.notes.push("gave up: no translated message with a store record appeared in the selected channel");
+			evidence.notes.push("gave up: no translated mounted row with a composer and scroller appeared in the selected channel");
 			writeEvidence("no-candidate");
 			return;
 		}
-		const candidate = withStoreRecord[0];
 		if (!candidate) {
 			attemptTimer = scheduleTimer(runOnce, attemptIntervalMs);
 			return;
@@ -82,8 +125,12 @@ function createMessageUpdateExperiment({
 		ran = true;
 		const messageId = String(candidate.messageId);
 		const record = getStoreMessage(channelId, messageId);
-		evidence.target = {messageId, channelId: String(channelId)};
+		const renderCountBefore = (() => {try {return Number(getMessageRenderCount(messageId)) || 0;} catch (error) {return 0;}})();
+		const parentRenderCountBefore = (() => {try {return Number(getParentRenderCount()) || 0;} catch (error) {return 0;}})();
+		const beforeUiSummary = summarizeUiSnapshot(uiBefore);
+		evidence.target = {messageId, channelId: String(channelId), source: candidate.source || "unknown"};
 		evidence.before = snapshotRecord(record, messageId);
+		evidence.beforeUi = beforeUiSummary;
 		const guildId = (() => {try {return getGuildId(channelId) || undefined;} catch (error) {return undefined;}})();
 		// The payload mirrors the probe-captured event exactly at the top level and
 		// stays PARTIAL below it: same id, same channel, the record's own current
@@ -105,13 +152,27 @@ function createMessageUpdateExperiment({
 		}
 		scheduleTimer(() => {
 			const after = getStoreMessage(channelId, messageId);
+			const uiAfter = captureUiSnapshot(channelId, messageId);
+			const afterUiSummary = summarizeUiSnapshot(uiAfter);
+			const renderCountAfter = (() => {try {return Number(getMessageRenderCount(messageId)) || 0;} catch (error) {return 0;}})();
+			const parentRenderCountAfter = (() => {try {return Number(getParentRenderCount()) || 0;} catch (error) {return 0;}})();
 			evidence.after = snapshotRecord(after, messageId);
+			evidence.afterUi = afterUiSummary;
 			evidence.verdict = {
 				recordSurvived: !!after,
 				contentSame: !!(after && record) && after.content === record.content,
 				embedsKept: !!(after && record) && (Array.isArray(record.embeds) ? record.embeds.length : 0) === (Array.isArray(after.embeds) ? after.embeds.length : 0),
 				attachmentsKept: !!(after && record) && (Array.isArray(record.attachments) ? record.attachments.length : 0) === (Array.isArray(after.attachments) ? after.attachments.length : 0),
-				translationStillShown: !!isViewTranslated(messageId)
+				translationStillShown: !!isViewTranslated(messageId),
+				parentRenderDelta: parentRenderCountAfter - parentRenderCountBefore,
+				messageRenderDelta: renderCountAfter - renderCountBefore,
+				targetRowPreserved: !!(uiBefore && uiAfter && uiBefore.messageElement === uiAfter.messageElement),
+				composerPreserved: !!(uiBefore && uiAfter && uiBefore.composerElement === uiAfter.composerElement),
+				activeElementPreserved: !!(uiBefore && uiAfter && uiBefore.activeElement === uiAfter.activeElement),
+				scrollerPreserved: !!(uiBefore && uiAfter && uiBefore.scrollerElement === uiAfter.scrollerElement),
+				scrollTopSame: beforeUiSummary.scrollTop === afterUiSummary.scrollTop,
+				composerTextLengthSame: beforeUiSummary.composerTextLength === afterUiSummary.composerTextLength,
+				composerSelectionSame: beforeUiSummary.composerSelectionStart === afterUiSummary.composerSelectionStart && beforeUiSummary.composerSelectionEnd === afterUiSummary.composerSelectionEnd
 			};
 			writeEvidence("complete");
 			log("[translator message-update experiment] complete - evidence written");
