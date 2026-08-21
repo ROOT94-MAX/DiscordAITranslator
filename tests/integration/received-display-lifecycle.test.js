@@ -43,6 +43,7 @@ test("disabling a channel restores automatic and manual originals in one targete
 		runtime.suppress("message-1");
 		runtime.suppress("message-3");
 			const rebuildsBeforeDisable = calls.rerenderAll;
+			const updatesBeforeDisable = calls.messageUpdates;
 
 			await plugin.toggleTranslation("channel-a");
 
@@ -51,7 +52,8 @@ test("disabling a channel restores automatic and manual originals in one targete
 			assert.equal(plugin.getReceivedDisplayView("message-3").content, "message-3 translated");
 			assert.equal(runtime.isSuppressed("message-1"), false);
 			assert.equal(runtime.isSuppressed("message-3"), true);
-			assert.equal(calls.rerenderAll, rebuildsBeforeDisable + 1, "the disable restore must repaint through exactly one rebuild");
+			assert.equal(calls.messageUpdates, updatesBeforeDisable + 2, "both restored rows repaint inside one channel transaction");
+			assert.equal(calls.rerenderAll, rebuildsBeforeDisable, "ordinary restore never remounts the Composer");
 	}
 	finally {harness.restore();}
 });

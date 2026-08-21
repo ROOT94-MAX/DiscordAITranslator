@@ -1,13 +1,12 @@
 const {createPluginInstance} = require("./createPluginInstance");
 
-// The render adapter refreshes through one BDFDB.MessageUtils.rerenderAll rebuild and
-// confirms mounted rows by their data-translator-revision marker, so the fake DOM is
-// revision-aware: a rebuild paints exactly the revision each mounted row was last
-// asked to confirm, and a stale painted revision reads back unconfirmed.
+// The render adapter refreshes ordinary rows through the Store dispatcher's synthetic
+// MESSAGE_UPDATE and confirms mounted rows by their data-translator-revision marker.
+// Special host and lifecycle paths retain MessageUtils.rerenderAll in their own tests.
 function createHarness({confirmAfterFallback = true, mountedMessageIds = null} = {}) {
 	const originalDocument = global.document;
 	const originalRequestAnimationFrame = global.requestAnimationFrame;
-	const calls = {rerenderAll: 0};
+	const calls = {rerenderAll: 0, messageUpdates: 0, messageUpdateIds: []};
 	const mounted = mountedMessageIds && new Set(mountedMessageIds.map(String));
 	const paintedRevisions = new Map();
 	const requestedRevisions = new Map();
@@ -61,10 +60,24 @@ function createHarness({confirmAfterFallback = true, mountedMessageIds = null} =
 		getElementById: () => null
 	};
 	global.requestAnimationFrame = callback => callback();
+	const dispatcher = {
+		dispatch(payload) {
+			if (!payload || payload.type !== "MESSAGE_UPDATE" || !payload.__translatorSynthetic || !payload.message) return;
+			const id = String(payload.message.id);
+			calls.messageUpdates++;
+			calls.messageUpdateIds.push(id);
+			if (confirmAfterFallback && getMessageElement(id) && requestedRevisions.has(id)) paintedRevisions.set(id, requestedRevisions.get(id));
+		}
+	};
 	const plugin = createPluginInstance({
 		callSetLanguages: false,
 		bdfdb: {
 			dotCN: {messagesscroller: ".messages-scroller"},
+			LibraryStores: {
+				SelectedChannelStore: {getChannelId: () => "channel-1"},
+				MessageStore: {_dispatcher: dispatcher, getMessage: (channelId, messageId) => ({id: String(messageId), channel_id: String(channelId), content: "source", embeds: [], attachments: []})},
+				ChannelStore: {getChannel: () => ({guild_id: "guild-1"})}
+			},
 			disCN: {messagetimestamp: "timestamp", messagetimestampinline: "inline", _translatortranslated: "translated", messageedited: "edited"},
 			DOMUtils: {formatClassName: (...names) => names.filter(Boolean).join(" ")},
 			LanguageUtils: {getName: language => language && language.name || ""},
