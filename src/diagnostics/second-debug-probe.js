@@ -145,6 +145,7 @@ function createSecondDebugProbe({
 	const instanceIds = new WeakMap();
 	const parentEntriesBySignature = new Map();
 	const missingModuleLabels = new Set();
+	const messageRenderCounts = new Map();
 	let nextInstanceId = 0;
 	let nextCallId = 0;
 	let domWalkCount = 0;
@@ -257,6 +258,14 @@ function createSecondDebugProbe({
 			return record(label, {error: error && error.message || String(error)});
 		}
 		return record(label, {sampled: shapes.length, shapes});
+	}
+
+	function recordMessageContentRender(messageId) {
+		if (messageId == null) return 0;
+		const key = String(messageId);
+		const count = (messageRenderCounts.get(key) || 0) + 1;
+		messageRenderCounts.set(key, count);
+		return count;
 	}
 
 	function recordParentRenderPass(e, {resolveScrollerElement = null} = {}) {
@@ -467,10 +476,12 @@ function createSecondDebugProbe({
 		marker: SECOND_DEBUG_MARKER,
 		record,
 		recordParentRenderPass,
+		recordMessageContentRender,
 		recordDomFiberWalk,
 		recordMessageRowShapes,
 		runRefreshExperiment,
 		getParentRenderCount: () => parentRenderCount,
+		getMessageRenderCount: messageId => messageRenderCounts.get(String(messageId)) || 0,
 		wrapModule,
 		list: () => entries.slice(),
 		dump,

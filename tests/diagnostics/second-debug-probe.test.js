@@ -95,6 +95,17 @@ test("repeated renders of the same instance update one entry instead of appendin
 	assert.equal(afterNewInstance[1].instanceId !== afterNewInstance[0].instanceId, true);
 });
 
+test("message content render counters stay ID-scoped without adding evidence log noise", () => {
+	const probe = createSecondDebugProbe({log: () => {}});
+	assert.equal(probe.recordMessageContentRender("m1"), 1);
+	assert.equal(probe.recordMessageContentRender("m1"), 2);
+	assert.equal(probe.recordMessageContentRender("m2"), 1);
+	assert.equal(probe.getMessageRenderCount("m1"), 2);
+	assert.equal(probe.getMessageRenderCount("m2"), 1);
+	assert.equal(probe.getMessageRenderCount("missing"), 0);
+	assert.equal(probe.list().length, 0, "busy message renders must not flood the persisted evidence log");
+});
+
 test("wrapModule records call arguments and resolved result shapes without changing the return value", async () => {
 	const probe = createSecondDebugProbe({log: () => {}});
 	const payload = {channelId: "channel-3", before: "m0", limit: 30};

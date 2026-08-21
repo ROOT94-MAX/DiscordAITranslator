@@ -166,20 +166,8 @@ module.exports = (_ => {
 			{name: "bdfdb-library-module", resolve: () => BDFDB.LibraryModules && (BDFDB.LibraryModules.Dispatcher || BDFDB.LibraryModules.DispatcherUtils) || null}
 		], log: line => console.info(line), sink: require("../diagnostics/second-debug-probe").createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder, fileName: "translator-message-update-probe.json"})}))(require("../diagnostics/message-update-probe")) : null;
 
-		// Debug-build-only: ONE guarded synthetic MESSAGE_UPDATE against one already-translated message, answering the merge-vs-replace question the probe cannot (see the module header). Uses the probe-proven store dispatcher handle.
-		const messageUpdateExperiment = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? (experimentModule => experimentModule.createMessageUpdateExperiment({
-			resolveDispatcher: () => resolveStoreDispatcher(BDFDB, ["dispatch"]),
-			getSelectedChannelId: () => {try {return BDFDB.LibraryStores.SelectedChannelStore.getChannelId();} catch (error) {return null;}},
-			getStoreMessage: (channelId, messageId) => {try {return BDFDB.LibraryStores.MessageStore.getMessage(channelId, messageId) || null;} catch (error) {return null;}},
-			getGuildId: channelId => {try {const channel = BDFDB.LibraryStores.ChannelStore.getChannel(channelId); return channel && channel.guild_id || null;} catch (error) {return null;}},
-			listTranslatedCandidates: () => {try {return _this.ensureReceivedDisplayRuntime().listTranslated().map(record => ({messageId: record.messageId, channelId: record.channelId}));} catch (error) {return [];}},
-			isViewTranslated: messageId => {try {const view = _this && _this.getReceivedDisplayRuntimeView(String(messageId)); return !!(view && view.translated);} catch (error) {return false;}},
-			log: line => console.info(line),
-			setTimeout: (callback, delay) => BDFDB.TimeUtils.timeout(callback, delay),
-			clearTimeout: timer => BDFDB.TimeUtils.clear(timer),
-			sink: require("../diagnostics/second-debug-probe").createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder, fileName: "translator-message-update-experiment.json"}),
-			maxAttempts: 120
-		}))(require("../diagnostics/message-update-experiment")) : null;
+		// Debug-build-only: one guarded MESSAGE_UPDATE records target-row, Composer and viewport identity; all host wiring stays outside the composition root.
+		const messageUpdateExperiment = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? require("../diagnostics/message-update-experiment-wiring").createPluginMessageUpdateExperiment({BDFDB, BdApi, getPlugin: () => _this, secondDebugProbe}) : null;
 
 		// Debug-build-only, read-only: captures how forwarded messages (已转发) look on this client - their body lives in forward snapshots the extraction path cannot read yet.
 		const forwardedMessageProbe = typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ ? require("../diagnostics/forwarded-message-probe").createForwardedMessageProbe({log: line => console.info(line), sink: require("../diagnostics/second-debug-probe").createSecondDebugEvidenceSink({fs: require("fs"), path: require("path"), pluginsFolder: BdApi && BdApi.Plugins && BdApi.Plugins.folder, fileName: "translator-forwarded-message-probe.json"})}) : null;
@@ -2561,7 +2549,7 @@ module.exports = (_ => {
 			}
 
 			processMessageContent (e) {
-				if (!e.instance.props.message || !e.returnvalue || !e.returnvalue.props) return;
+				if (typeof __TRANSLATOR_DISPLAY_DEBUG__ !== "undefined" && __TRANSLATOR_DISPLAY_DEBUG__ && secondDebugProbe && e.instance.props.message && e.instance.props.message.id) secondDebugProbe.recordMessageContentRender(e.instance.props.message.id); if (!e.instance.props.message || !e.returnvalue || !e.returnvalue.props) return;
 				let message = e.instance.props.message;
 				if (this.isRenderingReplyPreviewMessage(message)) {
 					let children = this.ensureElementChildrenArray(e.returnvalue);
