@@ -47,10 +47,14 @@ test("translator icon toggle stays channel-scoped even when legacy global mode w
 	});
 
 	plugin.forceUpdateAll();
+	const projectionPulses = [];
+	plugin.ensureReceivedDisplayRuntime = () => ({pulseChannelProjection: channelId => (projectionPulses.push(channelId), true)});
+	plugin.scheduleTranslationRerender = () => assert.fail("channel enablement must not schedule a whole-chat repaint");
 	plugin.toggleTranslation("channel-1");
 
 	assert.equal(plugin.isTranslationEnabled("channel-1"), true);
 	assert.equal(plugin.isTranslationEnabled("channel-2"), false);
+	assert.deepEqual(projectionPulses, ["channel-1"]);
 	assert.deepEqual(persisted.translationEnabledStates, {
 		globalDefault: false,
 		channelOverrides: {

@@ -2744,7 +2744,7 @@ module.exports = (_ => {
 				this.clearDisplayedAutoTranslations(channelId);
 				this.clearAutoTranslationQueue(channelId);
 				this.resetAutoTranslationTracking(channelId);
-				this.scheduleTranslationRerender();
+				this.ensureReceivedDisplayRuntime().pulseChannelProjection(channelId);
 				this.processAutoTranslationQueue();
 			}
 
@@ -2798,7 +2798,7 @@ module.exports = (_ => {
 					return;
 				}
 				this.resetAutoTranslationTracking(channelId);
-				this.scheduleTranslationRerender();
+				this.ensureReceivedDisplayRuntime().pulseChannelProjection(channelId);
 				this.processAutoTranslationQueue();
 			}
 			isTranslationEnabled (channelId) {
