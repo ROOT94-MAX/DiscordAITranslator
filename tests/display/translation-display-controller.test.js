@@ -46,6 +46,8 @@ function createHarness(renderOutcome, controllerOptions = {}) {
 			return renderOutcome ? renderOutcome(request) : {
 				confirmedIds: request.messageIds,
 				missingIds: [],
+				confirmedOwnerIds: request.ownerMessageIds || [],
+				missingOwnerIds: [],
 				fallbackUsed: false
 			};
 		}
@@ -252,7 +254,7 @@ test("a host-only display transaction runs without display-store records", async
 	assert.deepEqual(refreshes[0].messageIds, []);
 	assert.deepEqual(refreshes[0].ownerMessageIds, ["reply-1", "reply-2"]);
 	assert.deepEqual(refreshes[0].views, []);
-	assert.deepEqual(outcome, {confirmedIds: [], missingIds: [], fallbackUsed: false});
+	assert.deepEqual(outcome, {confirmedIds: [], missingIds: [], confirmedOwnerIds: ["reply-1", "reply-2"], missingOwnerIds: [], fallbackUsed: false});
 });
 
 test("missing acknowledgement remains inspectable without changing the display revision", async () => {
@@ -676,7 +678,10 @@ test("preview commits coalesce into one tagged host refresh instead of a rebuild
 	await timers[0].callback();
 	assert.equal(refreshes.length, 1, "the wave flushes as one transaction");
 	assert.deepEqual([...refreshes[0].ownerMessageIds].sort(), ["host1", "host2"]);
+	assert.deepEqual(refreshes[0].ownerViews.map(view => view.messageId).sort(), ["host1", "host2"]);
+	assert.equal(refreshes[0].ownerViews[0].revision, refreshes[0].ownerViews[1].revision, "the coalesced wave shares one surface revision");
 	assert.deepEqual(refreshes[0].sources, {preview: 2});
+	assert.equal(store.getPreviewHostRenderRevision("c1", "host1"), null, "confirmed host revisions are acknowledged and released");
 });
 
 test("the preview flush waits out a closed repaint window and lands when it opens", async () => {
@@ -700,6 +705,33 @@ test("the preview flush waits out a closed repaint window and lands when it open
 	await timers[1].callback();
 	assert.equal(refreshes.length, 1, "the held wave lands once the window opens");
 	assert.deepEqual(refreshes[0].ownerMessageIds, ["host1"]);
+});
+
+test("an unconfirmed preview host retries three targeted waves and then retires its surface command", async () => {
+	const timers = [];
+	const {store, refreshes, controller} = createHarness(request => ({
+		confirmedIds: [],
+		missingIds: [],
+		confirmedOwnerIds: [],
+		missingOwnerIds: request.ownerMessageIds,
+		retryOwnerIds: request.ownerMessageIds,
+		fallbackUsed: false
+	}), {
+		setTimeout: (callback, delay) => {timers.push({callback, delay}); return timers.length;}
+	});
+	store.capturePreviewSource({messageId: "ref1", channelId: "c1", sourceSignature: "s1", source: {content: "a", embeds: []}});
+	store.markPreviewHost("c1", "ref1", "host1");
+	await controller.commitPreviewResult({messageId: "ref1", channelId: "c1", signature: "s1", translation: {translatedContent: "t1"}});
+
+	for (let attempt = 1; attempt <= 3; attempt++) {
+		const timer = timers.shift();
+		assert.ok(timer, `targeted preview attempt ${attempt} must be scheduled`);
+		await timer.callback();
+	}
+	assert.equal(refreshes.length, 3);
+	assert.deepEqual(refreshes.map(request => request.ownerViews[0].attempt), [1, 2, 3]);
+	assert.equal(timers.length, 0, "the fourth wave is forbidden");
+	assert.equal(store.getPreviewHostRenderRevision("c1", "host1"), null, "exhaustion releases the surface command");
 });
 
 test("a preview commit with refresh false stays store-only and joins no wave", async () => {
