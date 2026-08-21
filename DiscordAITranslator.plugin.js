@@ -2,7 +2,7 @@
  * @name DiscordAITranslator
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
- * @version 0.3.40
+ * @version 0.3.41
  * @buildId 888308bed3551076
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator

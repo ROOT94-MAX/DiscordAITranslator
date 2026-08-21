@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-- Display: ordinary received-message transactions and reply-preview host commit/clear/restore/delete now remain on Store-targeted repaint paths. Channel enablement and primary-engine changes pulse one visible Store projection under the existing viewport anchor instead of scheduling a whole-chat `full` repaint. Body and preview surfaces keep separate DOM revisions and bounded retry; historical batching, the 300 ms preview wave, virtualized-on-mount display, live priority, channel isolation, and viewport intent remain unchanged. Plugin start/stop and settings reinitialization remain separate lifecycle work.
+## v0.3.41
+
+- Fixed: received-message, historical-batch, manual, restore, and reply-preview translation updates no longer rebuild the whole chat or remount the Composer. Ordinary bodies and reply hosts use separate Store-owned revisions with bounded targeted retry.
+- Lifecycle: channel enablement and primary-engine changes now pulse one visible Store projection under the existing viewport anchor instead of scheduling a `full` repaint. The 500 ms historical batch window, 300 ms preview wave, live priority, channel isolation, virtualized-on-mount display, and user-intent veto remain unchanged.
+- Field verification: probe `1eb82dee729eaf05` preserved the Composer, active input, target row, scroller, draft and offset. Warm-cache candidate `888308bed3551076` advanced `12L/0R → 17L/0R` with no `full`; after clearing 500 cached results, the cold path reported `4L/0R` and no user-visible regression.
+- Process: the successful Composer-isolation pattern and the rejected parent-forceUpdate, synchronous remount, per-row history, long debounce, and cache-confounded validation routes are recorded in the bilingual field-debugging handoff.
 
 ## v0.3.40
 

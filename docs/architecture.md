@@ -6,12 +6,12 @@ This document describes the current runtime boundaries and migration rules. User
 
 ## Current Status
 
-- Release line: v0.3.40.
+- Release line: v0.3.41.
 - Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
-- Published v0.3.40 build ID: `c0b27e1479677971`; current repository candidate build ID: `888308bed3551076`.
+- Published v0.3.41 build ID: `888308bed3551076`.
 - Legacy composition-root ratchet: 3,248 lines and two module-level shared declarators; Slice 5d originally closed at 3,260 before later bounded wiring extraction.
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
-- Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
+- Display strategy: mounted message rows and reply hosts use channel-scoped Flux `MESSAGE_UPDATE` merges with independent revisions and bounded retry. Channel/provider refresh uses one anchored projection pulse; translation work never widens into a whole-chat rebuild.
 
 Slice 5d composition-root extraction is complete. `src/legacy/runtime.js` remains the legacy plugin facade and lifecycle patch shell, with 19 explicitly inventoried lazy singletons of at most eight lines each. This closes the bounded extraction plan; it does not claim that the separate render, lifecycle, or oversized-module debts below are complete.
 
