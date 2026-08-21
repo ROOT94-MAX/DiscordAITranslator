@@ -43,11 +43,40 @@ function createDisplayRuntime(dependencies) {
 	// wiring falls back to the controller's own defaults (globals, always-open gate).
 	const controller = createTranslationDisplayController({store, renderAdapter, journal, setTimeout: dependencies.setTimeout, canRepaintNow: dependencies.canRepaintNow});
 
+	function pulseChannelProjection(channelId) {
+		if (!channelId || typeof dependencies.getChannelProjectionMessageId != "function") return false;
+		let messageId = null;
+		try {messageId = dependencies.getChannelProjectionMessageId(channelId);}
+		catch (error) {messageId = null;}
+		if (!messageId) return false;
+		let intentSequence = null;
+		let scrollState = null;
+		try {
+			intentSequence = typeof dependencies.getUserScrollIntentSequence == "function" ? dependencies.getUserScrollIntentSequence() : null;
+			const selector = dependencies.BDFDB && dependencies.BDFDB.dotCN && dependencies.BDFDB.dotCN.messagesscroller;
+			const scroller = dependencies.document && selector ? dependencies.document.querySelector(selector) : null;
+			if (scroller && typeof dependencies.captureScrollState == "function") scrollState = dependencies.captureScrollState({messageIds: [String(messageId)], channelId: String(channelId), lifecycle: true});
+		}
+		catch (error) {scrollState = null;}
+		const attempted = fluxRowRepaint.repaintRows([messageId], {channelId}).length === 1;
+		if (!attempted || !scrollState) return attempted;
+		const intentUnchanged = () => typeof dependencies.getUserScrollIntentSequence != "function" || intentSequence === dependencies.getUserScrollIntentSequence();
+		try {if (intentUnchanged() && typeof dependencies.restoreScrollStateNow == "function") dependencies.restoreScrollStateNow(scrollState);}
+		catch (error) {}
+		try {if (intentUnchanged() && typeof dependencies.restoreScrollState == "function") dependencies.restoreScrollState(scrollState);}
+		catch (error) {}
+		return true;
+	}
+
 	return Object.freeze({
 		getTransitionJournal: () => journal,
 		// Settings-panel diagnostics: how many transactions painted per-row (live) or
 		// through the whole-layer rebuild, with per-lane rebuild attribution.
 		getRebuildStats: () => renderAdapter.getRebuildStats(),
+		// Channel enablement and primary-engine changes need one message-list projection
+		// pass, not a whole-chat reconstruction. The current visible anchor is dispatched
+		// through Discord's Store path; a missing/unmounted row is left for natural mount.
+		pulseChannelProjection,
 		// Called from the message-content render hook on every content render, so the
 		// live path always holds the newest instance for each mounted row.
 		recordContentInstance: (messageId, instance) => liveRowRepaint.recordContentInstance(messageId, instance),

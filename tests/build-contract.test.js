@@ -26,7 +26,10 @@ test("the generated plugin keeps metadata and excludes development artifacts", a
 	const releaseBeforeDebug = fs.readFileSync(releasePath);
 	const debugResult = childProcess.spawnSync(process.execPath, [buildScript, "--debug"], {
 		cwd: root,
-		encoding: "utf8"
+		encoding: "utf8",
+		// The readable debug artifact intentionally carries probes and their inline
+		// sources; keep the assertion independent of Node's 1 MiB spawn default.
+		maxBuffer: 4 * 1024 * 1024
 	});
 	const conflictingFlagsResult = childProcess.spawnSync(process.execPath, [buildScript, "--debug", "--check"], {
 		cwd: root,

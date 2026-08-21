@@ -11,6 +11,7 @@ function createHarness() {
 	const document = {querySelector: selector => (calls.push(["querySelector", selector]), {selector})};
 	const viewport = {
 		getUserScrollIntentSequence: () => (calls.push(["getUserScrollIntentSequence"]), 17),
+		findVisibleMessageAnchor: () => (calls.push(["findVisibleMessageAnchor"]), {messageId: "message-anchor"}),
 		captureDisplayTransactionScrollState: context => (calls.push(["captureScrollState", context]), {context}),
 		restoreDisplayTransactionScrollState: state => calls.push(["restoreScrollState", state]),
 		restoreDisplayTransactionScrollStateNow: state => (calls.push(["restoreScrollStateNow", state]), "restored-now")
@@ -59,6 +60,7 @@ test("received display wiring creates the runtime with the complete host and plu
 	assert.equal(captured.resolveDispatcher(), dispatcher);
 	assert.equal(captured.getStoreMessage("channel-a", "message-a"), message);
 	assert.equal(captured.getGuildId("channel-a"), "guild-a");
+	assert.equal(captured.getChannelProjectionMessageId("channel-a"), "message-anchor");
 	captured.onTranslationDisplayed("channel-a", "message-a");
 	assert.equal(captured.getUserScrollIntentSequence(), 17);
 	assert.deepEqual(captured.captureScrollState("capture-context"), {context: "capture-context"});
@@ -71,6 +73,7 @@ test("received display wiring creates the runtime with the complete host and plu
 		["resolveDispatcher"],
 		["getStoreMessage", "channel-a", "message-a"],
 		["getChannel", "channel-a"],
+		["findVisibleMessageAnchor"],
 		["recordTranslationsDisplayed", "channel-a", ["message-a"]],
 		["getUserScrollIntentSequence"],
 		["captureScrollState", "capture-context"],
@@ -85,9 +88,11 @@ test("received display wiring contains Store and best-effort scroll adapter fail
 	harness.BDFDB.LibraryStores.ChannelStore.getChannel = () => {throw new Error("channel store unavailable");};
 	harness.viewport.captureDisplayTransactionScrollState = () => {throw new Error("capture unavailable");};
 	harness.viewport.restoreDisplayTransactionScrollState = () => {throw new Error("restore unavailable");};
+	harness.viewport.findVisibleMessageAnchor = () => {throw new Error("anchor unavailable");};
 
 	assert.equal(harness.captured.getStoreMessage("channel-a", "message-a"), null);
 	assert.equal(harness.captured.getGuildId("channel-a"), null);
+	assert.equal(harness.captured.getChannelProjectionMessageId("channel-a"), null);
 	assert.equal(harness.captured.captureScrollState("capture-context"), null);
 	assert.doesNotThrow(() => harness.captured.restoreScrollState("scroll-state"));
 });

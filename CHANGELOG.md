@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Display: ordinary received-message transactions and reply-preview host commit/clear/restore/delete now remain on Store-targeted repaint paths. Body and preview surfaces use separate DOM revisions; failures use bounded targeted retry instead of remounting the whole chat and Composer. Historical batching, the 300 ms preview wave, virtualized-on-mount display, live priority, and viewport intent remain unchanged; explicit lifecycle `full` refreshes are the remaining independent cut.
+- Display: ordinary received-message transactions and reply-preview host commit/clear/restore/delete now remain on Store-targeted repaint paths. Channel enablement and primary-engine changes pulse one visible Store projection under the existing viewport anchor instead of scheduling a whole-chat `full` repaint. Body and preview surfaces keep separate DOM revisions and bounded retry; historical batching, the 300 ms preview wave, virtualized-on-mount display, live priority, channel isolation, and viewport intent remain unchanged. Plugin start/stop and settings reinitialization remain separate lifecycle work.
 
 ## v0.3.40
 

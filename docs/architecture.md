@@ -8,7 +8,7 @@ This document describes the current runtime boundaries and migration rules. User
 
 - Release line: v0.3.40.
 - Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
-- Published v0.3.40 build ID: `c0b27e1479677971`; current repository build ID: `c0b27e1479677971`.
+- Published v0.3.40 build ID: `c0b27e1479677971`; current repository candidate build ID: `888308bed3551076`.
 - Legacy composition-root ratchet: 3,248 lines and two module-level shared declarators; Slice 5d originally closed at 3,260 before later bounded wiring extraction.
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
 - Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
@@ -39,7 +39,7 @@ The build uses esbuild in CommonJS mode with an ES2020 target, preserves the Bet
 | --- | --- | --- |
 | Received message state | `src/display/message-state-store.js` | Immutable source, request identity, automatic/manual origin, suppression, preview state, display revision, and restore archive |
 | Display transactions | `src/display/translation-display-controller.js`, `src/display/display-runtime.js`, `src/display/display-runtime-wiring.js` | One channel-scoped commit boundary for message IDs and reply-preview host IDs; one adapter owns Flux/Store, browser, timer, capsule, and viewport ports |
-| Row repaint and fallback | `src/display/flux-row-repaint.js`, `src/display/discord-render-adapter.js`, `src/display/repaint-scheduler.js`, `src/display/repaint-scheduler-wiring.js` | Flux row merge first; body and preview-host DOM revisions confirm independently; all message surfaces stay targeted, while explicit lifecycle work retains separately counted `full` repaint |
+| Row repaint and fallback | `src/display/flux-row-repaint.js`, `src/display/discord-render-adapter.js`, `src/display/display-runtime.js`, `src/display/repaint-scheduler.js` | Flux row merge first; body and preview-host DOM revisions confirm independently; channel/provider changes pulse one anchored Store projection; plugin lifecycle remains separate |
 | Historical acquisition and batching | `src/received/historical-source-runtime.js`, `src/orchestrator/historical-snapshot-cadence.js`, `src/orchestrator/historical-snapshot-cadence-wiring.js`, `src/orchestrator/historical-translation-job.js` | Immutable channel jobs, 500 ms quiet-window sealing, waiting-job absorption, one atomic batch commit; one adapter owns cadence host ports |
 | Live scheduling | `src/orchestrator/live-translation-queue.js`, `src/orchestrator/live-translation-queue-wiring.js` | High-priority channel-aware work that is not delayed behind historical collection; one adapter owns plugin policy/display/history/session ports and managed retry timers |
 | Message deletion lifecycle | `src/lifecycle/message-deletion-lifecycle.js`, `src/lifecycle/message-deletion-lifecycle-wiring.js` | Direct Store subscriptions; channel-scoped live/history/cache/display cleanup; one adapter owns cleanup fan-out and dispatcher resolution |
@@ -172,7 +172,7 @@ npm run verify
 ## Known Debt
 
 - `src/legacy/runtime.js` remains a 3,248-line legacy facade; further shrinkage requires a separately scoped ownership contract rather than an open-ended line-count task.
-- Ordinary and reply-preview message transactions no longer enter whole-chat fallback. Explicit channel/provider/plugin lifecycle refreshes can still increment `full` and remount/refresh the Composer; they are the remaining render-boundary slice.
+- Ordinary and reply-preview transactions plus channel enablement and primary-engine changes no longer enter whole-chat repaint. Plugin start/stop and settings reinitialization still use explicit host lifecycle refreshes and remain the independent render-boundary debt.
 - Provider abort support and lifecycle task registry cleanup remain observation-gated in `recovery-plan.md`; automatic multi-page history fetching is parked after field rollback, while direct Store message-delete subscriptions are field-closed.
 - Discord internal store and snapshot shapes require re-observation after client updates.
 - Some modules remain large and should split only when ownership contracts and regression tests exist.
