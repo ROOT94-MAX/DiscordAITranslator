@@ -9,7 +9,7 @@ This document describes the current runtime boundaries and migration rules. User
 - Release line: v0.3.40.
 - Distribution artifact: one readable `DiscordAITranslator.plugin.js` file generated deterministically from `src/`.
 - Published v0.3.40 build ID: `c0b27e1479677971`; current repository build ID: `c0b27e1479677971`.
-- Legacy composition-root ratchet: 3,260 lines and two module-level shared declarators.
+- Legacy composition-root ratchet: 3,248 lines and two module-level shared declarators; Slice 5d originally closed at 3,260 before later bounded wiring extraction.
 - Release verification: deterministic build check, syntax check, release-contract checks, and the complete Node test suite through `npm run verify`.
 - Display strategy: mounted message rows attempt a channel-scoped Flux `MESSAGE_UPDATE` merge first. A whole-chat rebuild is a confirmed fallback, not the default per-result path.
 
@@ -39,7 +39,7 @@ The build uses esbuild in CommonJS mode with an ES2020 target, preserves the Bet
 | --- | --- | --- |
 | Received message state | `src/display/message-state-store.js` | Immutable source, request identity, automatic/manual origin, suppression, preview state, display revision, and restore archive |
 | Display transactions | `src/display/translation-display-controller.js`, `src/display/display-runtime.js`, `src/display/display-runtime-wiring.js` | One channel-scoped commit boundary for message IDs and reply-preview host IDs; one adapter owns Flux/Store, browser, timer, capsule, and viewport ports |
-| Row repaint and fallback | `src/display/flux-row-repaint.js`, `src/display/discord-render-adapter.js`, `src/display/repaint-scheduler.js`, `src/display/repaint-scheduler-wiring.js` | Flux row merge first; DOM revision confirmation; at most one whole-chat fallback per transaction; one adapter owns Discord-state gates, managed timers, lifecycle repaint, and render-outcome reporting |
+| Row repaint and fallback | `src/display/flux-row-repaint.js`, `src/display/discord-render-adapter.js`, `src/display/repaint-scheduler.js`, `src/display/repaint-scheduler-wiring.js` | Flux row merge first; DOM revision confirmation; ordinary rows stay targeted through bounded retry, while explicit special-host/lifecycle work retains a separately visible fallback |
 | Historical acquisition and batching | `src/received/historical-source-runtime.js`, `src/orchestrator/historical-snapshot-cadence.js`, `src/orchestrator/historical-snapshot-cadence-wiring.js`, `src/orchestrator/historical-translation-job.js` | Immutable channel jobs, 500 ms quiet-window sealing, waiting-job absorption, one atomic batch commit; one adapter owns cadence host ports |
 | Live scheduling | `src/orchestrator/live-translation-queue.js`, `src/orchestrator/live-translation-queue-wiring.js` | High-priority channel-aware work that is not delayed behind historical collection; one adapter owns plugin policy/display/history/session ports and managed retry timers |
 | Message deletion lifecycle | `src/lifecycle/message-deletion-lifecycle.js`, `src/lifecycle/message-deletion-lifecycle-wiring.js` | Direct Store subscriptions; channel-scoped live/history/cache/display cleanup; one adapter owns cleanup fan-out and dispatcher resolution |
@@ -75,7 +75,7 @@ The build uses esbuild in CommonJS mode with an ES2020 target, preserves the Bet
 4. Dispatch through the channel's effective primary provider, then the global backup when permitted.
 5. Validate the terminal result and commit translation state.
 6. Start one ID-scoped display transaction.
-7. Attempt Flux row repaint and confirm the exact DOM revision. Use the whole-chat fallback only for unresolved mounted rows or host surfaces that require it.
+7. Attempt Flux row repaint and confirm the exact DOM revision. An unresolved ordinary row stays on bounded targeted retry and never remounts the Composer; special host surfaces remain a separate fallback boundary.
 
 Manual translation uses the same state and display transaction chain. Manual untranslate restores the archived source and suppresses immediate cached automatic repaint for that message.
 
@@ -97,9 +97,9 @@ The snapshot is cloned with its prototype and forward-reference fields preserved
 
 A display transaction contains a channel ID, translated message IDs, host reply-row IDs, expected revisions, trigger lanes, and viewport intent captured for that transaction. The controller commits state before paint and records whether each row is mounted, confirmed, virtualized-ready, skipped, failed, or unresolved.
 
-For mounted ordinary rows, `flux-row-repaint.js` dispatches the experiment-verified no-op `MESSAGE_UPDATE` merge through Discord's store dispatcher. Confirmation runs after the asynchronous store render. Rows already carrying the expected revision require no repaint.
+For mounted ordinary rows, `flux-row-repaint.js` dispatches a no-op-by-value `MESSAGE_UPDATE` merge through Discord's Store dispatcher. Current-client evidence confirms one message-list projection render with Composer/input/row/scroller identities preserved; exact DOM revision confirmation remains the visible-success verdict. Rows already carrying the expected revision require no repaint.
 
-`discord-render-adapter.js` performs one whole-chat rebuild only when row-level confirmation or a host surface still requires it. Function-component registry handles remain opportunistic because the current client exposes synthetic `{props}` objects without a class updater. The retired synchronous blank/remount implementation and adapter seam have been removed; its field verdict remains in the debugging handoff.
+`discord-render-adapter.js` returns unresolved ordinary rows to the bounded scheduler without widening them into a whole-chat rebuild. Special host surfaces still retain one explicit fallback while they await their own targeted route. Function-component registry handles remain opportunistic because the current client exposes synthetic `{props}` objects without a class updater. The retired synchronous blank/remount implementation and adapter seam remain deleted.
 
 ## Viewport Ownership
 
@@ -171,8 +171,8 @@ npm run verify
 
 ## Known Debt
 
-- `src/legacy/runtime.js` remains a 3,260-line legacy facade; further shrinkage requires a separately scoped ownership contract rather than an open-ended line-count task.
-- Whole-chat fallback diagnostics (`R`) can still remount/refresh the composer and its input row. The combined display-wiring PTB check on build `65a775c63d76dffa` reproduced this pre-existing behavior; it is explicitly parked for later render-boundary work.
+- `src/legacy/runtime.js` remains a 3,248-line legacy facade; further shrinkage requires a separately scoped ownership contract rather than an open-ended line-count task.
+- Ordinary message transactions no longer enter whole-chat fallback. Reply-preview hosts and explicit channel/lifecycle refreshes can still emit diagnostic `R` and remount/refresh the Composer; they remain separate render-boundary slices.
 - Provider abort support and lifecycle task registry cleanup remain observation-gated in `recovery-plan.md`; automatic multi-page history fetching is parked after field rollback, while direct Store message-delete subscriptions are field-closed.
 - Discord internal store and snapshot shapes require re-observation after client updates.
 - Some modules remain large and should split only when ownership contracts and regression tests exist.

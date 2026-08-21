@@ -2,13 +2,10 @@
 // store immediately; only the repaint is scheduled here, so deferring never loses a
 // translation - it only delays the paint.
 //
-// Both paths below end in the same whole-list rebuild; there is no owner-update
-// repaint (measured no-op, see discord-render-adapter). What this module owns is
-// cadence: the transaction path (schedule/flush) coalesces per-message requests,
-// keeps rows single-flight, and bounds retries so the render adapter rebuilds at
-// most once per transaction. The retained full-list path (scheduleFullRepaint)
-// serves the display owners not yet migrated - manual translation, reply previews,
-// embeds, titles - and defers around open settings and a focused text area.
+// The transaction path (schedule/flush) coalesces ID-scoped Store repaints, keeps
+// rows single-flight, and bounds retries without widening ordinary messages into a
+// whole-chat rebuild. The retained scheduleFullRepaint path is channel/lifecycle
+// compatibility work and defers around open settings and a focused text area.
 // 120ms is a pinned product ceiling, not a tuning knob: the throughput contract
 // asserts live translations add no more than 200ms display delay. A 2026-08-19
 // attempt to raise it for startup-bounce smoothing was reverted for that reason.

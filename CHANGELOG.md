@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Display: ordinary received-message transactions now remain on the Store-targeted repaint path; DOM confirmation failure uses bounded targeted retry instead of remounting the whole chat and Composer. Historical batching, virtualized-on-mount display, live priority, and viewport intent remain unchanged; reply-preview hosts and explicit lifecycle refreshes are tracked as later independent cuts.
+
 ## v0.3.40
 
 - Architecture: 完成 Slice 5d composition-root 收口；新增 19 个延迟单例的显式白名单与每项最多 8 行的紧凑边界契约，确认 `runtime.js` 终态为 3,260 行和两个模块级可变声明。后续渲染、生命周期及大模块债务继续按独立证据开启，不再把无边界的继续缩行列为活动任务

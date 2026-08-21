@@ -1,17 +1,15 @@
-// Per-row repaint through Discord's own store path - the verified endgame route
-// (recovery plan route 1; field experiment 2026-08-19, evidence in
-// translator-message-update-experiment.json). A synthetic MESSAGE_UPDATE whose
+// Per-row repaint through Discord's own store path. A synthetic MESSAGE_UPDATE whose
 // partial `message` carries the record's own current content is a no-op by value:
-// the store handler MERGES (embeds and attachments survived the experiment), the
-// row re-renders through Discord's normal path, and the content render patch
-// re-applies the translation - no whole-layer rebuild, no composer remount, no
-// scroll-restore dance. The payload mirrors the probe-captured real event exactly
-// at the top level ({type, guildId, message}); __translatorSynthetic marks it for
-// any handler that must ignore our own dispatches.
+// the store handler MERGES (embeds and attachments survive), and current-client probe
+// evidence shows the message-list projection renders while the Composer, active input,
+// row element and scroller identities stay stable. A changed display view is accepted
+// only after the adapter sees its exact DOM revision. The payload mirrors the captured
+// real event at the top level; __translatorSynthetic marks it for handlers that ignore
+// plugin-originated dispatches.
 //
 // Safety posture: rows without a store record are not attempted, every dispatch is
-// individually guarded, and the adapter's DOM confirm still owns the verdict - an
-// unconfirmed row falls through to the rebuild exactly as before.
+// individually guarded, and the adapter's DOM confirm still owns the verdict. An
+// unconfirmed ordinary row remains on bounded targeted retry or paints on mount.
 const MESSAGE_UPDATE_ACTION = "MESSAGE_UPDATE";
 
 function createFluxRowRepaint({resolveDispatcher = () => null, getStoreMessage = () => null, getGuildId = () => null} = {}) {

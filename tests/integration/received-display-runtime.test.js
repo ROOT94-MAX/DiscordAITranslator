@@ -64,7 +64,8 @@ test("a confirmed render acknowledgement marks the committed revision confirmed"
 		const outcome = await plugin.commitReceivedDisplayResult(translatedResult());
 
 		assert.deepEqual(outcome, {confirmedIds: ["message-1"], missingIds: [], fallbackUsed: false});
-		assert.equal(calls.rerenderAll, 1);
+		assert.equal(calls.messageUpdates, 1);
+		assert.equal(calls.rerenderAll, 0, "ordinary acknowledgement must preserve the Composer boundary");
 		assert.equal(plugin.getReceivedDisplayView("message-1").renderStatus, "confirmed");
 	}
 	finally {harness.restore();}
