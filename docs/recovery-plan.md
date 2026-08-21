@@ -8,7 +8,7 @@ Completed incident history, rejected approaches, and field evidence live in `fie
 
 Everything in this section is already shipped or verified. It is retained only so future work starts from the correct current state.
 
-- v0.3.40 is published from `master` as one deterministic `DiscordAITranslator.plugin.js` artifact.
+- v0.3.41 is published from `master` as one deterministic `DiscordAITranslator.plugin.js` artifact.
 - Mounted ordinary messages use Flux/Store row repaint and bounded targeted retry; confirmation failure no longer widens into a whole-chat rebuild.
 - Historical snapshots seal after a 500 ms quiet window, compatible waiting work merges before start, and one job commits one display batch.
 - Viewport restoration is owned by `MessageViewportStore` and obeys newer user scroll intent.
@@ -27,11 +27,11 @@ Working rules:
 4. Use debug probes only to answer a bounded question; keep raw evidence outside Git.
 5. Require PTB observation when a change crosses Discord's render, Store, snapshot, or viewport boundary.
 
-## Active: Composer Isolation
+## Verified Completed: Composer Isolation
 
-**Status: ORDINARY AND PREVIEW FIELD ROUTES CONFIRMED; CHANNEL/PROVIDER LIFECYCLE CUT IMPLEMENTED, FIELD GATE OPEN.** Ordinary live, cached, historical, manual, restore, and reply-preview transactions remain on Store-targeted routes. Channel enablement and primary-engine changes now pulse one visible message-list projection under the viewport owner's anchor instead of scheduling a whole-chat repaint. Virtualized rows paint on mount. The implementation preserves the 500 ms historical quiet window, one historical display transaction, the 300 ms preview wave, live priority, channel isolation, and the single viewport owner.
+**Status: COMPLETE AND FIELD-CONFIRMED.** Ordinary live, cached, historical, manual, restore, and reply-preview transactions remain on Store-targeted routes. Channel enablement and primary-engine changes pulse one visible message-list projection under the viewport owner's anchor instead of scheduling a whole-chat repaint. Virtualized rows paint on mount. The implementation preserves the 500 ms historical quiet window, one historical display transaction, the 300 ms preview wave, live priority, channel isolation, and the single viewport owner.
 
-Current-client evidence for probe `1eb82dee729eaf05` shows one synthetic `MESSAGE_UPDATE` caused one message-list projection render while preserving the Composer, active input element, target row, scroller, draft length, and scroll offset. Ordinary candidate `3cd42fa098e0f7a4` produced `4L/5R (prev 5) · full 2`; preview candidate `594a8699a7d2c1b2` then produced `5L/0R · full 1`, proving both message surfaces and isolating the final counted repaint to channel/provider lifecycle. Candidate `888308bed3551076` replaces those two triggers with one anchored Store projection pulse. Plugin start/stop and settings reinitialization remain independent. Do not revive parent-forceUpdate, synchronous atomic rebuild, per-row history transactions, or long global debounce.
+Current-client probe `1eb82dee729eaf05` showed one synthetic `MESSAGE_UPDATE` caused one message-list projection render while preserving the Composer, active input, target row, scroller, draft length, and scroll offset. Ordinary candidate `3cd42fa098e0f7a4` produced `4L/5R (prev 5) · full 2`; preview candidate `594a8699a7d2c1b2` produced `5L/0R · full 1`; final build `888308bed3551076` advanced from `12L/0R` to `17L/0R` with no `full`. After clearing all 500 result-cache entries, the cold path reported `4L/0R`, and the user reported no remaining issue. Plugin start/stop and settings reinitialization remain independent lifecycle work. Do not revive parent-forceUpdate, synchronous atomic rebuild, per-row history transactions, long global debounce, or cache-confounded validation.
 
 ## Parked: Historical Source Completeness
 
@@ -75,7 +75,7 @@ Preserved decisions:
 - Treat capsule restyling as a separate decision after both settings surfaces are stable.
 - Begin with a current control-to-setting contract inventory; do not implement from the archived line numbers or old branch assumptions.
 
-Restart this work only after a fresh recon against the current `settings-panel.js`, `translate-components.js`, labels, styles, and v0.3.40+ tests.
+Restart this work only after a fresh recon against the current `settings-panel.js`, `translate-components.js`, labels, styles, and v0.3.41+ tests.
 
 ## Delivery Gate
 
