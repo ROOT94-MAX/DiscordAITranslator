@@ -3,39 +3,20 @@
 // Real-client evidence (docs/recovery-plan.md, 2026-08-13): message rows are
 // functional/memoized components, and React forceUpdate on every candidate around the
 // channel-stream boundary is a measured no-op (caused: false) - the strategy that
-// froze the client when deployed. The mechanism users actually saw working is the one
-// the 2026-06 plugin shipped: BDFDB.MessageUtils.rerenderAll(true) unmounts and
-// rebuilds the chat layer, which crosses the Composer boundary. Ordinary message
-// transactions therefore stay on the targeted path even when confirmation is still
-// pending; only special host surfaces not yet given a row route retain that fallback.
-//
-// What made the old plugin freeze was frequency, not the primitive. This adapter keeps
-// the rebuild affordable with three rules:
-// - at most ONE rebuild per transaction, never a rebuild-per-retry;
-// - rows already showing their expected revision confirm from the DOM without any
-//   rebuild, so scheduler retries are read-only once the paint landed;
-// - a batch whose rows are all virtualised (no DOM node) never rebuilds - absent rows
-//   paint from the store when they mount.
+// froze the client when deployed. Whole-chat reconstruction crosses the Composer and
+// virtual-list boundary, so this adapter no longer owns that primitive. Ordinary body
+// views confirm `data-translator-revision`; reply hosts confirm their independent
+// `data-translator-preview-revision`. Unresolved mounted surfaces re-enter bounded
+// targeted retry, while virtualised surfaces paint from store state on mount.
 // Scroll safety (bottom lock, anchor restore, user-gesture guard) lives in the
 // injected captureScrollState/restoreScrollState from the viewport store.
 function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, getUserScrollIntentSequence, captureScrollState, restoreScrollState, restoreScrollStateNow = () => {}, isRuntimeActive = () => true, liveRowRepaint = null}) {
-	// Which path painted, surfaced in the settings panel so a user screenshot
-	// answers what no non-technical report can: live = per-row self-repaint
-	// (no rebuild), rebuild = BDFDB whole-layer rebuild. rebuildsBySource books each
-	// rebuild once per trigger lane present in the transaction (live, cached,
-	// historical, manual, retry - cadence audit 2026-08-19), and recentRebuilds keeps
-	// a small ring so a debug session can read the exact storm pattern.
+	// Kept shape-compatible with the settings diagnostic: live counts confirmed
+	// targeted waves. Adapter rebuild counters now remain zero; explicit lifecycle
+	// `full` repaint accounting is owned by repaint-scheduler.js.
 	const rebuildStats = {live: 0, rebuild: 0};
 	const rebuildsBySource = {};
 	const recentRebuilds = [];
-	const RECENT_REBUILD_LIMIT = 40;
-	function bookRebuild(sources, size) {
-		rebuildStats.rebuild++;
-		const sourceKeys = sources && typeof sources == "object" ? Object.keys(sources) : [];
-		for (const source of sourceKeys.length ? sourceKeys : ["other"]) rebuildsBySource[source] = (rebuildsBySource[source] || 0) + 1;
-		recentRebuilds.push({at: Date.now(), size, sources: Object.assign({}, sources || {})});
-		if (recentRebuilds.length > RECENT_REBUILD_LIMIT) recentRebuilds.shift();
-	}
 	function escapeAttributeValue(value) {
 		return String(value).replace(/(["\\])/g, "\\$1");
 	}
@@ -165,39 +146,49 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 		});
 	}
 
+	function confirmOwnerViews(messageIds, viewsByMessageId) {
+		return messageIds.filter(messageId => {
+			const view = viewsByMessageId.get(String(messageId));
+			const element = view && findMessageElement(messageId);
+			if (!element || typeof element.querySelector != "function") return false;
+			try {return !!element.querySelector(`[data-translator-preview-revision="${escapeAttributeValue(view.revision)}"]`);}
+			catch (error) {return false;}
+		});
+	}
+
 	return {
 		getRebuildStats: () => Object.assign({}, rebuildStats, {
 			rebuildsBySource: Object.assign({}, rebuildsBySource),
 			recentRebuilds: recentRebuilds.map(entry => Object.assign({}, entry, {sources: Object.assign({}, entry.sources)}))
 		}),
-		async refreshMessages({channelId = null, messageIds = [], ownerMessageIds = [], views = [], sources = null}) {
+		async refreshMessages({channelId = null, messageIds = [], ownerMessageIds = [], ownerViews = [], views = [], sources = null}) {
 			const uniqueMessageIds = getUniqueMessageIds(messageIds);
+			const uniqueOwnerMessageIds = getUniqueMessageIds(ownerMessageIds);
 			const viewsByMessageId = getViewsByMessageId(views);
+			const ownerViewsByMessageId = getViewsByMessageId(ownerViews);
 			const presentIds = uniqueMessageIds.filter(messageId => !!findMessageElement(messageId));
 			const deferredIds = uniqueMessageIds.filter(messageId => !presentIds.includes(messageId));
-			// Read-only pre-check: whatever the last rebuild already painted needs no
-			// further work. This is what breaks the rebuild-per-retry loop.
+			const presentOwnerIds = uniqueOwnerMessageIds.filter(messageId => !!findMessageElement(messageId));
+			const deferredOwnerIds = uniqueOwnerMessageIds.filter(messageId => !presentOwnerIds.includes(messageId));
+			// Read-only pre-check: already-confirmed surfaces need no Store dispatch.
 			let confirmedIds = confirmViews(presentIds, viewsByMessageId);
 			let unconfirmedIds = presentIds.filter(messageId => !confirmedIds.includes(messageId));
-			// Reply-preview hosts carry no revision marker; a mounted host is reason
-			// enough to rebuild so its preview repaints with the list.
-			const hostNeedsPaint = getUniqueMessageIds(ownerMessageIds).some(messageId => !!findMessageElement(messageId));
-			const needsRebuild = unconfirmedIds.length > 0 || hostNeedsPaint;
-			if (!needsRebuild) return {confirmedIds, missingIds: [], deferredIds, retryIds: [], fallbackUsed: false};
-			if (!isRuntimeActive()) return {confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], fallbackUsed: false};
+			let confirmedOwnerIds = confirmOwnerViews(presentOwnerIds, ownerViewsByMessageId);
+			let unconfirmedOwnerIds = presentOwnerIds.filter(messageId => !confirmedOwnerIds.includes(messageId));
+			const needsPaint = unconfirmedIds.length > 0 || unconfirmedOwnerIds.length > 0;
+			if (!needsPaint) return {confirmedIds, missingIds: [], deferredIds, retryIds: [], confirmedOwnerIds, missingOwnerIds: [], deferredOwnerIds, retryOwnerIds: [], fallbackUsed: false};
+			if (!isRuntimeActive()) return {confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], confirmedOwnerIds, missingOwnerIds: [], deferredOwnerIds: deferredOwnerIds.concat(unconfirmedOwnerIds), retryOwnerIds: [], fallbackUsed: false};
 			const intentSequence = getUserScrollIntentSequence();
 			const scroller = document.querySelector(BDFDB.dotCN.messagesscroller);
-			const scrollState = scroller ? captureScrollState({messageIds: uniqueMessageIds}) : null;
+			const scrollState = scroller ? captureScrollState({messageIds: uniqueMessageIds.concat(uniqueOwnerMessageIds)}) : null;
 			let renderError;
 			let hasRenderError = false;
 			try {
-				// Live path first (2026-08-19, the fix for one-rebuild-per-translation-wave):
-				// rows repaint themselves through their registered content instances or the
-				// Store dispatcher. Ordinary rows never widen an unconfirmed result into a
-				// whole-chat rebuild: the scheduler owns their bounded retry, and a row that
-				// remains virtualised or unresolved paints from store state on a later mount.
-				if (!hostNeedsPaint && liveRowRepaint && unconfirmedIds.length) {
-					const attemptedIds = liveRowRepaint.repaintRows(unconfirmedIds, {channelId});
+				// Ordinary content rows may use a registered class instance; reply hosts always
+				// use the Store dispatcher because their preview sits above MessageContent.
+				if (liveRowRepaint && (unconfirmedIds.length || unconfirmedOwnerIds.length)) {
+					const targets = getUniqueMessageIds(unconfirmedIds.concat(unconfirmedOwnerIds));
+					const attemptedIds = liveRowRepaint.repaintRows(targets, {channelId, ownerMessageIds: unconfirmedOwnerIds});
 					if (attemptedIds.length) {
 						if (scrollState && intentSequence === getUserScrollIntentSequence()) {
 							try {restoreScrollStateNow(scrollState);}
@@ -206,40 +197,35 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 						await waitForPaint();
 						confirmedIds = confirmViews(presentIds, viewsByMessageId);
 						unconfirmedIds = presentIds.filter(messageId => !confirmedIds.includes(messageId));
-						// The flux route re-renders asynchronously through the store; give
-						// React one more frame to commit before concluding the row needs
-						// the whole-layer rebuild.
-						if (unconfirmedIds.length) {
+						confirmedOwnerIds = confirmOwnerViews(presentOwnerIds, ownerViewsByMessageId);
+						unconfirmedOwnerIds = presentOwnerIds.filter(messageId => !confirmedOwnerIds.includes(messageId));
+						// Store projection is asynchronous; allow one additional paint before
+						// returning unresolved surfaces to their bounded retry owners.
+						if (unconfirmedIds.length || unconfirmedOwnerIds.length) {
 							await waitForPaint();
 							confirmedIds = confirmViews(presentIds, viewsByMessageId);
 							unconfirmedIds = presentIds.filter(messageId => !confirmedIds.includes(messageId));
+							confirmedOwnerIds = confirmOwnerViews(presentOwnerIds, ownerViewsByMessageId);
+							unconfirmedOwnerIds = presentOwnerIds.filter(messageId => !confirmedOwnerIds.includes(messageId));
 						}
-						if (!unconfirmedIds.length) {
+						if (!unconfirmedIds.length && !unconfirmedOwnerIds.length) {
 							rebuildStats.live++;
-							return {confirmedIds, missingIds: [], deferredIds, retryIds: [], fallbackUsed: false};
+							return {confirmedIds, missingIds: [], deferredIds, retryIds: [], confirmedOwnerIds, missingOwnerIds: [], deferredOwnerIds, retryOwnerIds: [], fallbackUsed: false};
 						}
 					}
 				}
-				if (!hostNeedsPaint) return {
+				if (!isRuntimeActive()) return {confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], confirmedOwnerIds, missingOwnerIds: [], deferredOwnerIds: deferredOwnerIds.concat(unconfirmedOwnerIds), retryOwnerIds: [], fallbackUsed: false};
+				return {
 					confirmedIds,
 					missingIds: unconfirmedIds,
 					deferredIds,
 					retryIds: unconfirmedIds.slice(),
+					confirmedOwnerIds,
+					missingOwnerIds: unconfirmedOwnerIds,
+					deferredOwnerIds,
+					retryOwnerIds: unconfirmedOwnerIds.slice(),
 					fallbackUsed: false
 				};
-				bookRebuild(sources, uniqueMessageIds.length);
-				BDFDB.MessageUtils.rerenderAll(true);
-				await waitForPaint();
-				confirmedIds = confirmViews(presentIds, viewsByMessageId);
-				unconfirmedIds = presentIds.filter(messageId => !confirmedIds.includes(messageId));
-				// The rebuild settles asynchronously (a timeout plus two render passes),
-				// so an unconfirmed row gets one more read-only look after another paint.
-				// Never a second rebuild: retries go through the bounded scheduler path.
-				if (unconfirmedIds.length) {
-					await waitForPaint();
-					confirmedIds = confirmViews(presentIds, viewsByMessageId);
-					unconfirmedIds = presentIds.filter(messageId => !confirmedIds.includes(messageId));
-				}
 			}
 			catch (err) {
 				renderError = err;
@@ -257,12 +243,16 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 				}
 			}
 			if (hasRenderError) throw renderError;
-			if (!isRuntimeActive()) return {confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], fallbackUsed: false};
+			if (!isRuntimeActive()) return {confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], confirmedOwnerIds, missingOwnerIds: [], deferredOwnerIds: deferredOwnerIds.concat(unconfirmedOwnerIds), retryOwnerIds: [], fallbackUsed: false};
 			return {
 				confirmedIds,
 				missingIds: unconfirmedIds,
 				deferredIds,
 				retryIds: unconfirmedIds.slice(),
+				confirmedOwnerIds,
+				missingOwnerIds: unconfirmedOwnerIds,
+				deferredOwnerIds,
+				retryOwnerIds: unconfirmedOwnerIds.slice(),
 				fallbackUsed: false
 			};
 		}

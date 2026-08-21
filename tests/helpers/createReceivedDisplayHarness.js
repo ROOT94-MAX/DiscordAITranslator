@@ -10,6 +10,8 @@ function createHarness({confirmAfterFallback = true, mountedMessageIds = null} =
 	const mounted = mountedMessageIds && new Set(mountedMessageIds.map(String));
 	const paintedRevisions = new Map();
 	const requestedRevisions = new Map();
+	const paintedPreviewRevisions = new Map();
+	const requestedPreviewRevisions = new Map();
 	const messageElements = new Map();
 	function getMessageElement(messageId) {
 		const id = String(messageId);
@@ -20,9 +22,14 @@ function createHarness({confirmAfterFallback = true, mountedMessageIds = null} =
 			"data-list-item-id": `chat-messages___chat-messages-${id}`,
 			querySelector(selector) {
 				const match = typeof selector == "string" ? selector.match(/data-translator-revision="(\d+)"/) : null;
-				if (!match) return null;
-				requestedRevisions.set(id, Number(match[1]));
-				return paintedRevisions.get(id) === Number(match[1]) ? {} : null;
+				if (match) {
+					requestedRevisions.set(id, Number(match[1]));
+					return paintedRevisions.get(id) === Number(match[1]) ? {} : null;
+				}
+				const previewMatch = typeof selector == "string" ? selector.match(/data-translator-preview-revision="(\d+)"/) : null;
+				if (!previewMatch) return null;
+				requestedPreviewRevisions.set(id, Number(previewMatch[1]));
+				return paintedPreviewRevisions.get(id) === Number(previewMatch[1]) ? {} : null;
 			}
 		});
 		return messageElements.get(id);
@@ -67,6 +74,7 @@ function createHarness({confirmAfterFallback = true, mountedMessageIds = null} =
 			calls.messageUpdates++;
 			calls.messageUpdateIds.push(id);
 			if (confirmAfterFallback && getMessageElement(id) && requestedRevisions.has(id)) paintedRevisions.set(id, requestedRevisions.get(id));
+			if (confirmAfterFallback && getMessageElement(id) && requestedPreviewRevisions.has(id)) paintedPreviewRevisions.set(id, requestedPreviewRevisions.get(id));
 		}
 	};
 	const plugin = createPluginInstance({

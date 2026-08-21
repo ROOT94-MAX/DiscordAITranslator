@@ -27,7 +27,12 @@ function createDisplayRuntime(dependencies) {
 	});
 	const rowRepaint = {
 		repaintRows(messageIds, context) {
-			const attempted = new Set(liveRowRepaint.repaintRows(messageIds));
+			const ownerMessageIds = new Set([].concat(context && context.ownerMessageIds || []).map(String));
+			// A MessageContent class update cannot reach the reply header above it. Preview
+			// hosts always go through Discord's Store row projection; ordinary content rows
+			// may still use the cheaper registered-instance path first.
+			const liveCandidates = messageIds.filter(messageId => !ownerMessageIds.has(String(messageId)));
+			const attempted = new Set(liveRowRepaint.repaintRows(liveCandidates));
 			const remaining = messageIds.filter(messageId => !attempted.has(String(messageId)));
 			if (remaining.length) for (const messageId of fluxRowRepaint.repaintRows(remaining, context || {})) attempted.add(messageId);
 			return [...attempted];
@@ -94,6 +99,10 @@ function createDisplayRuntime(dependencies) {
 		listPreviewed: () => store.listPreviewed(),
 		markPreviewHost: (channelId, referencedMessageId, hostMessageId) => store.markPreviewHost(channelId, referencedMessageId, hostMessageId),
 		getPreviewHostMessageIds: (channelId, referencedMessageIds) => store.getPreviewHostMessageIds(channelId, referencedMessageIds),
+		beginPreviewHostRefresh: (channelId, hostMessageIds) => store.beginPreviewHostRefresh(channelId, hostMessageIds),
+		getPreviewHostRenderRevision: (channelId, hostMessageId) => store.getPreviewHostRenderRevision(channelId, hostMessageId),
+		acknowledgePreviewHostRefresh: (channelId, hostMessageIds) => store.acknowledgePreviewHostRefresh(channelId, hostMessageIds),
+		retirePreviewHostRefresh: (channelId, hostMessageIds) => store.retirePreviewHostRefresh(channelId, hostMessageIds),
 		markPreviewEligible: (channelId, messageId) => store.markPreviewEligible(channelId, messageId),
 		isPreviewEligible: (channelId, messageId) => store.isPreviewEligible(channelId, messageId),
 		clearPreviewEligibility: channelId => store.clearPreviewEligibility(channelId)

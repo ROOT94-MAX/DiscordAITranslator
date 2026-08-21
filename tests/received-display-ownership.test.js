@@ -87,18 +87,16 @@ test("automatic translation flows never fall back to the whole-list repaint", ()
 	}
 });
 
-test("the display adapter returns ordinary unresolved rows before the special-host rebuild", () => {
+test("the display adapter contains no whole-chat primitive for ordinary or preview transactions", () => {
 	// The former contract stopped at the controller seam and missed rerenderAll inside
 	// the adapter, producing a false-green while ordinary transactions still remounted
 	// the Composer. Pin the actual terminal owner and the ordering of its two exits.
 	const methodStart = SOURCES.adapter.indexOf("async refreshMessages");
-	const ordinaryExit = SOURCES.adapter.indexOf("if (!hostNeedsPaint) return", methodStart);
-	const rebuildCall = SOURCES.adapter.indexOf("BDFDB.MessageUtils.rerenderAll(true)", ordinaryExit);
 	assert.notEqual(methodStart, -1);
-	assert.notEqual(ordinaryExit, -1);
-	assert.notEqual(rebuildCall, -1, "special hosts temporarily retain the explicit fallback");
-	assert.doesNotMatch(SOURCES.adapter.slice(methodStart, ordinaryExit), /MessageUtils\.rerenderAll/, "ordinary rows must exit before any whole-chat primitive");
-	assert.ok(ordinaryExit < rebuildCall, "only the special-host branch can reach the rebuild");
+	const method = SOURCES.adapter.slice(methodStart);
+	assert.doesNotMatch(method, /BDFDB\.MessageUtils\.rerenderAll/, "message and preview display both stay below the Composer boundary");
+	assert.match(method, /ownerViews/);
+	assert.match(SOURCES.adapter, /data-translator-preview-revision/);
 });
 
 test("the extracted live queue cannot reach display state at all", () => {

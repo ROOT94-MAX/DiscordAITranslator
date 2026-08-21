@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.40
- * @buildId 3cd42fa098e0f7a4
+ * @buildId 594a8699a7d2c1b2
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -130,7 +130,7 @@ var require_message_state_store = __commonJS({
     __name(createBaseRecord, "createBaseRecord");
     function createMessageStateStore({ journal = null, onTranslationDisplayed = /* @__PURE__ */ __name(() => {
     }, "onTranslationDisplayed") } = {}) {
-      let records = /* @__PURE__ */ new Map(), channelMessageIds = /* @__PURE__ */ new Map(), channelGenerations = /* @__PURE__ */ new Map(), previewEligibility = /* @__PURE__ */ new Map(), previewHostsByChannel = /* @__PURE__ */ new Map(), revision = 0, previewPendingSequence = 0;
+      let records = /* @__PURE__ */ new Map(), channelMessageIds = /* @__PURE__ */ new Map(), channelGenerations = /* @__PURE__ */ new Map(), previewEligibility = /* @__PURE__ */ new Map(), previewHostsByChannel = /* @__PURE__ */ new Map(), previewHostRenderRevisions = /* @__PURE__ */ new Map(), revision = 0, previewPendingSequence = 0, previewHostRenderRevision = 0;
       function recordTransition(record, transition) {
         return record && record.status === MESSAGE_STATUSES.TRANSLATED && onTranslationDisplayed(record.channelId, record.messageId), !journal || !record || journal.append({ channelId: record.channelId, messageId: record.messageId, revision: record.revision, transition }), record;
       }
@@ -255,6 +255,28 @@ var require_message_state_store = __commonJS({
         return [...hostIds];
       }
       __name(getPreviewHostMessageIds, "getPreviewHostMessageIds");
+      function beginPreviewHostRefresh(channelId, hostMessageIds = []) {
+        let normalizedChannelId = normalizeIdentity(channelId), hostIds = [...new Set(hostMessageIds.map(normalizeIdentity).filter(Boolean))];
+        if (!normalizedChannelId || !hostIds.length) return [];
+        previewHostRenderRevisions.has(normalizedChannelId) || previewHostRenderRevisions.set(normalizedChannelId, /* @__PURE__ */ new Map());
+        let revisions = previewHostRenderRevisions.get(normalizedChannelId), commandRevision = ++previewHostRenderRevision;
+        for (let hostMessageId of hostIds) revisions.set(hostMessageId, commandRevision);
+        return hostIds.map((messageId) => Object.freeze({ messageId, revision: commandRevision, attempt: 1 }));
+      }
+      __name(beginPreviewHostRefresh, "beginPreviewHostRefresh");
+      function getPreviewHostRenderRevision(channelId, hostMessageId) {
+        let revisions = previewHostRenderRevisions.get(normalizeIdentity(channelId));
+        return revisions && revisions.get(normalizeIdentity(hostMessageId)) || null;
+      }
+      __name(getPreviewHostRenderRevision, "getPreviewHostRenderRevision");
+      function retirePreviewHostRefresh(channelId, hostMessageIds = []) {
+        let normalizedChannelId = normalizeIdentity(channelId), revisions = previewHostRenderRevisions.get(normalizedChannelId);
+        if (!revisions) return [];
+        let retired = [];
+        for (let hostMessageId of hostMessageIds.map(normalizeIdentity).filter(Boolean)) revisions.delete(hostMessageId) && retired.push(hostMessageId);
+        return revisions.size || previewHostRenderRevisions.delete(normalizedChannelId), retired;
+      }
+      __name(retirePreviewHostRefresh, "retirePreviewHostRefresh");
       function clearPreviewHostMappings(channelId = null, referencedMessageIds = null) {
         if (channelId == null) return previewHostsByChannel.clear();
         let normalizedChannelId = normalizeIdentity(channelId), references = previewHostsByChannel.get(normalizedChannelId);
@@ -284,7 +306,7 @@ var require_message_state_store = __commonJS({
           references.size || previewHostsByChannel.delete(normalizedChannelId);
         }
         let eligible = previewEligibility.get(normalizedChannelId);
-        return eligible && eligible.delete(normalizedMessageId) && (deleted = !0, eligible.size || previewEligibility.delete(normalizedChannelId)), record && deleteRecord(record) && (deleted = !0), channelMessageIds.has(normalizedChannelId) || channelGenerations.delete(normalizedChannelId), deleted;
+        return eligible && eligible.delete(normalizedMessageId) && (deleted = !0, eligible.size || previewEligibility.delete(normalizedChannelId)), retirePreviewHostRefresh(normalizedChannelId, [normalizedMessageId]), record && deleteRecord(record) && (deleted = !0), channelMessageIds.has(normalizedChannelId) || channelGenerations.delete(normalizedChannelId), deleted;
       }
       return __name(deleteMessage, "deleteMessage"), Object.freeze({
         captureSource(snapshot) {
@@ -355,7 +377,7 @@ var require_message_state_store = __commonJS({
         deleteMessage,
         pruneChannel(channelId) {
           let normalizedChannelId = normalizeIdentity(channelId), inFlightStatuses = /* @__PURE__ */ new Set([MESSAGE_STATUSES.PENDING, MESSAGE_STATUSES.TRANSLATING]), pruned = listChannel(normalizedChannelId).filter((record) => !(record.origin === MESSAGE_ORIGINS.MANUAL && record.status === MESSAGE_STATUSES.TRANSLATED) && !inFlightStatuses.has(record.status) && (record.status !== MESSAGE_STATUSES.CANCELLED || record.renderStatus === RENDER_STATUSES.CONFIRMED) && !record.archive && !record.suppressed && !record.previewPending).filter(deleteRecord);
-          return previewEligibility.delete(normalizedChannelId), clearPreviewHostMappings(normalizedChannelId), channelMessageIds.has(normalizedChannelId) || channelGenerations.delete(normalizedChannelId), pruned;
+          return previewEligibility.delete(normalizedChannelId), clearPreviewHostMappings(normalizedChannelId), previewHostRenderRevisions.delete(normalizedChannelId), channelMessageIds.has(normalizedChannelId) || channelGenerations.delete(normalizedChannelId), pruned;
         },
         resolveChannelId,
         markPending(request) {
@@ -589,6 +611,10 @@ var require_message_state_store = __commonJS({
           return references.has(normalizedReferencedId) || references.set(normalizedReferencedId, /* @__PURE__ */ new Set()), references.get(normalizedReferencedId).add(normalizedHostId), !0;
         },
         getPreviewHostMessageIds,
+        beginPreviewHostRefresh,
+        getPreviewHostRenderRevision,
+        acknowledgePreviewHostRefresh: retirePreviewHostRefresh,
+        retirePreviewHostRefresh,
         markPreviewEligible(channelId, messageId) {
           let normalizedChannelId = normalizeIdentity(channelId), normalizedMessageId = normalizeIdentity(messageId);
           return !normalizedChannelId || !normalizedMessageId ? !1 : (previewEligibility.has(normalizedChannelId) || previewEligibility.set(normalizedChannelId, /* @__PURE__ */ new Set()), previewEligibility.get(normalizedChannelId).add(normalizedMessageId), !0);
@@ -651,7 +677,7 @@ var require_translation_display_controller = __commonJS({
       };
     }
     __name(createEmptyOutcome, "createEmptyOutcome");
-    var DEFERRED_REFRESH_DELAY_MS = 300;
+    var DEFERRED_REFRESH_DELAY_MS = 300, MAX_OWNER_REPAINT_ATTEMPTS = 3;
     function createTranslationDisplayController({
       store,
       renderAdapter,
@@ -665,7 +691,7 @@ var require_translation_display_controller = __commonJS({
       let transactionSequence = 0, pendingRefreshByChannel = /* @__PURE__ */ new Map(), deferredFlushTimer = null;
       function getPendingRefresh(channelId) {
         let key = String(channelId);
-        return pendingRefreshByChannel.has(key) || pendingRefreshByChannel.set(key, { messageIds: /* @__PURE__ */ new Set(), hostMessageIds: /* @__PURE__ */ new Set() }), pendingRefreshByChannel.get(key);
+        return pendingRefreshByChannel.has(key) || pendingRefreshByChannel.set(key, { messageIds: /* @__PURE__ */ new Set(), hostMessageIds: /* @__PURE__ */ new Set(), hostViews: /* @__PURE__ */ new Map() }), pendingRefreshByChannel.get(key);
       }
       __name(getPendingRefresh, "getPendingRefresh");
       function armDeferredFlush() {
@@ -678,9 +704,9 @@ var require_translation_display_controller = __commonJS({
           pendingRefreshByChannel.clear();
           for (let [channelId, wave] of pending) {
             let records = [...wave.messageIds].map((messageId) => store.getDisplayState(messageId)).filter(Boolean), sources = {};
-            records.length && (sources.historical = records.length), wave.hostMessageIds.size && (sources.preview = wave.hostMessageIds.size);
+            records.length && (sources.historical = records.length), (wave.hostMessageIds.size || wave.hostViews.size) && (sources.preview = new Set([].concat([...wave.hostMessageIds], [...wave.hostViews.keys()])).size);
             try {
-              await refreshRecords(records, { channelId, ownerMessageIds: [...wave.hostMessageIds], sources });
+              await refreshRecords(records, { channelId, ownerMessageIds: [...wave.hostMessageIds], ownerViews: [...wave.hostViews.values()], sources });
             } catch {
             }
           }
@@ -691,19 +717,20 @@ var require_translation_display_controller = __commonJS({
         !journal || !view || journal.append({ channelId: view.channelId, messageId: view.messageId, revision: view.revision, transition });
       }
       __name(recordRenderTransition, "recordRenderTransition");
-      async function refreshRecords(records, { channelId = null, ownerMessageIds = [], sources = null } = {}) {
-        if (!records.length && !ownerMessageIds.length) return createEmptyOutcome();
+      async function refreshRecords(records, { channelId = null, ownerMessageIds = [], ownerViews = [], sources = null } = {}) {
+        if (!records.length && !ownerMessageIds.length && !ownerViews.length) return createEmptyOutcome();
         let views = records.map((record) => createDisplayView(store.getDisplayState(record.messageId)));
         if (views.some((view) => !view)) throw new Error("A display transaction requires one view per record");
         let channelIds = new Set(views.map((view) => view.channelId));
         if (channelId != null && channelIds.add(String(channelId)), channelIds.size !== 1) throw new Error("A display transaction cannot span channels");
-        let transactionChannelId = channelIds.values().next().value, requestedViews = new Map(views.map((view) => [String(view.messageId), view]));
+        let transactionChannelId = channelIds.values().next().value, requestedOwnerViews = ownerViews.length ? ownerViews.map((view) => Object.freeze({ ...view, messageId: String(view.messageId), attempt: Math.max(1, view.attempt || 1) })) : store.beginPreviewHostRefresh(transactionChannelId, [...new Set(ownerMessageIds.map(String))]), requestedOwnerMessageIds = requestedOwnerViews.map((view) => view.messageId), requestedOwnerViewsById = new Map(requestedOwnerViews.map((view) => [view.messageId, view])), requestedViews = new Map(views.map((view) => [String(view.messageId), view]));
         for (let view of views) recordRenderTransition(view, "render-requested");
         let rawOutcome = await renderAdapter.refreshMessages({
           transactionId: ++transactionSequence,
           channelId: transactionChannelId,
           messageIds: views.map((view) => view.messageId),
-          ownerMessageIds,
+          ownerMessageIds: requestedOwnerMessageIds,
+          ownerViews: requestedOwnerViews,
           views,
           // Which lanes asked for this paint (cadence audit 2026-08-19); the adapter
           // books its rebuild attribution from these counts.
@@ -719,6 +746,25 @@ var require_translation_display_controller = __commonJS({
         }
         __name(filterCurrentIds, "filterCurrentIds");
         let confirmedIds = filterCurrentIds(rawOutcome.confirmedIds), missingIds = filterCurrentIds(rawOutcome.missingIds), deferredIds = filterCurrentIds(rawOutcome.deferredIds), retryIds = filterCurrentIds(rawOutcome.retryIds);
+        function filterCurrentOwnerIds(messageIds) {
+          return (Array.isArray(messageIds) ? messageIds : []).map(String).filter((messageId) => {
+            let view = requestedOwnerViewsById.get(messageId);
+            return !!(view && store.getPreviewHostRenderRevision(transactionChannelId, messageId) === view.revision);
+          });
+        }
+        __name(filterCurrentOwnerIds, "filterCurrentOwnerIds");
+        let confirmedOwnerIds = filterCurrentOwnerIds(rawOutcome.confirmedOwnerIds), missingOwnerIds = filterCurrentOwnerIds(rawOutcome.missingOwnerIds), deferredOwnerIds = filterCurrentOwnerIds(rawOutcome.deferredOwnerIds), retryOwnerIds = filterCurrentOwnerIds(rawOutcome.retryOwnerIds);
+        confirmedOwnerIds.length && store.acknowledgePreviewHostRefresh(transactionChannelId, confirmedOwnerIds);
+        let ownerRetrySet = new Set(retryOwnerIds.concat(missingOwnerIds));
+        for (let messageId of ownerRetrySet) {
+          let view = requestedOwnerViewsById.get(messageId);
+          if (!view) continue;
+          if (view.attempt >= MAX_OWNER_REPAINT_ATTEMPTS) {
+            store.retirePreviewHostRefresh(transactionChannelId, [messageId]);
+            continue;
+          }
+          getPendingRefresh(transactionChannelId).hostViews.set(messageId, Object.freeze({ ...view, attempt: view.attempt + 1 })), armDeferredFlush();
+        }
         for (let messageId of confirmedIds) recordRenderTransition(requestedViews.get(String(messageId)), "render-confirmed");
         for (let messageId of missingIds) recordRenderTransition(requestedViews.get(String(messageId)), "render-unconfirmed");
         store.markRenderOutcome({ confirmedIds, missingIds });
@@ -728,7 +774,7 @@ var require_translation_display_controller = __commonJS({
           missingIds,
           fallbackUsed: rawOutcome.fallbackUsed === !0
         };
-        return deferredIds.length ? filteredOutcome.deferredIds = deferredIds : delete filteredOutcome.deferredIds, retryIds.length ? filteredOutcome.retryIds = retryIds : delete filteredOutcome.retryIds, staleIds.length && (filteredOutcome.staleIds = staleIds), filteredOutcome;
+        return deferredIds.length ? filteredOutcome.deferredIds = deferredIds : delete filteredOutcome.deferredIds, retryIds.length ? filteredOutcome.retryIds = retryIds : delete filteredOutcome.retryIds, requestedOwnerViews.length ? (filteredOutcome.confirmedOwnerIds = confirmedOwnerIds, filteredOutcome.missingOwnerIds = missingOwnerIds, deferredOwnerIds.length ? filteredOutcome.deferredOwnerIds = deferredOwnerIds : delete filteredOutcome.deferredOwnerIds, retryOwnerIds.length ? filteredOutcome.retryOwnerIds = retryOwnerIds : delete filteredOutcome.retryOwnerIds) : (delete filteredOutcome.confirmedOwnerIds, delete filteredOutcome.missingOwnerIds, delete filteredOutcome.deferredOwnerIds, delete filteredOutcome.retryOwnerIds), staleIds.length && (filteredOutcome.staleIds = staleIds), filteredOutcome;
       }
       return __name(refreshRecords, "refreshRecords"), Object.freeze({
         getDisplayView(messageId) {
@@ -817,14 +863,7 @@ var require_discord_render_adapter = __commonJS({
   "src/display/discord-render-adapter.js"(exports2, module2) {
     function createDiscordRenderAdapter({ BDFDB, document: document2, requestAnimationFrame: requestAnimationFrame2, getUserScrollIntentSequence, captureScrollState, restoreScrollState, restoreScrollStateNow = /* @__PURE__ */ __name(() => {
     }, "restoreScrollStateNow"), isRuntimeActive = /* @__PURE__ */ __name(() => !0, "isRuntimeActive"), liveRowRepaint = null }) {
-      let rebuildStats = { live: 0, rebuild: 0 }, rebuildsBySource = {}, recentRebuilds = [], RECENT_REBUILD_LIMIT = 40;
-      function bookRebuild(sources, size) {
-        rebuildStats.rebuild++;
-        let sourceKeys = sources && typeof sources == "object" ? Object.keys(sources) : [];
-        for (let source of sourceKeys.length ? sourceKeys : ["other"]) rebuildsBySource[source] = (rebuildsBySource[source] || 0) + 1;
-        recentRebuilds.push({ at: Date.now(), size, sources: Object.assign({}, sources || {}) }), recentRebuilds.length > RECENT_REBUILD_LIMIT && recentRebuilds.shift();
-      }
-      __name(bookRebuild, "bookRebuild");
+      let rebuildStats = { live: 0, rebuild: 0 }, rebuildsBySource = {}, recentRebuilds = [];
       function escapeAttributeValue(value) {
         return String(value).replace(/(["\\])/g, "\\$1");
       }
@@ -937,34 +976,52 @@ var require_discord_render_adapter = __commonJS({
           }
         });
       }
-      return __name(confirmViews, "confirmViews"), {
+      __name(confirmViews, "confirmViews");
+      function confirmOwnerViews(messageIds, viewsByMessageId) {
+        return messageIds.filter((messageId) => {
+          let view = viewsByMessageId.get(String(messageId)), element = view && findMessageElement(messageId);
+          if (!element || typeof element.querySelector != "function") return !1;
+          try {
+            return !!element.querySelector(`[data-translator-preview-revision="${escapeAttributeValue(view.revision)}"]`);
+          } catch {
+            return !1;
+          }
+        });
+      }
+      return __name(confirmOwnerViews, "confirmOwnerViews"), {
         getRebuildStats: /* @__PURE__ */ __name(() => Object.assign({}, rebuildStats, {
           rebuildsBySource: Object.assign({}, rebuildsBySource),
           recentRebuilds: recentRebuilds.map((entry) => Object.assign({}, entry, { sources: Object.assign({}, entry.sources) }))
         }), "getRebuildStats"),
-        async refreshMessages({ channelId = null, messageIds = [], ownerMessageIds = [], views = [], sources = null }) {
-          let uniqueMessageIds = getUniqueMessageIds(messageIds), viewsByMessageId = getViewsByMessageId(views), presentIds = uniqueMessageIds.filter((messageId) => !!findMessageElement(messageId)), deferredIds = uniqueMessageIds.filter((messageId) => !presentIds.includes(messageId)), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), hostNeedsPaint = getUniqueMessageIds(ownerMessageIds).some((messageId) => !!findMessageElement(messageId));
-          if (!(unconfirmedIds.length > 0 || hostNeedsPaint)) return { confirmedIds, missingIds: [], deferredIds, retryIds: [], fallbackUsed: !1 };
-          if (!isRuntimeActive()) return { confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], fallbackUsed: !1 };
-          let intentSequence = getUserScrollIntentSequence(), scrollState = document2.querySelector(BDFDB.dotCN.messagesscroller) ? captureScrollState({ messageIds: uniqueMessageIds }) : null, renderError, hasRenderError = !1;
+        async refreshMessages({ channelId = null, messageIds = [], ownerMessageIds = [], ownerViews = [], views = [], sources = null }) {
+          let uniqueMessageIds = getUniqueMessageIds(messageIds), uniqueOwnerMessageIds = getUniqueMessageIds(ownerMessageIds), viewsByMessageId = getViewsByMessageId(views), ownerViewsByMessageId = getViewsByMessageId(ownerViews), presentIds = uniqueMessageIds.filter((messageId) => !!findMessageElement(messageId)), deferredIds = uniqueMessageIds.filter((messageId) => !presentIds.includes(messageId)), presentOwnerIds = uniqueOwnerMessageIds.filter((messageId) => !!findMessageElement(messageId)), deferredOwnerIds = uniqueOwnerMessageIds.filter((messageId) => !presentOwnerIds.includes(messageId)), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), confirmedOwnerIds = confirmOwnerViews(presentOwnerIds, ownerViewsByMessageId), unconfirmedOwnerIds = presentOwnerIds.filter((messageId) => !confirmedOwnerIds.includes(messageId));
+          if (!(unconfirmedIds.length > 0 || unconfirmedOwnerIds.length > 0)) return { confirmedIds, missingIds: [], deferredIds, retryIds: [], confirmedOwnerIds, missingOwnerIds: [], deferredOwnerIds, retryOwnerIds: [], fallbackUsed: !1 };
+          if (!isRuntimeActive()) return { confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], confirmedOwnerIds, missingOwnerIds: [], deferredOwnerIds: deferredOwnerIds.concat(unconfirmedOwnerIds), retryOwnerIds: [], fallbackUsed: !1 };
+          let intentSequence = getUserScrollIntentSequence(), scrollState = document2.querySelector(BDFDB.dotCN.messagesscroller) ? captureScrollState({ messageIds: uniqueMessageIds.concat(uniqueOwnerMessageIds) }) : null, renderError, hasRenderError = !1;
           try {
-            if (!hostNeedsPaint && liveRowRepaint && unconfirmedIds.length && liveRowRepaint.repaintRows(unconfirmedIds, { channelId }).length) {
-              if (scrollState && intentSequence === getUserScrollIntentSequence())
-                try {
-                  restoreScrollStateNow(scrollState);
-                } catch {
-                }
-              if (await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), unconfirmedIds.length && (await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId))), !unconfirmedIds.length)
-                return rebuildStats.live++, { confirmedIds, missingIds: [], deferredIds, retryIds: [], fallbackUsed: !1 };
+            if (liveRowRepaint && (unconfirmedIds.length || unconfirmedOwnerIds.length)) {
+              let targets = getUniqueMessageIds(unconfirmedIds.concat(unconfirmedOwnerIds));
+              if (liveRowRepaint.repaintRows(targets, { channelId, ownerMessageIds: unconfirmedOwnerIds }).length) {
+                if (scrollState && intentSequence === getUserScrollIntentSequence())
+                  try {
+                    restoreScrollStateNow(scrollState);
+                  } catch {
+                  }
+                if (await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), confirmedOwnerIds = confirmOwnerViews(presentOwnerIds, ownerViewsByMessageId), unconfirmedOwnerIds = presentOwnerIds.filter((messageId) => !confirmedOwnerIds.includes(messageId)), (unconfirmedIds.length || unconfirmedOwnerIds.length) && (await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), confirmedOwnerIds = confirmOwnerViews(presentOwnerIds, ownerViewsByMessageId), unconfirmedOwnerIds = presentOwnerIds.filter((messageId) => !confirmedOwnerIds.includes(messageId))), !unconfirmedIds.length && !unconfirmedOwnerIds.length)
+                  return rebuildStats.live++, { confirmedIds, missingIds: [], deferredIds, retryIds: [], confirmedOwnerIds, missingOwnerIds: [], deferredOwnerIds, retryOwnerIds: [], fallbackUsed: !1 };
+              }
             }
-            if (!hostNeedsPaint) return {
+            return isRuntimeActive() ? {
               confirmedIds,
               missingIds: unconfirmedIds,
               deferredIds,
               retryIds: unconfirmedIds.slice(),
+              confirmedOwnerIds,
+              missingOwnerIds: unconfirmedOwnerIds,
+              deferredOwnerIds,
+              retryOwnerIds: unconfirmedOwnerIds.slice(),
               fallbackUsed: !1
-            };
-            bookRebuild(sources, uniqueMessageIds.length), BDFDB.MessageUtils.rerenderAll(!0), await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), unconfirmedIds.length && (await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)));
+            } : { confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], confirmedOwnerIds, missingOwnerIds: [], deferredOwnerIds: deferredOwnerIds.concat(unconfirmedOwnerIds), retryOwnerIds: [], fallbackUsed: !1 };
           } catch (err) {
             renderError = err, hasRenderError = !0;
           } finally {
@@ -980,8 +1037,12 @@ var require_discord_render_adapter = __commonJS({
             missingIds: unconfirmedIds,
             deferredIds,
             retryIds: unconfirmedIds.slice(),
+            confirmedOwnerIds,
+            missingOwnerIds: unconfirmedOwnerIds,
+            deferredOwnerIds,
+            retryOwnerIds: unconfirmedOwnerIds.slice(),
             fallbackUsed: !1
-          } : { confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], fallbackUsed: !1 };
+          } : { confirmedIds, missingIds: [], deferredIds: deferredIds.concat(unconfirmedIds), retryIds: [], confirmedOwnerIds, missingOwnerIds: [], deferredOwnerIds: deferredOwnerIds.concat(unconfirmedOwnerIds), retryOwnerIds: [], fallbackUsed: !1 };
         }
       };
     }
@@ -1131,7 +1192,7 @@ var require_display_runtime = __commonJS({
         getGuildId: dependencies.getGuildId || (() => null)
       }), renderAdapter = createDiscordRenderAdapter(Object.assign({}, dependencies, { liveRowRepaint: {
         repaintRows(messageIds, context) {
-          let attempted = new Set(liveRowRepaint.repaintRows(messageIds)), remaining = messageIds.filter((messageId) => !attempted.has(String(messageId)));
+          let ownerMessageIds = new Set([].concat(context && context.ownerMessageIds || []).map(String)), liveCandidates = messageIds.filter((messageId) => !ownerMessageIds.has(String(messageId))), attempted = new Set(liveRowRepaint.repaintRows(liveCandidates)), remaining = messageIds.filter((messageId) => !attempted.has(String(messageId)));
           if (remaining.length) for (let messageId of fluxRowRepaint.repaintRows(remaining, context || {})) attempted.add(messageId);
           return [...attempted];
         }
@@ -1192,6 +1253,10 @@ var require_display_runtime = __commonJS({
         listPreviewed: /* @__PURE__ */ __name(() => store.listPreviewed(), "listPreviewed"),
         markPreviewHost: /* @__PURE__ */ __name((channelId, referencedMessageId, hostMessageId) => store.markPreviewHost(channelId, referencedMessageId, hostMessageId), "markPreviewHost"),
         getPreviewHostMessageIds: /* @__PURE__ */ __name((channelId, referencedMessageIds) => store.getPreviewHostMessageIds(channelId, referencedMessageIds), "getPreviewHostMessageIds"),
+        beginPreviewHostRefresh: /* @__PURE__ */ __name((channelId, hostMessageIds) => store.beginPreviewHostRefresh(channelId, hostMessageIds), "beginPreviewHostRefresh"),
+        getPreviewHostRenderRevision: /* @__PURE__ */ __name((channelId, hostMessageId) => store.getPreviewHostRenderRevision(channelId, hostMessageId), "getPreviewHostRenderRevision"),
+        acknowledgePreviewHostRefresh: /* @__PURE__ */ __name((channelId, hostMessageIds) => store.acknowledgePreviewHostRefresh(channelId, hostMessageIds), "acknowledgePreviewHostRefresh"),
+        retirePreviewHostRefresh: /* @__PURE__ */ __name((channelId, hostMessageIds) => store.retirePreviewHostRefresh(channelId, hostMessageIds), "retirePreviewHostRefresh"),
         markPreviewEligible: /* @__PURE__ */ __name((channelId, messageId) => store.markPreviewEligible(channelId, messageId), "markPreviewEligible"),
         isPreviewEligible: /* @__PURE__ */ __name((channelId, messageId) => store.isPreviewEligible(channelId, messageId), "isPreviewEligible"),
         clearPreviewEligibility: /* @__PURE__ */ __name((channelId) => store.clearPreviewEligibility(channelId), "clearPreviewEligibility")
@@ -1575,7 +1640,11 @@ var require_translation_display_logic = __commonJS({
           let fallbackContent = translationDisplayLogic.getReplyPreviewDisplayContentForMessage(plugin, stableReferencedMessage, channelId) || translationDisplayLogic.getReplyPreviewFallbackContent(plugin, stableReferencedMessage) || (stableReferencedMessage.content || "").trim();
           e.instance.props.referencedMessage = Object.assign({}, e.instance.props.referencedMessage);
           let previewMessage = new BDFDB.DiscordObjects.Message(stableReferencedMessage);
-          previewMessage.content = fallbackContent, plugin.markReplyPreviewRenderMessage(previewMessage, { channelId, hostMessageId: (hasVisibleStoredTranslation || shouldQueuePreview) && baseMessage && baseMessage.id }), e.instance.props.referencedMessage.message = previewMessage, e.returnvalue && e.returnvalue.props && (e.returnvalue = plugin.wrapReplyPreviewJumpPause(plugin.stripTranslatorStylingFromReplyPreviewNode(e.returnvalue)));
+          if (previewMessage.content = fallbackContent, plugin.markReplyPreviewRenderMessage(previewMessage, { channelId, hostMessageId: (hasVisibleStoredTranslation || shouldQueuePreview) && baseMessage && baseMessage.id }), e.instance.props.referencedMessage.message = previewMessage, e.returnvalue && e.returnvalue.props) {
+            e.returnvalue = plugin.wrapReplyPreviewJumpPause(plugin.stripTranslatorStylingFromReplyPreviewNode(e.returnvalue));
+            let hostMessageId = baseMessage && baseMessage.id, hostRevision = hostMessageId && plugin.ensureReceivedDisplayRuntime().getPreviewHostRenderRevision(channelId, hostMessageId);
+            e.returnvalue && e.returnvalue.props && (hostRevision != null ? e.returnvalue.props["data-translator-preview-revision"] = String(hostRevision) : delete e.returnvalue.props["data-translator-preview-revision"]);
+          }
         },
         resolveLoadedMessageContentTranslation(plugin, message, channelId) {
           if (plugin.getReceivedAutoTranslateScope() != "loaded_messages" || !plugin.isTranslationEnabled(channelId) || plugin.isOwnMessage(message) || plugin.ensureReceivedDisplayRuntime().isSuppressed(message.id) || plugin.ensureLiveTranslationQueue().isMessageQueued(message.id)) return null;
@@ -12323,7 +12392,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "3cd42fa098e0f7a4";
+            return "594a8699a7d2c1b2";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);

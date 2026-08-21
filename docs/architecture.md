@@ -39,7 +39,7 @@ The build uses esbuild in CommonJS mode with an ES2020 target, preserves the Bet
 | --- | --- | --- |
 | Received message state | `src/display/message-state-store.js` | Immutable source, request identity, automatic/manual origin, suppression, preview state, display revision, and restore archive |
 | Display transactions | `src/display/translation-display-controller.js`, `src/display/display-runtime.js`, `src/display/display-runtime-wiring.js` | One channel-scoped commit boundary for message IDs and reply-preview host IDs; one adapter owns Flux/Store, browser, timer, capsule, and viewport ports |
-| Row repaint and fallback | `src/display/flux-row-repaint.js`, `src/display/discord-render-adapter.js`, `src/display/repaint-scheduler.js`, `src/display/repaint-scheduler-wiring.js` | Flux row merge first; DOM revision confirmation; ordinary rows stay targeted through bounded retry, while explicit special-host/lifecycle work retains a separately visible fallback |
+| Row repaint and fallback | `src/display/flux-row-repaint.js`, `src/display/discord-render-adapter.js`, `src/display/repaint-scheduler.js`, `src/display/repaint-scheduler-wiring.js` | Flux row merge first; body and preview-host DOM revisions confirm independently; all message surfaces stay targeted, while explicit lifecycle work retains separately counted `full` repaint |
 | Historical acquisition and batching | `src/received/historical-source-runtime.js`, `src/orchestrator/historical-snapshot-cadence.js`, `src/orchestrator/historical-snapshot-cadence-wiring.js`, `src/orchestrator/historical-translation-job.js` | Immutable channel jobs, 500 ms quiet-window sealing, waiting-job absorption, one atomic batch commit; one adapter owns cadence host ports |
 | Live scheduling | `src/orchestrator/live-translation-queue.js`, `src/orchestrator/live-translation-queue-wiring.js` | High-priority channel-aware work that is not delayed behind historical collection; one adapter owns plugin policy/display/history/session ports and managed retry timers |
 | Message deletion lifecycle | `src/lifecycle/message-deletion-lifecycle.js`, `src/lifecycle/message-deletion-lifecycle-wiring.js` | Direct Store subscriptions; channel-scoped live/history/cache/display cleanup; one adapter owns cleanup fan-out and dispatcher resolution |
@@ -75,7 +75,7 @@ The build uses esbuild in CommonJS mode with an ES2020 target, preserves the Bet
 4. Dispatch through the channel's effective primary provider, then the global backup when permitted.
 5. Validate the terminal result and commit translation state.
 6. Start one ID-scoped display transaction.
-7. Attempt Flux row repaint and confirm the exact DOM revision. An unresolved ordinary row stays on bounded targeted retry and never remounts the Composer; special host surfaces remain a separate fallback boundary.
+7. Attempt Flux row repaint and confirm the exact body or preview-host DOM revision. Unresolved surfaces stay on bounded targeted retry and never remount the Composer.
 
 Manual translation uses the same state and display transaction chain. Manual untranslate restores the archived source and suppresses immediate cached automatic repaint for that message.
 
@@ -99,7 +99,7 @@ A display transaction contains a channel ID, translated message IDs, host reply-
 
 For mounted ordinary rows, `flux-row-repaint.js` dispatches a no-op-by-value `MESSAGE_UPDATE` merge through Discord's Store dispatcher. Current-client evidence confirms one message-list projection render with Composer/input/row/scroller identities preserved; exact DOM revision confirmation remains the visible-success verdict. Rows already carrying the expected revision require no repaint.
 
-`discord-render-adapter.js` returns unresolved ordinary rows to the bounded scheduler without widening them into a whole-chat rebuild. Special host surfaces still retain one explicit fallback while they await their own targeted route. Function-component registry handles remain opportunistic because the current client exposes synthetic `{props}` objects without a class updater. The retired synchronous blank/remount implementation and adapter seam remain deleted.
+`discord-render-adapter.js` returns unresolved ordinary rows to the bounded scheduler and unresolved preview hosts to their 300 ms wave, with at most three attempts. Preview host commands use their own Store-owned surface revision and DOM marker. Function-component registry handles remain opportunistic because the current client exposes synthetic `{props}` objects without a class updater; reply hosts always use Store dispatch. The retired synchronous blank/remount implementation remains deleted.
 
 ## Viewport Ownership
 
@@ -172,7 +172,7 @@ npm run verify
 ## Known Debt
 
 - `src/legacy/runtime.js` remains a 3,248-line legacy facade; further shrinkage requires a separately scoped ownership contract rather than an open-ended line-count task.
-- Ordinary message transactions no longer enter whole-chat fallback. Reply-preview hosts and explicit channel/lifecycle refreshes can still emit diagnostic `R` and remount/refresh the Composer; they remain separate render-boundary slices.
+- Ordinary and reply-preview message transactions no longer enter whole-chat fallback. Explicit channel/provider/plugin lifecycle refreshes can still increment `full` and remount/refresh the Composer; they are the remaining render-boundary slice.
 - Provider abort support and lifecycle task registry cleanup remain observation-gated in `recovery-plan.md`; automatic multi-page history fetching is parked after field rollback, while direct Store message-delete subscriptions are field-closed.
 - Discord internal store and snapshot shapes require re-observation after client updates.
 - Some modules remain large and should split only when ownership contracts and regression tests exist.

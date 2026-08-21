@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Display: ordinary received-message transactions now remain on the Store-targeted repaint path; DOM confirmation failure uses bounded targeted retry instead of remounting the whole chat and Composer. Historical batching, virtualized-on-mount display, live priority, and viewport intent remain unchanged; reply-preview hosts and explicit lifecycle refreshes are tracked as later independent cuts.
+- Display: ordinary received-message transactions and reply-preview host commit/clear/restore/delete now remain on Store-targeted repaint paths. Body and preview surfaces use separate DOM revisions; failures use bounded targeted retry instead of remounting the whole chat and Composer. Historical batching, the 300 ms preview wave, virtualized-on-mount display, live priority, and viewport intent remain unchanged; explicit lifecycle `full` refreshes are the remaining independent cut.
 
 ## v0.3.40
 

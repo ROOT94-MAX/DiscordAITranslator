@@ -1295,6 +1295,24 @@ test("reply preview host ownership is one-to-many and channel-isolated", () => {
 	assert.equal(store.markPreviewHost("c1", "referenced", ""), false);
 });
 
+test("reply preview host refreshes carry a surface-specific revision until acknowledged", () => {
+	const store = createMessageStateStore();
+	store.markPreviewHost("c1", "referenced", "reply-1");
+	store.markPreviewHost("c1", "referenced", "reply-2");
+
+	const first = store.beginPreviewHostRefresh("c1", ["reply-1", "reply-2"]);
+	assert.equal(first.length, 2);
+	assert.equal(first[0].revision, first[1].revision, "one preview wave shares one surface command revision");
+	assert.equal(store.getPreviewHostRenderRevision("c1", "reply-1"), first[0].revision);
+	assert.equal(store.getPreviewHostRenderRevision("c1", "reply-2"), first[1].revision);
+
+	store.acknowledgePreviewHostRefresh("c1", ["reply-1"]);
+	assert.equal(store.getPreviewHostRenderRevision("c1", "reply-1"), null);
+	assert.equal(store.getPreviewHostRenderRevision("c1", "reply-2"), first[1].revision, "another host stays pending");
+	store.retirePreviewHostRefresh("c1", ["reply-2"]);
+	assert.equal(store.getPreviewHostRenderRevision("c1", "reply-2"), null);
+});
+
 test("clearing preview state retires only its recorded host rows", () => {
 	const store = createMessageStateStore();
 	for (const [messageId, channelId] of [["referenced-1", "c1"], ["referenced-2", "c1"], ["referenced-3", "c2"]]) {
