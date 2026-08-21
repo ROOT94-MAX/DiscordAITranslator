@@ -91,6 +91,27 @@ test("effective channel primary engine changes received and reply cache signatur
 	assert.equal(replyOverride.translator, "deepseek");
 });
 
+test("changing a channel primary engine pulses one message-list projection instead of scheduling a full repaint", () => {
+	const {plugin} = createPersistedPlugin();
+	const calls = [];
+	plugin.clearDisplayedAutoTranslations = channelId => calls.push(["clear-display", channelId]);
+	plugin.clearAutoTranslationQueue = channelId => calls.push(["clear-queue", channelId]);
+	plugin.resetAutoTranslationTracking = channelId => calls.push(["reset-tracking", channelId]);
+	plugin.ensureReceivedDisplayRuntime = () => ({pulseChannelProjection: channelId => (calls.push(["pulse-projection", channelId]), true)});
+	plugin.scheduleTranslationRerender = () => assert.fail("primary-engine refresh must not schedule a whole-chat repaint");
+	plugin.processAutoTranslationQueue = () => calls.push(["process-queue"]);
+
+	plugin.refreshChannelPrimaryEngineRuntime("channel-1");
+
+	assert.deepEqual(calls, [
+		["clear-display", "channel-1"],
+		["clear-queue", "channel-1"],
+		["reset-tracking", "channel-1"],
+		["pulse-projection", "channel-1"],
+		["process-queue"]
+	]);
+});
+
 test("translateText dispatches received and sent work through the channel primary engine", async () => {
 	const {plugin} = createPersistedPlugin({"channel-2": "deepseek"});
 	plugin.setLanguages();

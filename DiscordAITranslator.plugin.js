@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.40
- * @buildId 594a8699a7d2c1b2
+ * @buildId 888308bed3551076
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -1197,11 +1197,45 @@ var require_display_runtime = __commonJS({
           return [...attempted];
         }
       } })), controller = createTranslationDisplayController({ store, renderAdapter, journal: null, setTimeout: dependencies.setTimeout, canRepaintNow: dependencies.canRepaintNow });
-      return Object.freeze({
+      function pulseChannelProjection(channelId) {
+        if (!channelId || typeof dependencies.getChannelProjectionMessageId != "function") return !1;
+        let messageId = null;
+        try {
+          messageId = dependencies.getChannelProjectionMessageId(channelId);
+        } catch {
+          messageId = null;
+        }
+        if (!messageId) return !1;
+        let intentSequence = null, scrollState = null;
+        try {
+          intentSequence = typeof dependencies.getUserScrollIntentSequence == "function" ? dependencies.getUserScrollIntentSequence() : null;
+          let selector = dependencies.BDFDB && dependencies.BDFDB.dotCN && dependencies.BDFDB.dotCN.messagesscroller;
+          dependencies.document && selector && dependencies.document.querySelector(selector) && typeof dependencies.captureScrollState == "function" && (scrollState = dependencies.captureScrollState({ messageIds: [String(messageId)], channelId: String(channelId), lifecycle: !0 }));
+        } catch {
+          scrollState = null;
+        }
+        let attempted = fluxRowRepaint.repaintRows([messageId], { channelId }).length === 1;
+        if (!attempted || !scrollState) return attempted;
+        let intentUnchanged = /* @__PURE__ */ __name(() => typeof dependencies.getUserScrollIntentSequence != "function" || intentSequence === dependencies.getUserScrollIntentSequence(), "intentUnchanged");
+        try {
+          intentUnchanged() && typeof dependencies.restoreScrollStateNow == "function" && dependencies.restoreScrollStateNow(scrollState);
+        } catch {
+        }
+        try {
+          intentUnchanged() && typeof dependencies.restoreScrollState == "function" && dependencies.restoreScrollState(scrollState);
+        } catch {
+        }
+        return !0;
+      }
+      return __name(pulseChannelProjection, "pulseChannelProjection"), Object.freeze({
         getTransitionJournal: /* @__PURE__ */ __name(() => null, "getTransitionJournal"),
         // Settings-panel diagnostics: how many transactions painted per-row (live) or
         // through the whole-layer rebuild, with per-lane rebuild attribution.
         getRebuildStats: /* @__PURE__ */ __name(() => renderAdapter.getRebuildStats(), "getRebuildStats"),
+        // Channel enablement and primary-engine changes need one message-list projection
+        // pass, not a whole-chat reconstruction. The current visible anchor is dispatched
+        // through Discord's Store path; a missing/unmounted row is left for natural mount.
+        pulseChannelProjection,
         // Called from the message-content render hook on every content render, so the
         // live path always holds the newest instance for each mounted row.
         recordContentInstance: /* @__PURE__ */ __name((messageId, instance) => liveRowRepaint.recordContentInstance(messageId, instance), "recordContentInstance"),
@@ -1338,6 +1372,17 @@ var require_display_runtime_wiring = __commonJS({
             return null;
           }
         }, "getGuildId"),
+        // One visible message is enough to invalidate Discord's message-list Store
+        // projection. Reuse the viewport owner's anchor lookup so this adapter neither
+        // scans message text nor introduces a second DOM identity parser.
+        getChannelProjectionMessageId: /* @__PURE__ */ __name(() => {
+          try {
+            let anchor = plugin.ensureMessageViewportStore().findVisibleMessageAnchor();
+            return anchor && anchor.messageId || null;
+          } catch {
+            return null;
+          }
+        }, "getChannelProjectionMessageId"),
         onTranslationDisplayed: /* @__PURE__ */ __name((channelId, messageId) => plugin.ensureLoadedStatusCapsuleController().recordTranslationsDisplayed(channelId, [messageId]), "onTranslationDisplayed"),
         getUserScrollIntentSequence: /* @__PURE__ */ __name(() => plugin.ensureMessageViewportStore().getUserScrollIntentSequence(), "getUserScrollIntentSequence"),
         // Scroll preservation is best-effort: capture/restore failures never break a
@@ -12392,7 +12437,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "594a8699a7d2c1b2";
+            return "888308bed3551076";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);
@@ -14313,7 +14358,7 @@ __________________ __________________ __________________
             return this.ensureSettingsStore().clearChannelPrimaryEngineOverride(channelId);
           }
           refreshChannelPrimaryEngineRuntime(channelId) {
-            channelId && (this.clearDisplayedAutoTranslations(channelId), this.clearAutoTranslationQueue(channelId), this.resetAutoTranslationTracking(channelId), this.scheduleTranslationRerender(), this.processAutoTranslationQueue());
+            channelId && (this.clearDisplayedAutoTranslations(channelId), this.clearAutoTranslationQueue(channelId), this.resetAutoTranslationTracking(channelId), this.ensureReceivedDisplayRuntime().pulseChannelProjection(channelId), this.processAutoTranslationQueue());
           }
           createEmptyChannelEnablementState(globalDefault = !1) {
             return createEmptyChannelEnablementState(globalDefault);
@@ -14351,7 +14396,7 @@ __________________ __________________ __________________
               }
               return;
             }
-            this.resetAutoTranslationTracking(channelId), this.scheduleTranslationRerender(), this.processAutoTranslationQueue();
+            this.resetAutoTranslationTracking(channelId), this.ensureReceivedDisplayRuntime().pulseChannelProjection(channelId), this.processAutoTranslationQueue();
           }
           isTranslationEnabled(channelId) {
             return this.ensureSettingsStore().isTranslationEnabled(channelId);

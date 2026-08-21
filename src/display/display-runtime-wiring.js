@@ -41,6 +41,16 @@ function createPluginReceivedDisplayRuntime({
 			}
 			catch (error) {return null;}
 		},
+		// One visible message is enough to invalidate Discord's message-list Store
+		// projection. Reuse the viewport owner's anchor lookup so this adapter neither
+		// scans message text nor introduces a second DOM identity parser.
+		getChannelProjectionMessageId: () => {
+			try {
+				const anchor = plugin.ensureMessageViewportStore().findVisibleMessageAnchor();
+				return anchor && anchor.messageId || null;
+			}
+			catch (error) {return null;}
+		},
 		onTranslationDisplayed: (channelId, messageId) => plugin.ensureLoadedStatusCapsuleController().recordTranslationsDisplayed(channelId, [messageId]),
 		getUserScrollIntentSequence: () => plugin.ensureMessageViewportStore().getUserScrollIntentSequence(),
 		// Scroll preservation is best-effort: capture/restore failures never break a
