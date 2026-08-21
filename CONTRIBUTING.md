@@ -37,7 +37,7 @@ After changing `src/`, run `npm run build` before a focused test that instantiat
 
 ## Release Metadata
 
-`src/plugin/metadata.json` is the source of truth for the BetterDiscord metadata banner, including `@version`. The build copies it into `DiscordAITranslator.plugin.js`; keep `package.json`, `README.md`, and `CHANGELOG.md` aligned with that source.
+`src/plugin/metadata.json` is the source of truth for the BetterDiscord metadata banner, including `@version`. The build copies it into `DiscordAITranslator.plugin.js`; keep `package.json`, the root entry in `package-lock.json`, both README files, `CHANGELOG.md`, and the release-contract version aligned with that source. Rebuild the generated artifact, then verify its `@version`, `@buildId`, and SHA-256 before tagging or uploading a release.
 
 The distributed plugin metadata must use an English description and include the repository through `@authorLink`, `@website`, or `@source` metadata.
 

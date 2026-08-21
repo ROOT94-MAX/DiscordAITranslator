@@ -50,7 +50,7 @@ The 2026-08-20 lifecycle audit found no evidence supporting one global task-regi
 **Status: OPEN WITH PARTIAL FOUNDATIONS.** Request identities, display revisions, and channel generations exist, but the following concrete gaps remain in current code/tests:
 Strengthen confirmation and command identity after field evidence justifies the change:
 
-- Body text, decoration, embeds, reply previews, and titles need surface-specific confirmation; one child revision marker is not proof that every visible surface is current.
+- Body text and reply-preview hosts now have independent revision confirmation and bounded targeted retry. Decoration, embed, and title surfaces still need explicit confirmation before a transaction may claim every visible surface is current.
 - Manual, live, historical, edit, delete, preview, and disable operations need one latest-command identity so an older callback cannot supersede newer intent.
 - Historical terminal validation should account for stale items individually instead of hiding valid siblings without an explicit reason.
 - Render projections should remain read-only during one React pass.
@@ -60,7 +60,7 @@ The unresolved product decision is whether reply previews should carry the same 
 
 ## Parked UI Redesign
 
-**Status: PARKED — not part of the active implementation order.**
+**Status: PARKED — the display prerequisite is complete, but current P0 recon has not started.**
 The former detailed UI redesign plan is archived outside Git at:
 
 ```text
@@ -75,7 +75,13 @@ Preserved decisions:
 - Treat capsule restyling as a separate decision after both settings surfaces are stable.
 - Begin with a current control-to-setting contract inventory; do not implement from the archived line numbers or old branch assumptions.
 
-Restart this work only after a fresh recon against the current `settings-panel.js`, `translate-components.js`, labels, styles, and v0.3.41+ tests.
+Current v0.3.41 recon baseline:
+
+- `settings-panel.js`: 1,345 lines; `translate-components.js`: 342 lines; `styles.js`: 876 lines.
+- Runtime provider inventory: 12 keys, including four retained compatibility adapters omitted by the old nine-provider plan.
+- Release gate: 1,325 tests. The archived v0.3.38 line numbers and 1,108-test baseline are historical only.
+
+The display-unification prerequisite is now complete. Restart UI work only with a fresh control-to-setting inventory against the current panel modules, labels, styles, and v0.3.41 tests; do not restore the archived plan verbatim.
 
 ## Delivery Gate
 

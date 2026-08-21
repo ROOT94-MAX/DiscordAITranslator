@@ -50,7 +50,7 @@ DiscordAITranslator 把翻译控制放在当前会话附近，而不是使用一
 - **原文保护：**在供应商往返过程中保护自定义术语、包裹符、代码式文本、剧透和跳过前缀。
 - **主备供应商：**频道可覆盖主供应商，凭证和备用供应商仍保持全局配置。
 - **累计历史状态：**浮动胶囊按频道累计唯一已翻译消息，跨多个历史批次继续增长。
-- **视口保护：**优先尝试单行重绘；用户正在滚动时延迟历史显示，只在用户意图未改变时恢复阅读行。
+- **视口保护：**译文表面保持 Store 定向刷新；用户正在滚动时延迟历史显示，只在用户意图未改变时恢复阅读行。
 
 ## 支持的翻译服务商
 
@@ -64,7 +64,10 @@ DiscordAITranslator 把翻译控制放在当前会话附近，而不是使用一
 | `openai` | OpenAI API | API Key | Responses API，支持单条、批量和决策流程 |
 | `gemini` | Google Gemini | API Key | 原生 `generateContent` 接口 |
 | `oaicompat` | OpenAI 兼容端点 | Endpoint、Model、Key | 可接入自建或第三方兼容服务 |
+| `itranslate` | iTranslate | 可选 API Key | 保留的兼容适配器；未填写时可在运行时发现公开 Web Key |
 | `yandex` | Yandex | API Key | 保留的兼容供应商 |
+| `papago` | Papago | Client ID 与 Secret | 保留的 Naver 兼容供应商 |
+| `baidu` | Baidu | App ID 与 Secret | 保留的兼容供应商，使用供应商专用签名 |
 
 供应商凭证、端点、模型、全局主供应商默认值和备用供应商都在 BetterDiscord 设置中配置。频道只能覆盖自己的主供应商和语言选择。准确行为见[供应商契约](docs/providers.md)。
 
@@ -100,7 +103,7 @@ DiscordAITranslator 把翻译控制放在当前会话附近，而不是使用一
 ## 已知限制
 
 - Discord 内部组件、Store 和转发快照结构不是公开 API，客户端更新后可能需要重新适配。
-- 单行确认或回复宿主未满足显示事务时，仍会回退到整聊天区重绘，因此偶尔可能看到轻微输入框图标闪烁。
+- 译文结果只做有界 Store 定向重试，不再扩大为整聊天区重绘。插件启停和应用全局设置仍属于独立宿主生命周期操作，可能短暂刷新输入框。
 - 译文会增加消息行和列表总高度；插件保护阅读消息位置，但滚动条滑块仍可能移动或改变大小。
 - 免密钥和第三方供应商可能存在额度、限流、负载大小、区域或输出转换限制，这些不完全由插件控制。
 - 即使自动化测试通过，涉及 Discord 渲染边界的变化仍需要 PTB 实际观察。
@@ -127,7 +130,7 @@ npm run verify
 
 `npm run verify` 会检查源码/产物一致性、JavaScript 语法、架构约束、发布元数据、双语文档入口和完整单元/契约/集成测试。请勿手工编辑生成的插件文件。
 
-贡献规则和仓库不变量见 [CONTRIBUTING.md](./CONTRIBUTING.md) 与 [AGENTS.md](./AGENTS.md)。
+贡献规则见 [CONTRIBUTING.md](./CONTRIBUTING.md)；仓库不变量和当前职责边界见[架构文档](docs/architecture.zh-CN.md)。
 
 ## 技术文档
 

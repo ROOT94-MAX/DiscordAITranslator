@@ -50,7 +50,7 @@ DiscordAITranslator keeps translation controls close to the conversation instead
 - **Original-text protection:** preserve configured terms, wrapper pairs, code-like content, spoilers, and skip prefixes through provider round trips.
 - **Primary and backup providers:** use a channel-specific primary provider while keeping credentials and backup behavior global.
 - **Cumulative history status:** the floating capsule tracks translated message IDs per channel across multiple history batches.
-- **Viewport protection:** row-level repaint is attempted first; history display waits for active scrolling to idle, and a captured reading line is restored only when user intent has not changed.
+- **Viewport protection:** translation surfaces stay on Store-targeted repaint paths; history display waits for active scrolling to idle, and a captured reading line is restored only when user intent has not changed.
 
 ## Supported Providers
 
@@ -64,7 +64,10 @@ DiscordAITranslator keeps translation controls close to the conversation instead
 | `openai` | OpenAI API | API key | Responses API with single, batch, and decision flows |
 | `gemini` | Google Gemini | API key | Native `generateContent` integration |
 | `oaicompat` | OpenAI-compatible endpoint | Endpoint, model, key | Self-hosted or third-party compatible services |
+| `itranslate` | iTranslate | Optional API key | Retained compatibility adapter; may discover its public web key at runtime |
 | `yandex` | Yandex | API key | Retained compatibility provider |
+| `papago` | Papago | Client ID and secret | Retained Naver compatibility provider |
+| `baidu` | Baidu | App ID and secret | Retained compatibility provider with provider-specific signing |
 
 Provider credentials, endpoints, models, the global primary default, and the backup provider are configured in BetterDiscord settings. A channel may override only its primary provider and language choices. See [provider contracts](docs/providers.md) for the exact behavior.
 
@@ -100,7 +103,7 @@ Automatic translation has no global on-by-default switch. A channel remains off 
 ## Known Limitations
 
 - Discord's internal component, Store, and forwarded-snapshot shapes are not public APIs and may require adaptation after client updates.
-- A whole-chat repaint remains as a fallback when row-level confirmation or a reply host cannot satisfy a display transaction; this can still cause occasional mild composer flicker.
+- Translation results stay on bounded Store-targeted retry and do not widen into a whole-chat repaint. Plugin start/stop and applying global settings remain separate host lifecycle operations and may briefly refresh the Composer.
 - Adding translated text changes row and total-list height. The plugin protects the reader's message position, but the scrollbar thumb can still move or resize.
 - Keyless and third-party providers may apply quotas, rate limits, payload limits, regional restrictions, or output transformations outside the plugin's control.
 - PTB observation is still required for render-boundary changes even when the automated suite passes.
@@ -127,7 +130,7 @@ npm run verify
 
 `npm run verify` checks source/artifact parity, JavaScript syntax, architecture budgets, release metadata, bilingual documentation entry points, and the complete unit/contract/integration suite. Do not edit the generated plugin by hand.
 
-Contribution rules and repository invariants are documented in [CONTRIBUTING.md](./CONTRIBUTING.md) and [AGENTS.md](./AGENTS.md).
+Contribution rules are documented in [CONTRIBUTING.md](./CONTRIBUTING.md); repository invariants and current ownership boundaries are documented in the [architecture guide](docs/architecture.md).
 
 ## Documentation
 
@@ -136,7 +139,7 @@ Contribution rules and repository invariants are documented in [CONTRIBUTING.md]
 - Provider contracts: [docs/providers.md](docs/providers.md)
 - Architecture: [English](docs/architecture.md) | [简体中文](docs/architecture.zh-CN.md)
 - Field-debugging handoff: [English](docs/field-debugging-guide.md) | [简体中文](docs/field-debugging-guide.zh-CN.md)
-- Active recovery plan: [docs/recovery-plan.md](docs/recovery-plan.md)
+- Current recovery plan: [docs/recovery-plan.md](docs/recovery-plan.md)
 - Release history: [CHANGELOG.md](./CHANGELOG.md)
 
 ## Credits

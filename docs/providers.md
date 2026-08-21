@@ -25,7 +25,10 @@ Provider-specific HTTP schemas stay inside their adapters. Channel code selects 
 | `openai` | Official OpenAI Responses API | API key; official endpoint and model have defaults |
 | `gemini` | Native Gemini `generateContent` API | API key; official endpoint and model have defaults |
 | `oaicompat` | Third-party or self-hosted OpenAI-compatible API | API key, explicit endpoint, and explicit model |
-| Other legacy adapters | Compatibility providers | Existing provider-specific configuration |
+| `itranslate` | iTranslate compatibility adapter | Optional API key; otherwise discovers the public web key at runtime |
+| `yandex` | Yandex compatibility adapter | API key |
+| `papago` | Naver Papago compatibility adapter | Client ID and client secret in the provider credential field |
+| `baidu` | Baidu compatibility adapter | App ID and secret in the provider credential field |
 
 The example `oaicompat` endpoint and model are placeholders only. They are never accepted as a valid runtime configuration and are never sent to the network.
 
