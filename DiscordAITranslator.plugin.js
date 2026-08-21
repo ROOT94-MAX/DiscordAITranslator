@@ -3,7 +3,7 @@
  * @author ROOT94
  * @authorLink https://github.com/ROOT94-MAX/DiscordAITranslator
  * @version 0.3.40
- * @buildId c0b27e1479677971
+ * @buildId 3cd42fa098e0f7a4
  * @description BetterDiscord translation plugin with channel-aware automatic translation and AI providers.
  * @source https://github.com/ROOT94-MAX/DiscordAITranslator
  * @license GPL-2.0
@@ -957,6 +957,13 @@ var require_discord_render_adapter = __commonJS({
               if (await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), unconfirmedIds.length && (await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId))), !unconfirmedIds.length)
                 return rebuildStats.live++, { confirmedIds, missingIds: [], deferredIds, retryIds: [], fallbackUsed: !1 };
             }
+            if (!hostNeedsPaint) return {
+              confirmedIds,
+              missingIds: unconfirmedIds,
+              deferredIds,
+              retryIds: unconfirmedIds.slice(),
+              fallbackUsed: !1
+            };
             bookRebuild(sources, uniqueMessageIds.length), BDFDB.MessageUtils.rerenderAll(!0), await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)), unconfirmedIds.length && (await waitForPaint(), confirmedIds = confirmViews(presentIds, viewsByMessageId), unconfirmedIds = presentIds.filter((messageId) => !confirmedIds.includes(messageId)));
           } catch (err) {
             renderError = err, hasRenderError = !0;
@@ -12316,7 +12323,7 @@ Please click <a style="font-weight: 500;">Download Now</a> to install it.</div>`
             return normalizeSemverVersion(this.version);
           }
           getBuildId() {
-            return "c0b27e1479677971";
+            return "3cd42fa098e0f7a4";
           }
           createHistoricalTranslationJob(config = {}) {
             return new HistoricalTranslationJob(config);

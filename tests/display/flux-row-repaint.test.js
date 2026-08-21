@@ -12,7 +12,7 @@ function createHarness({records = {m1: {content: "original one"}, m2: {content: 
 	return {repaint, dispatches};
 }
 
-test("each row dispatches the experiment-verified no-op payload through Discord's store path", () => {
+test("each row dispatches the probe-shaped no-op payload through Discord's store path", () => {
 	const {repaint, dispatches} = createHarness();
 
 	const attempted = repaint.repaintRows(["m1", "m2"], {channelId: "c1"});

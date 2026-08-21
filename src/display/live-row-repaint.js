@@ -11,9 +11,9 @@
 // composer remount (icon flicker), no scroll-restore dance (bounce).
 //
 // Rows without a usable instance (function-component clients expose no updater;
-// virtualised rows never render) are simply not attempted: the adapter's DOM confirm
-// routes them to the whole-chat fallback, so the worst case is the established
-// behavior.
+// virtualised rows never render) are simply not attempted here. The Store-dispatch
+// route gets the next chance; unresolved ordinary rows remain bounded retries or
+// paint from stored state when they later mount.
 const MAX_TRACKED_ROWS = 2000;
 
 function createLiveRowRepaint({reactUtils = null, resolveFlushSync = () => null} = {}) {

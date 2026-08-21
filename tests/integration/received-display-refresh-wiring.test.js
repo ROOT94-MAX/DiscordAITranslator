@@ -2,13 +2,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {createHarness} = require("../helpers/createReceivedDisplayHarness");
 
-// The adapter repaints through BDFDB.MessageUtils.rerenderAll (the only mechanism the
-// 2026-08-13 real-client evidence proved working). The runtime narrows the BDFDB it
-// injects into the display runtime, so this contract pins the wiring: a mounted row
-// must repaint through the injected MessageUtils, not through a BDFDB the adapter
-// never received. A missing injection is silently swallowed by the scheduler's
-// catch, which is exactly the false-green this test exists to prevent.
-test("a committed translation repaints the chat through the injected rerenderAll", async () => {
+// Ordinary translations repaint through the Store dispatcher verified on the current
+// client. The harness pins the complete wiring so a source-only unit test cannot hide
+// a missing dispatcher and let the adapter drift back to whole-chat reconstruction.
+test("a committed translation repaints its mounted row through the injected Store dispatcher", async () => {
 	const harness = createHarness();
 	try {
 		const {plugin, calls} = harness;
@@ -20,7 +17,8 @@ test("a committed translation repaints the chat through the injected rerenderAll
 
 		await new Promise(resolve => setTimeout(resolve, 400));
 
-		assert.equal(calls.rerenderAll, 1, "the mounted row must repaint through BDFDB.MessageUtils.rerenderAll");
+		assert.equal(calls.messageUpdates, 1, "the mounted row gets one synthetic MESSAGE_UPDATE");
+		assert.equal(calls.rerenderAll, 0, "ordinary display never remounts the Composer");
 		assert.equal(plugin.getReceivedDisplayView("m1").renderStatus, "confirmed", "the repainted row must acknowledge its revision");
 	}
 	finally {
@@ -72,13 +70,10 @@ test("a virtualised-only commit never asks for a chat rebuild", async () => {
 	}
 });
 
-test("a flush lane tag travels end to end into the adapter's rebuild attribution", async () => {
-	// Cadence audit 2026-08-19: the settings counters must say which lane rebuilt.
-	// This drives the real runtime wiring: scheduleReceivedDisplayFlush -> scheduler
-	// -> display runtime -> controller -> adapter counters.
+test("a flush lane travels end to end without booking a whole-chat rebuild", async () => {
 	const harness = createHarness();
 	try {
-		const {plugin} = harness;
+		const {plugin, calls} = harness;
 		const channelId = "channel-attribution";
 		plugin.isViewingMessageHistory = () => false;
 		plugin.captureReceivedMessageSource({messageId: "m1", channelId, generation: 1, sourceSignature: "sig-m1", source: {content: "hello", embeds: []}});
@@ -88,7 +83,10 @@ test("a flush lane tag travels end to end into the adapter's rebuild attribution
 		await new Promise(resolve => setTimeout(resolve, 400));
 
 		const stats = plugin.ensureReceivedDisplayRuntime().getRebuildStats();
-		assert.equal(stats.rebuildsBySource.cached, 1, "the lane tag must reach the adapter's counters");
+		assert.equal(calls.messageUpdates, 1);
+		assert.equal(stats.live, 1, "the targeted transaction is acknowledged once");
+		assert.equal(stats.rebuild, 0);
+		assert.deepEqual(stats.rebuildsBySource, {});
 	}
 	finally {
 		harness.plugin.clearReceivedDisplayFlushQueue();

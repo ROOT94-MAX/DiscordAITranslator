@@ -10,7 +10,7 @@ User-visible behavior remains owned by `product.md`; setting ownership by `setti
 
 - Published v0.3.40 artifact: one installable `DiscordAITranslator.plugin.js`, build ID `c0b27e1479677971`.
 - The release gate passes 1,313 unit, contract, and integration tests; generated, repository, installed, and release-asset hashes are compared during publication.
-- Slice 5d composition-root extraction is complete at a 3,260-line runtime ratchet, two module-level mutable declarators, and 19 compact lazy singleton boundaries.
+- Slice 5d composition-root extraction is complete; later debug-wiring extraction lowered the current runtime ratchet to 3,248 lines with the same two module-level mutable declarators and 19 compact lazy singleton boundaries.
 - Accepted PTB evidence covers cumulative capsule behavior, forwarded automatic/manual translation and restore, configuration transitions, active-scroll veto, post-scroll completion, live priority, channel isolation, and the live-arrival History Guard.
 - Whole-chat fallback can still refresh the composer/input; the user explicitly parked that separate render-boundary debt.
 - Remaining field observations are listed under **Open or Observation Items**. Do not convert an observation into a root cause without new evidence.
@@ -43,6 +43,7 @@ The refactor was intentionally bottom-up. A top-down rewrite of the composition 
 | Field-era ownership cleanup (`1b8f565`, `8ff33bf`) | Forward content projection and duplicate direct-original display still leaked through the runtime | Moved content-view projection into display ownership and removed the obsolete direct-original React/CSS/settings branch | Ratchet reached 3,479 in that slice; retired-code cleanup lowered it to 3,478 and direct Store deletion subscriptions to 3,476. `showOriginalMessage` is the sole received-original setting |
 | Resumed display wiring (`04ea458`, `aa3057f`) | Display-runtime and repaint-scheduler host wiring still lived in the composition root | Moved Flux/Store/browser/viewport and repaint gate/timer/outcome ports into their owning wiring modules | Build `65a775c63d76dffa` passed active-scroll veto and stable post-scroll completion. Whole-chat fallback still refreshed the composer/input, matching the existing render debt; the user parked that issue for later |
 | Live queue wiring and arrival guard (`8580478`, `e3039d7`) | Live queue policy/session/handoff wiring remained in the composition root; a live row could strand a history reader at newest | Extracted the 31 queue ports with managed retry timers; the queue now arms a viewport reading-line guard before the host commits the live row | Build `c0b27e1479677971` passed live priority, channel isolation, History Guard, 1,311 tests, and installed configuration parity |
+| Composer-isolation recon and ordinary-row cut | The ownership test stopped at controller entry points and missed adapter `rerenderAll`; current-client Composer identity around Store updates was also unmeasured | Added a debug-only list/content render counter plus Composer/active-input/row/scroller identity evidence; ordinary unresolved rows now remain bounded targeted retries | Probe build `1eb82dee729eaf05` recorded list projection `+1` with Composer/input/row/scroller preserved; the ordinary-row candidate awaits its PTB display gate |
 
 ### What the refactor did and did not accomplish
 
@@ -59,7 +60,7 @@ Therefore, “module extracted” never means “field behavior solved.” Futur
 
 - `src/display/message-state-store.js` is the state authority for automatic and manual received translations, source snapshots, reply previews, revisions, and restore state.
 - `src/display/translation-display-controller.js` commits display transactions. Historical results commit as one batch; reply-preview hosts are wave-coalesced.
-- `src/display/flux-row-repaint.js` uses the experiment-verified internal `MESSAGE_UPDATE` merge path for mounted message rows. `src/display/discord-render-adapter.js` confirms DOM revisions and uses one whole-chat rebuild only when row refresh cannot satisfy the transaction.
+- `src/display/flux-row-repaint.js` uses the internal `MESSAGE_UPDATE` merge path for mounted message rows. `src/display/discord-render-adapter.js` confirms DOM revisions and keeps unresolved ordinary rows on bounded targeted retry. Reply hosts still retain their separate whole-chat fallback.
 - `src/orchestrator/historical-snapshot-cadence.js` waits for a 500 ms quiet window. `src/orchestrator/historical-translation-job.js` owns immutable jobs and absorbs compatible sealed work before start, so a scroll-back session does not become one provider/display transaction per render tick.
 - `src/viewport/message-viewport-store.js` is the sole owner of reading-line anchors, user-scroll intent, bottom rescue, raw-offset fallback, and 180/600 ms settle checks.
 - `src/ui/loaded-status-capsule.js`, `src/ui/loaded-status-position.js`, and `src/status/loaded-translation-status-store.js` own capsule DOM, geometry, and cumulative channel counts.
@@ -88,7 +89,7 @@ This section preserves the order in which the failures were reported and correct
 4. **Attribution before tuning:** lane diagnostics separated live, cached, historical, manual, retry, preview, lifecycle, and fallback rebuilds. A field read showing `other 69` versus `hist 8` proved reply-preview commits, not only historical body commits, dominated one session.
 5. **History cadence fix:** snapshots now seal after a 500 ms quiet window and compatible waiting jobs merge before start. This restores the intended one scroll-back wave → one historical job → one batch commit rather than one job per render tick.
 6. **Preview cadence fix:** preview state still commits immediately, but host repaints collect into one tagged 300 ms wave and wait while the repaint gate says the user is scrolling.
-7. **Row repaint endgame:** read-only probes showed no usable exported BDFDB dispatcher, then found a store dispatcher route. A guarded experiment proved a no-op `MESSAGE_UPDATE` merge rerenders the target row. `src/display/flux-row-repaint.js` now tries that route, checks the DOM revision on a second frame, and retains whole-chat rebuild only as fallback.
+7. **Row repaint evidence:** read-only probes showed no usable exported BDFDB dispatcher, then found a Store dispatcher route. The first experiment proved merge safety but did not count target content renders. The reopened probe confirmed one message-list projection render with Composer/input/row/scroller identities preserved; exact target visibility still belongs to DOM revision confirmation. Ordinary failure now stays targeted, while reply hosts retain the separate fallback.
 8. **Jump to newest during active history viewing:** historical paint now defers behind the active-scroll gate. If a fallback remount strands the viewport at bottom—a position an in-history upward gesture did not request—the immediate restore may rescue the captured anchor.
 9. **Timestamp/reading-line drift after translated rows grow:** anchoring the top visible row preserved the wrong visual point. The anchor is now the visible row nearest viewport center, followed by 180/600 ms settle checks. Every delayed check is vetoed by newer user intent; delayed writes never pull the user back after another gesture.
 10. **Enable auto-translate while reading an old date:** a stale 4.5-second manual anchor was reused during a lifecycle repaint, and a virtualized missing row caused restore to return without using the current raw offset. Lifecycle enable now captures the current viewport only; missing element lookup falls back to the captured offset and settle passes refine the exact row.
@@ -124,7 +125,7 @@ This section preserves the order in which the failures were reported and correct
 
 | Symptom | Proven cause | Current fix / contract | Do not repeat |
 | --- | --- | --- | --- |
-| Composer icon blinked whenever translations appeared | Whole-chat rebuild unmounted the composer | Flux row repaint is attempted first; DOM confirmation retains rebuild fallback | Do not treat a faster rebuild as a row repaint |
+| Composer icon blinked whenever translations appeared | Whole-chat rebuild unmounted the composer | Ordinary messages use Store targeting plus bounded retry; preview hosts and lifecycle are separate cuts | Do not treat a faster rebuild as a row repaint or widen an unconfirmed ordinary row |
 | Historical messages appeared one by one and each caused a rebuild | Snapshot micro-jobs sealed per render tick; provider and preview completions added separate transactions | 500 ms history quiet window, waiting-job absorption, 300 ms preview waves, one historical batch commit | Do not make cumulative counting drive per-message presentation |
 | Atomic rebuild made scrolling worse | Once handles were wired, synchronous blank/remount forced every transaction to rebuild | Retired implementation and adapter seam removed; BDFDB rebuild is fallback only | Do not restore synchronous blank/remount |
 | Instance registry stayed at `0L` | Function components appeared as synthetic `{props}` objects without an updater | Registry remains opportunistic; Flux store merge is the working row path | Do not force-update the synthetic instance |
@@ -192,9 +193,9 @@ This section preserves the order in which the failures were reported and correct
 
 ## Open or Observation Items
 
-1. Some whole-chat rebuild fallbacks remain (`R` lane/diagnostic), so the composer/input can still refresh when row confirmation fails, preview hosts require a broad paint, or lifecycle settings change. Build `65a775c63d76dffa` reproduced this existing behavior; the user explicitly parked it for later.
+1. Ordinary row confirmation failure no longer enters whole-chat fallback. With reply-host and lifecycle-setting `R` diagnostics, the composer/input can still refresh; each needs its own host confirmation and trigger evidence before change.
 2. Scrollbar thumb size/position can move when translated rows change total height. Reopen only when the center reading-line message itself is lost or the view is stranded at newest.
-3. Slice 5d composition-root extraction is complete at 3,260 lines, two module-level mutable declarators, and 19 compact lazy singleton boundaries. Further facade shrinkage requires a new bounded ownership contract rather than continuing this closed plan.
+3. Slice 5d composition-root extraction is complete; the current ratchet is 3,248 lines, two module-level mutable declarators, and 19 compact lazy singleton boundaries. Further facade shrinkage requires a new bounded ownership contract rather than continuing this closed plan.
 4. Oversized modules and generated-bundle size remain architecture debt. Split by ownership after contracts exist; do not split merely to reduce a line count.
 5. Automatic multi-page history fetching is parked after field rollback. Clean-stop cache flush is complete, while provider physical cancellation and broader lifecycle consolidation remain observation-gated.
 

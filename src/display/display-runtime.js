@@ -13,10 +13,9 @@ function createDisplayRuntime(dependencies) {
 	const store = createMessageStateStore({journal, onTranslationDisplayed: dependencies.onTranslationDisplayed});
 	// Per-row repaint, two routes under one adapter slot. The instance registry only
 	// works on class-component clients (this client's reading is 0L - BDFDB hands
-	// function components a synthetic instance); the flux route is the one the
-	// 2026-08-19 experiment verified on this client: a no-op MESSAGE_UPDATE merges
-	// cleanly and the row re-renders through Discord's own store path. The adapter's
-	// DOM confirm still owns the verdict either way.
+	// function components a synthetic instance); the flux route enters Discord's Store
+	// projection without remounting the Composer. The adapter's exact DOM revision
+	// confirmation, not the dispatch attempt itself, owns the visible verdict.
 	const liveRowRepaint = createLiveRowRepaint({
 		reactUtils: dependencies.BDFDB && dependencies.BDFDB.ReactUtils,
 		resolveFlushSync: () => resolveFlushSync(dependencies.BDFDB && dependencies.BDFDB.ReactUtils)

@@ -5,9 +5,9 @@
 // channel-stream boundary is a measured no-op (caused: false) - the strategy that
 // froze the client when deployed. The mechanism users actually saw working is the one
 // the 2026-06 plugin shipped: BDFDB.MessageUtils.rerenderAll(true) unmounts and
-// rebuilds the chat layer, which crosses every memo boundary. The live per-row path
-// (live-row-repaint.js) runs first and needs no rebuild at all. The retired atomic
-// single-task experiment has been removed; its field verdict remains in the handoff.
+// rebuilds the chat layer, which crosses the Composer boundary. Ordinary message
+// transactions therefore stay on the targeted path even when confirmation is still
+// pending; only special host surfaces not yet given a row route retain that fallback.
 //
 // What made the old plugin freeze was frequency, not the primitive. This adapter keeps
 // the rebuild affordable with three rules:
@@ -192,10 +192,10 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 			let hasRenderError = false;
 			try {
 				// Live path first (2026-08-19, the fix for one-rebuild-per-translation-wave):
-				// rows repaint themselves through their registered content instances, so the
-				// common case costs no rebuild at all - the composer never remounts and the
-				// scroll anchor barely moves. Preview hosts still need the rebuild, and any
-				// row the DOM confirm cannot verify falls through to it unchanged.
+				// rows repaint themselves through their registered content instances or the
+				// Store dispatcher. Ordinary rows never widen an unconfirmed result into a
+				// whole-chat rebuild: the scheduler owns their bounded retry, and a row that
+				// remains virtualised or unresolved paints from store state on a later mount.
 				if (!hostNeedsPaint && liveRowRepaint && unconfirmedIds.length) {
 					const attemptedIds = liveRowRepaint.repaintRows(unconfirmedIds, {channelId});
 					if (attemptedIds.length) {
@@ -220,6 +220,13 @@ function createDiscordRenderAdapter({BDFDB, document, requestAnimationFrame, get
 						}
 					}
 				}
+				if (!hostNeedsPaint) return {
+					confirmedIds,
+					missingIds: unconfirmedIds,
+					deferredIds,
+					retryIds: unconfirmedIds.slice(),
+					fallbackUsed: false
+				};
 				bookRebuild(sources, uniqueMessageIds.length);
 				BDFDB.MessageUtils.rerenderAll(true);
 				await waitForPaint();

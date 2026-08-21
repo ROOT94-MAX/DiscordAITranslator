@@ -9,7 +9,7 @@
 - 发布版本：v0.3.40。
 - 分发产物：由 `src/` 确定性生成的一份可读 `DiscordAITranslator.plugin.js`。
 - 已发布 v0.3.40 构建 ID：`c0b27e1479677971`；当前仓库构建 ID：`c0b27e1479677971`。
-- 旧运行时组合根约束：3,260 行、两个模块级共享声明。
+- 旧运行时组合根约束：3,248 行、两个模块级共享声明；Slice 5d 最初在 3,260 行关闭，后续有界 wiring 提取继续降低约束。
 - 发布验证：`npm run verify` 统一执行确定性构建、语法、发布契约和完整 Node 测试。
 - 显示策略：已挂载消息先尝试频道级 Flux `MESSAGE_UPDATE` 合并；整聊天区重建只作为确认后的回退，而不是每个结果的默认路径。
 
@@ -39,7 +39,7 @@ src/plugin/index.js
 | --- | --- | --- |
 | 收到消息状态 | `src/display/message-state-store.js` | 不可变原文、请求身份、自动/手动来源、抑制状态、回复预览、显示修订和恢复档案 |
 | 显示事务 | `src/display/translation-display-controller.js`、`src/display/display-runtime.js`、`src/display/display-runtime-wiring.js` | 消息 ID 与回复预览宿主 ID 的单一频道级提交边界；一个适配器拥有 Flux/Store、浏览器、计时器、胶囊和视口端口 |
-| 单行重绘和回退 | `src/display/flux-row-repaint.js`、`src/display/discord-render-adapter.js`、`src/display/repaint-scheduler.js`、`src/display/repaint-scheduler-wiring.js` | 先走 Flux 单行合并，确认 DOM 修订，每个事务最多一次整聊天区回退；一个适配器拥有 Discord 状态门、托管计时器、生命周期重绘和结果回报端口 |
+| 单行重绘和回退 | `src/display/flux-row-repaint.js`、`src/display/discord-render-adapter.js`、`src/display/repaint-scheduler.js`、`src/display/repaint-scheduler-wiring.js` | 先走 Flux 单行合并并确认 DOM 修订；普通行只做有界定向重试，特殊宿主/生命周期回退保持单独可见 |
 | 历史采集和封批 | `src/received/historical-source-runtime.js`、`src/orchestrator/historical-snapshot-cadence.js`、`src/orchestrator/historical-snapshot-cadence-wiring.js`、`src/orchestrator/historical-translation-job.js` | 不可变频道任务、500ms 安静窗口、等待任务吸收、一次原子批次提交；一个适配器拥有 cadence 宿主端口 |
 | 实时调度 | `src/orchestrator/live-translation-queue.js`、`src/orchestrator/live-translation-queue-wiring.js` | 高优先级频道任务，不因历史采集而人为延迟；一个适配器拥有插件策略/显示/历史/会话端口和托管重试计时器 |
 | 消息删除生命周期 | `src/lifecycle/message-deletion-lifecycle.js`、`src/lifecycle/message-deletion-lifecycle-wiring.js` | 直接 Store 订阅；频道级实时/历史/缓存/显示清理；一个适配器拥有清理分发和 dispatcher 解析 |
@@ -75,7 +75,7 @@ src/plugin/index.js
 4. 调用频道有效主供应商，并在允许时调用全局备用供应商。
 5. 验证终态结果并提交翻译状态。
 6. 启动一个按 ID 限定的显示事务。
-7. 尝试 Flux 单行重绘并确认精确 DOM 修订；只有未解决的挂载行或特殊宿主才走整聊天区回退。
+7. 尝试 Flux 单行重绘并确认精确 DOM 修订；未解决普通行继续有界定向重试，不重挂载输入框，特殊宿主仍是独立回退边界。
 
 手动翻译使用同一状态和显示事务链。手动取消翻译会恢复归档原文，并抑制该消息立即被缓存的自动结果重新覆盖。
 
@@ -97,9 +97,9 @@ src/plugin/index.js
 
 显示事务包含频道 ID、译文消息 ID、回复宿主 ID、期望修订、触发通道和该事务自己的视口意图。控制器先提交状态，再绘制，并记录每行是已挂载确认、虚拟化就绪、跳过、失败还是未解决。
 
-对于普通已挂载消息，`flux-row-repaint.js` 通过 Discord Store dispatcher 发送已经实验确认的无内容变化 `MESSAGE_UPDATE` 合并，随后等待异步 Store 渲染并检查 DOM 修订。已经携带目标修订的消息不需要刷新。
+对于普通已挂载消息，`flux-row-repaint.js` 通过 Discord Store dispatcher 发送按值无变化的 `MESSAGE_UPDATE` 合并。当前客户端证据确认消息列表投影渲染一次且 Composer/活动输入/目标行/Scroller 身份保持；是否可见仍以精确 DOM 修订确认为准。已经携带目标修订的消息不需要刷新。
 
-只有单行确认或特殊宿主仍未满足事务时，`discord-render-adapter.js` 才执行一次整聊天区重建。当前客户端函数组件只暴露没有类更新器的 `{props}` 合成对象，因此实例注册表只是机会性路径。同步清空/重挂载实现及其 adapter 空接口已经删除，现场结论保留在调试交接中。
+`discord-render-adapter.js` 会把未确认普通行交回有界调度器，不再扩大为整聊天区重建。特殊宿主仍保留一次显式回退，等待自己的定向刷新路线。当前客户端函数组件只暴露没有类更新器的 `{props}` 合成对象，因此实例注册表只是机会性路径；同步清空/重挂载实现及其 adapter 空接口继续保持删除。
 
 ## 视口归属
 
@@ -171,8 +171,8 @@ npm run verify
 
 ## 已知债务
 
-- `src/legacy/runtime.js` 仍是 3,260 行旧门面；后续缩减必须先建立独立职责契约，不能继续使用无边界的行数任务。
-- 整聊天区回退诊断 `R` 仍会重挂载或刷新输入框及其所在行。组合显示接线构建 `65a775c63d76dffa` 的 PTB 复验再次观察到这一既有行为；该问题已明确停放，留待后续渲染边界工作处理。
+- `src/legacy/runtime.js` 仍是 3,248 行旧门面；后续缩减必须先建立独立职责契约，不能继续使用无边界的行数任务。
+- 普通消息事务已退出整聊天区回退；回复预览宿主与显式频道/生命周期刷新仍可能产生诊断 `R` 并重挂载输入框，继续作为两个独立边界切片。
 - 供应商物理中止和生命周期任务注册表继续在 `recovery-plan.md` 中由证据触发；自动多页历史读取已在现场回退后暂停，Store 消息删除直接订阅已经完成现场确认。
 - Discord 内部 Store 和快照结构在客户端更新后需要重新观察。
 - 一些模块仍偏大，只有在职责契约和回归测试存在后才应拆分。

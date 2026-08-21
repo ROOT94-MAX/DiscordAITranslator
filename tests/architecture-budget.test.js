@@ -17,7 +17,7 @@ const BUDGET = Object.freeze({
 	// MESSAGE_UPDATE probe (strategy ladder), the one-shot merge-semantics
 	// experiment, and the forwarded-message shape probe. Not retained legacy.
 	// +5 (2026-08-19): flux per-row repaint handles (dispatcher, message record,
-	// guild) into the display runtime - the experiment-verified endgame wiring.
+	// guild) into the display runtime - the Store-targeted repaint wiring.
 	// +8 (2026-08-19): forwarded-message extraction reads the forward snapshot body
 	// so 已转发 messages stop being skipped as contentless.
 	// +2 (2026-08-19): getStreamBodyContent/paintStreamBody delegations - the

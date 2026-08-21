@@ -85,7 +85,9 @@ test("live automatic commits coalesce into one acknowledged display flush", asyn
 
 		await new Promise(resolve => setTimeout(resolve, 250));
 
-		assert.equal(calls.rerenderAll, 1, "five commits must share one acknowledged rebuild");
+		assert.equal(calls.messageUpdates, 5, "the one display transaction targets its five mounted rows");
+		assert.equal(calls.rerenderAll, 0, "the coalesced batch never remounts the Composer");
+		assert.equal(plugin.ensureReceivedDisplayRuntime().getRebuildStats().live, 1, "five row dispatches belong to one acknowledged display transaction");
 		assert.equal(messageIds.every(messageId => plugin.getReceivedDisplayView(messageId).renderStatus === "confirmed"), true);
 	}
 	finally {harness.restore();}
@@ -474,7 +476,8 @@ test("a translation arriving while you type is displayed promptly", async () => 
 		plugin.scheduleReceivedDisplayFlush(channelId, "m1");
 
 		await new Promise(resolve => setTimeout(resolve, 300));
-		assert.equal(calls.rerenderAll, 1, "targeted display must not wait for typing to stop");
+		assert.equal(calls.messageUpdates, 1, "targeted display must not wait for typing to stop");
+		assert.equal(calls.rerenderAll, 0);
 		assert.equal(plugin.getReceivedDisplayRuntimeView("m1").translated, true);
 	}
 	finally {
@@ -500,15 +503,16 @@ test("the 120 ms repaint window coalesces only paint while live loading appears 
 
 		assert.equal(calls.single, 1, "provider work must start immediately");
 		assert.equal(calls.batch, 0, "one live message must stay on the direct path");
-		assert.equal(harness.calls.rerenderAll, 0, "the repaint window must not fire in the queue turn");
+		assert.equal(harness.calls.messageUpdates, 0, "the repaint window must not fire in the queue turn");
 		assert.equal(plugin.getReceivedDisplayRuntimeView(message.id).showLoading, true, "the loading view must be available immediately");
 
 		await new Promise(resolve => setTimeout(resolve, 80));
-		assert.equal(harness.calls.rerenderAll, 0, "provider completion must still wait for the repaint coalescer");
+		assert.equal(harness.calls.messageUpdates, 0, "provider completion must still wait for the repaint coalescer");
 		assert.equal(plugin.getReceivedDisplayRuntimeView(message.id).translated, true, "the translated state must already be committed before paint");
 
 		await new Promise(resolve => setTimeout(resolve, 180));
-		assert.equal(harness.calls.rerenderAll, 1, "the coalesced repaint must land once the 120 ms window expires");
+		assert.equal(harness.calls.messageUpdates, 1, "the coalesced targeted repaint lands once the 120 ms window expires");
+		assert.equal(harness.calls.rerenderAll, 0);
 	}
 	finally {
 		harness.plugin.clearReceivedDisplayFlushQueue();
@@ -529,11 +533,12 @@ test("a translation arriving while the settings panel is open does not repaint t
 		plugin.scheduleReceivedDisplayFlush(channelId, "m1");
 
 		await new Promise(resolve => setTimeout(resolve, 300));
-		assert.equal(calls.rerenderAll, 0, "an open settings surface must not be disturbed by a chat repaint");
+		assert.equal(calls.messageUpdates, 0, "an open settings surface must not be disturbed by a chat repaint");
 
 		settingsOpen = false;
 		await new Promise(resolve => setTimeout(resolve, 700));
-		assert.equal(calls.rerenderAll, 1, "the repaint must still happen once the panel closes");
+		assert.equal(calls.messageUpdates, 1, "the targeted repaint still happens once the panel closes");
+		assert.equal(calls.rerenderAll, 0);
 	}
 	finally {
 		harness.plugin.clearReceivedDisplayFlushQueue();
@@ -559,10 +564,11 @@ test("a repaint waits out an active history scroll and lands when the gesture id
 		plugin.scheduleReceivedDisplayFlush(channelId, "m1");
 
 		await new Promise(resolve => setTimeout(resolve, 350));
-		assert.equal(calls.rerenderAll, 0, "no rebuild may land under the user's scroll gesture");
+		assert.equal(calls.messageUpdates, 0, "no targeted paint lands under the user's scroll gesture");
 		scrolling = false;
 		await new Promise(resolve => setTimeout(resolve, 600));
-		assert.equal(calls.rerenderAll, 1, "the deferred paint lands once the scroll idles, with no new schedule call");
+		assert.equal(calls.messageUpdates, 1, "the deferred targeted paint lands once the scroll idles, with no new schedule call");
+		assert.equal(calls.rerenderAll, 0);
 		assert.equal(plugin.getReceivedDisplayRuntimeView("m1").translated, true);
 	}
 	finally {
@@ -582,12 +588,10 @@ test("a targeted repaint appears promptly even while reading back through histor
 		await plugin.commitReceivedDisplayResult({messageId: "m1", channelId, generation: 1, sourceSignature: "sig-m1", origin: "automatic", status: "translated", translation: {content: "你好"}}, {refresh: false});
 		plugin.scheduleReceivedDisplayFlush(channelId, "m1");
 
-		// The old 1500ms history delay existed to protect readers from a FULL-LIST
-		// repaint that could not preserve their anchor. The rebuild path captures and
-		// restores the anchor, so a translation must not sit invisible for a second
-		// and a half.
+		// A targeted Store repaint has no reason to wait out the old full-list delay.
 		await new Promise(resolve => setTimeout(resolve, 350));
-		assert.equal(calls.rerenderAll, 1, "a targeted repaint must not wait out the full-list history delay");
+		assert.equal(calls.messageUpdates, 1, "a targeted repaint must not wait out the full-list history delay");
+		assert.equal(calls.rerenderAll, 0);
 		assert.equal(plugin.getReceivedDisplayRuntimeView("m1").translated, true);
 	}
 	finally {
@@ -596,7 +600,7 @@ test("a targeted repaint appears promptly even while reading back through histor
 	}
 });
 
-test("an unconfirmed rebuild keeps scheduler retries read-only and never slows the next batch", async () => {
+test("an unconfirmed targeted repaint stays bounded and never widens the next batch", async () => {
 	const harness = createHarness({confirmAfterFallback: false});
 	try {
 		const {plugin, calls} = harness;
@@ -608,15 +612,15 @@ test("an unconfirmed rebuild keeps scheduler retries read-only and never slows t
 		await plugin.commitReceivedDisplayResult({messageId: "m1", channelId, generation: 1, sourceSignature: "sig-m1", origin: "automatic", status: "translated", translation: {content: "你好"}}, {refresh: false});
 		plugin.scheduleReceivedDisplayFlush(channelId, "m1");
 		await new Promise(resolve => setTimeout(resolve, 350));
-		// One transaction owns one rebuild even when no revision marker ever lands; the
-		// scheduler's bounded retries re-read the DOM instead of rebuilding per attempt.
-		assert.equal(calls.rerenderAll, 1, "one transaction must rebuild exactly once even without confirmation");
+		assert.equal(calls.messageUpdates, 1, "the first bounded targeted attempt ran");
+		assert.equal(calls.rerenderAll, 0, "confirmation failure never widens into a chat rebuild");
 
 		plugin.clearReceivedDisplayFlushQueue();
 		await plugin.commitReceivedDisplayResult({messageId: "m2", channelId, generation: 1, sourceSignature: "sig-m2", origin: "automatic", status: "translated", translation: {content: "你好二"}}, {refresh: false});
 		plugin.scheduleReceivedDisplayFlush(channelId, "m2");
 		await new Promise(resolve => setTimeout(resolve, 350));
-		assert.equal(calls.rerenderAll, 2, "the next transaction must keep the live one-rebuild cadence");
+		assert.equal(calls.messageUpdates, 2, "the next transaction keeps the live targeted cadence");
+		assert.equal(calls.rerenderAll, 0);
 	}
 	finally {
 		harness.plugin.clearReceivedDisplayFlushQueue();

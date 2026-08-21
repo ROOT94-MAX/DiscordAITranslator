@@ -23,7 +23,8 @@ function read(...parts) {
 const SOURCES = {
 	runtime: read("src", "legacy", "runtime.js"),
 	displayLogic: read("src", "display", "translation-display-logic.js"),
-	received: read("src", "received", "received-translation-runtime.js")
+	received: read("src", "received", "received-translation-runtime.js"),
+	adapter: read("src", "display", "discord-render-adapter.js")
 };
 
 // Named here so a rename cannot silently turn every assertion below into a tautology.
@@ -84,6 +85,20 @@ test("automatic translation flows never fall back to the whole-list repaint", ()
 		assert.doesNotMatch(flow, FULL_LIST_REPAINT);
 		assert.doesNotMatch(flow, LEGACY_WHOLE_MESSAGE_WRITER);
 	}
+});
+
+test("the display adapter returns ordinary unresolved rows before the special-host rebuild", () => {
+	// The former contract stopped at the controller seam and missed rerenderAll inside
+	// the adapter, producing a false-green while ordinary transactions still remounted
+	// the Composer. Pin the actual terminal owner and the ordering of its two exits.
+	const methodStart = SOURCES.adapter.indexOf("async refreshMessages");
+	const ordinaryExit = SOURCES.adapter.indexOf("if (!hostNeedsPaint) return", methodStart);
+	const rebuildCall = SOURCES.adapter.indexOf("BDFDB.MessageUtils.rerenderAll(true)", ordinaryExit);
+	assert.notEqual(methodStart, -1);
+	assert.notEqual(ordinaryExit, -1);
+	assert.notEqual(rebuildCall, -1, "special hosts temporarily retain the explicit fallback");
+	assert.doesNotMatch(SOURCES.adapter.slice(methodStart, ordinaryExit), /MessageUtils\.rerenderAll/, "ordinary rows must exit before any whole-chat primitive");
+	assert.ok(ordinaryExit < rebuildCall, "only the special-host branch can reach the rebuild");
 });
 
 test("the extracted live queue cannot reach display state at all", () => {
