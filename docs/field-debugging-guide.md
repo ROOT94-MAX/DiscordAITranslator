@@ -8,11 +8,11 @@ User-visible behavior remains owned by `product.md`; setting ownership by `setti
 
 ## Verified State at Handoff
 
-- Published v0.3.40 artifact: one installable `DiscordAITranslator.plugin.js`, build ID `c0b27e1479677971`.
-- The release gate passes 1,313 unit, contract, and integration tests; generated, repository, installed, and release-asset hashes are compared during publication.
+- Published v0.3.41 artifact: one installable `DiscordAITranslator.plugin.js`, build ID `888308bed3551076`.
+- The release gate passes 1,325 unit, contract, and integration tests; generated, repository, installed, and release-asset hashes are compared during publication.
 - Slice 5d composition-root extraction is complete; later debug-wiring extraction lowered the current runtime ratchet to 3,248 lines with the same two module-level mutable declarators and 19 compact lazy singleton boundaries.
-- Accepted PTB evidence covers cumulative capsule behavior, forwarded automatic/manual translation and restore, configuration transitions, active-scroll veto, post-scroll completion, live priority, channel isolation, and the live-arrival History Guard.
-- Whole-chat fallback can still refresh the composer/input; the user explicitly parked that separate render-boundary debt.
+- Accepted PTB evidence covers cumulative capsule behavior, forwarded automatic/manual translation and restore, configuration transitions, active-scroll veto, post-scroll completion, live priority, channel isolation, the live-arrival History Guard, and warm/cold-cache Composer isolation.
+- Translation display no longer enters whole-chat fallback. During plugin start/stop and settings reinitialization, the composer/input can still refresh; that remains separate lifecycle work.
 - Remaining field observations are listed under **Open or Observation Items**. Do not convert an observation into a root cause without new evidence.
 
 ## Working Rules
@@ -43,7 +43,7 @@ The refactor was intentionally bottom-up. A top-down rewrite of the composition 
 | Field-era ownership cleanup (`1b8f565`, `8ff33bf`) | Forward content projection and duplicate direct-original display still leaked through the runtime | Moved content-view projection into display ownership and removed the obsolete direct-original React/CSS/settings branch | Ratchet reached 3,479 in that slice; retired-code cleanup lowered it to 3,478 and direct Store deletion subscriptions to 3,476. `showOriginalMessage` is the sole received-original setting |
 | Resumed display wiring (`04ea458`, `aa3057f`) | Display-runtime and repaint-scheduler host wiring still lived in the composition root | Moved Flux/Store/browser/viewport and repaint gate/timer/outcome ports into their owning wiring modules | Build `65a775c63d76dffa` passed active-scroll veto and stable post-scroll completion. Whole-chat fallback still refreshed the composer/input, matching the existing render debt; the user parked that issue for later |
 | Live queue wiring and arrival guard (`8580478`, `e3039d7`) | Live queue policy/session/handoff wiring remained in the composition root; a live row could strand a history reader at newest | Extracted the 31 queue ports with managed retry timers; the queue now arms a viewport reading-line guard before the host commits the live row | Build `c0b27e1479677971` passed live priority, channel isolation, History Guard, 1,311 tests, and installed configuration parity |
-| Composer isolation: ordinary, preview-host, channel/provider cuts | The ownership test stopped at controller entry points and missed adapter `rerenderAll`; previews lacked surface confirmation; channel/provider changes still scheduled `full` | Added Composer-boundary evidence; ordinary and preview surfaces stay Store-targeted; channel/provider changes pulse one visible Store projection under the viewport anchor | Probe `1eb82dee729eaf05` preserved the boundary; `3cd42fa098e0f7a4` reported `4L/5R(prev 5)·full 2`; `594a8699a7d2c1b2` reported `5L/0R·full 1`; candidate `888308bed3551076` removes that final counted channel/provider repaint |
+| Composer isolation: ordinary, preview-host, channel/provider cuts | The ownership test stopped at controller entry points and missed adapter `rerenderAll`; previews lacked surface confirmation; channel/provider changes still scheduled `full` | Added Composer-boundary evidence; ordinary and preview surfaces stay Store-targeted; channel/provider changes pulse one visible Store projection under the viewport anchor | Probe `1eb82dee729eaf05` preserved the boundary; `3cd42fa098e0f7a4` reported `4L/5R(prev 5)·full 2`; `594a8699a7d2c1b2` reported `5L/0R·full 1`; final `888308bed3551076` reported `12L/0R → 17L/0R`, then cold-cache `4L/0R`, with no `full` or reported regression |
 
 ### What the refactor did and did not accomplish
 
@@ -173,6 +173,16 @@ This section preserves the order in which the failures were reported and correct
 - On 2026-08-20 the user closed the remaining automatic collection/count mismatch; no further `93/93` capture is required.
 - Direct Store subscriptions are field-closed for both single and bulk message deletion.
 - Forwarded one-original display and enabling automatic translation while reading old history are field-closed; the former screenshot-only confirmation gates are retired.
+- On 2026-08-21 Composer isolation closed on build `888308bed3551076`: warm-cache diagnostics advanced `12L/0R → 17L/0R` without `full`; after clearing 500 result-cache entries, cold-cache translation reported `4L/0R`, and the user reported no issue.
+
+### Successful Pattern: Composer Isolation
+
+1. Attribute the trigger lane before changing paint: ordinary body, reply host, channel/provider lifecycle, and plugin lifecycle are separate cuts.
+2. Prove one no-op-by-value Store `MESSAGE_UPDATE` against the actual client first; require Composer, active input, row, scroller, draft, and offset identities to survive.
+3. Let body and preview surfaces own separate revisions. Confirm the exact DOM revision; unresolved mounted surfaces get bounded targeted retry, while virtualized rows paint on mount.
+4. For channel/provider refresh, pulse one visible anchor row and reuse the single viewport owner's immediate and settled restore under the user-intent veto.
+5. Validate warm cache first to isolate repaint behavior, then clear only `translationCache` and repeat the cold path. Do not clear settings, credentials, or channel state together with the result cache.
+6. Accept scrollbar-thumb geometry changes caused by translated height; reopen only for a lost reading-line message, a jump to newest, Composer replacement, or a new `R/full` count.
 
 ## Rejected or Superseded Approaches
 
@@ -188,12 +198,13 @@ This section preserves the order in which the failures were reported and correct
 - Snapshot identity properties: Discord normalization strips unknown fields.
 - Relaxing protected-placeholder validation: silently accepts damaged translations.
 - Reusing a manual-message anchor for channel lifecycle repaint: can strand virtualized history at newest.
+- Clearing translation cache before the warm-path gate: mixes provider/cache work into a render-boundary experiment and hides which lane caused the symptom.
 - Treating every apparent jump as translation-caused: use gesture and jump-to-newest evidence; user action and native UI can legitimately move the viewport.
 - Treating Discord developer documentation as a repaint API: the public developer API does not expose the client-internal React/virtual-list boundary used by this plugin; field probes and guarded internal adapters remain necessary.
 
 ## Open or Observation Items
 
-1. Ordinary rows, reply hosts, channel enablement, and primary-engine changes no longer enter whole-chat repaint. Candidate `888308bed3551076` needs the final field gate; during plugin start/stop or settings reinitialization the composer/input can still refresh, so that lifecycle evidence remains separate.
+1. Ordinary rows, reply hosts, channel enablement, and primary-engine changes are field-closed outside whole-chat repaint. Plugin start/stop and settings reinitialization can still refresh the composer/input, so that lifecycle evidence remains separate.
 2. Scrollbar thumb size/position can move when translated rows change total height. Reopen only when the center reading-line message itself is lost or the view is stranded at newest.
 3. Slice 5d composition-root extraction is complete; the current ratchet is 3,248 lines, two module-level mutable declarators, and 19 compact lazy singleton boundaries. Further facade shrinkage requires a new bounded ownership contract rather than continuing this closed plan.
 4. Oversized modules and generated-bundle size remain architecture debt. Split by ownership after contracts exist; do not split merely to reduce a line count.

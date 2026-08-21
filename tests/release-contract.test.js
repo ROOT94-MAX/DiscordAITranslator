@@ -7,9 +7,9 @@ const root = path.resolve(__dirname, "..");
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), "utf8");
 const readJson = relativePath => JSON.parse(read(relativePath));
 const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const RELEASE_VERSION = "0.3.40";
+const RELEASE_VERSION = "0.3.41";
 
-test("release metadata, README and changelog agree on v0.3.40", () => {
+test("release metadata, README and changelog agree on v0.3.41", () => {
 	const packageJson = readJson("package.json");
 	const packageLock = readJson("package-lock.json");
 	const metadata = readJson("src/plugin/metadata.json");
@@ -116,6 +116,26 @@ test("architecture and field handoff provide complete Chinese companion entry po
 	const index = read("docs/README.md");
 	assert.match(index, /architecture\.zh-CN\.md/);
 	assert.match(index, /field-debugging-guide\.zh-CN\.md/);
+});
+
+test("the bilingual handoff pins the field-closed Composer isolation pattern", () => {
+	const recovery = read("docs/recovery-plan.md");
+	const english = read("docs/field-debugging-guide.md");
+	const chinese = read("docs/field-debugging-guide.zh-CN.md");
+
+	assert.match(recovery, /^## Verified Completed: Composer Isolation$/m);
+	assert.match(english, /^### Successful Pattern: Composer Isolation$/m);
+	assert.match(chinese, /^### 成功模式：Composer 隔离$/m);
+	for (const document of [recovery, english, chinese]) {
+		assert.match(document, /888308bed3551076/);
+		assert.match(document, /12L\/0R/);
+		assert.match(document, /17L\/0R/);
+		assert.match(document, /4L\/0R/);
+	}
+	assert.match(english, /clear only `translationCache`/);
+	assert.match(chinese, /只清 `translationCache`/);
+	assert.doesNotMatch(english, /needs the final field gate/);
+	assert.doesNotMatch(chinese, /等待最终现场门/);
 });
 
 test("the recovery plan keeps closed field work and completed slices out of the active backlog", () => {

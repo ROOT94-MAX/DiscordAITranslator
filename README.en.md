@@ -6,14 +6,14 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Discord-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.com)
 [![Loader](https://img.shields.io/badge/Loader-BetterDiscord-4E5D94?style=flat-square)](https://betterdiscord.app)
-[![Version](https://img.shields.io/badge/Version-0.3.40-success?style=flat-square)](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest)
+[![Version](https://img.shields.io/badge/Version-0.3.41-success?style=flat-square)](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest)
 [![Verify](https://img.shields.io/github/actions/workflow/status/ROOT94-MAX/DiscordAITranslator/verify.yml?branch=master&style=flat-square&label=verify)](https://github.com/ROOT94-MAX/DiscordAITranslator/actions/workflows/verify.yml)
 [![Downloads](https://img.shields.io/github/downloads/ROOT94-MAX/DiscordAITranslator/total?style=flat-square&color=yellow)](https://github.com/ROOT94-MAX/DiscordAITranslator/releases)
 [![License](https://img.shields.io/badge/License-GPL%20v2-blue?style=flat-square)](./LICENSE)
 
 A BetterDiscord translation plugin for channel-aware incoming translation, outgoing translation, historical backfill, manual actions, forwarded messages, and protected text.
 
-**Latest release: v0.3.40** · **Runtime: BetterDiscord + BDFDB Library**
+**Latest release: v0.3.41** · **Runtime: BetterDiscord + BDFDB Library**
 
 [Download latest plugin](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest/download/DiscordAITranslator.plugin.js) · [Open release notes](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest) · [Read the documentation](./docs/README.md)
 
