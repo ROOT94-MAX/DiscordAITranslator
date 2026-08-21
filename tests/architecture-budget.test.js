@@ -48,7 +48,9 @@ const BUDGET = Object.freeze({
 	// lifecycle repaint and managed timers moved into repaint-scheduler-wiring.js.
 	// -69 (2026-08-21): live queue policy, display/history handoff, channel-session
 	// and managed retry timer wiring moved into live-translation-queue-wiring.js.
-	runtimeLines: 3260,
+	// -12 (2026-08-21): the debug-only MESSAGE_UPDATE experiment's Store, DOM,
+	// Composer and evidence-sink ports moved into its own wiring module.
+	runtimeLines: 3248,
 	moduleLevelVarDeclarators: 2
 });
 
