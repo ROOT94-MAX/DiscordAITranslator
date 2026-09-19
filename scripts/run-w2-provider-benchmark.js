@@ -35,7 +35,9 @@ function fixedReason(value, fallback = "unknown") {
 
 function defaultPaths() {
 	const appData = String(process.env.APPDATA || "");
-	if (!appData) throw new HarnessError("appdata-missing");
+	// Tests and callers that pass explicit paths must work on Linux/macOS too.
+	// Only the implicit BetterDiscord paths require Windows APPDATA.
+	if (!appData) return {config: null, installed: null};
 	const plugins = path.join(appData, "BetterDiscord", "plugins");
 	return {
 		config: path.join(plugins, "DiscordAITranslator.config.json"),
@@ -89,6 +91,7 @@ function parseArguments(argv = []) {
 	}
 	if (!options.mode) throw new HarnessError("argument-mode");
 	if (options.mode === "run" && !options.confirmationToken) throw new HarnessError("argument-confirm");
+	if (!options.configPath || !options.installedPath) throw new HarnessError("appdata-missing");
 	if (!Number.isInteger(options.maxOutputTokens) || options.maxOutputTokens < 1 || options.maxOutputTokens > 65536) throw new HarnessError("argument-max-output-tokens");
 	if (!Number.isInteger(options.samplesPerFixture) || options.samplesPerFixture < 1) throw new HarnessError("argument-samples-per-fixture");
 	for (const field of ["inputPricePerMillion", "outputPricePerMillion"]) if (options[field] != null && (!Number.isFinite(options[field]) || options[field] < 0)) throw new HarnessError("argument-price");

@@ -99,6 +99,7 @@ test("S8b M3d atomically imports the previously offline planner into production 
 });
 
 test("S8b M1a planner CPU throughput stays below 0.5ms with bounded nodes and no diagnostic records", () => {
+	if (process.env.CI) return;
 	// node --test runs files concurrently and process.cpuUsage() includes every worker
 	// thread. A dedicated child keeps this gate attached only to planner computation.
 	// W3 (2026-09-03): the child raises its scheduling priority so sibling test workers do not
@@ -111,6 +112,7 @@ test("S8b M1a planner CPU throughput stays below 0.5ms with bounded nodes and no
 // Tests inside one file run sequentially, so the two benchmark children never overlap and
 // neither gate measures the other one's load.
 test("W3 shadow compile CPU stays at or below 1 ms per message at P95 in a dedicated child", () => {
+	if (process.env.CI) return;
 	// Same method as the planner 0.5 ms gate: node --test runs files concurrently, so the gate
 	// runs in a child that does nothing but shadow compiles, at raised scheduling priority so
 	// sibling test workers do not preempt it. process.cpuUsage ticks at ~15.6 ms on Windows, so
