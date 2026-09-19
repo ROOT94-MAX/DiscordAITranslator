@@ -15,7 +15,7 @@ A BetterDiscord translation plugin for channel-aware incoming translation, outgo
 
 **Current version: v1.0.0** · **Runtime: BetterDiscord + BDFDB Library**
 
-This branch is preparing 1.0.0; public downloads remain governed by GitHub Releases. Advanced settings allow 100–10,000 cache entries (default 500). Diagnostics provides a concise summary and expandable troubleshooting details.
+Version 1.0.0 is released. Use [GitHub Releases](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest) for downloads and release notes. Advanced settings allow 100–10,000 cache entries (default 500). Diagnostics shows the version, build, and provider status with expandable troubleshooting details.
 
 [Download latest plugin](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest/download/DiscordAITranslator.plugin.js) · [Open release notes](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest) · [Read the documentation](docs/README.md)
 

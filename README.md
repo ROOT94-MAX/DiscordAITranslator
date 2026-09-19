@@ -15,7 +15,7 @@
 
 **当前版本：v1.0.0** · **运行环境：BetterDiscord + BDFDB Library**
 
-本分支正在准备 1.0.0，公开下载仍以 GitHub Releases 为准。缓存容量可在“高级”中设为 100～10,000 条（默认 500）；“诊断”提供简明状态和可展开的排障详情。
+1.0.0 已正式发布，公开下载和更新说明以 [GitHub Releases](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest) 为准。缓存容量可在“高级”中设为 100～10,000 条（默认 500）；“诊断”提供版本、构建和服务状态，并可展开排障详情。
 
 [下载最新版插件](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest/download/DiscordAITranslator.plugin.js) · [查看发布说明](https://github.com/ROOT94-MAX/DiscordAITranslator/releases/latest) · [阅读技术文档](docs/README.md)
 
