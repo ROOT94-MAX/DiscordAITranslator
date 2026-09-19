@@ -66,13 +66,11 @@ Incoming messages show a translation and its marker; displaying the original alo
 | `microsoft` | Azure Translator | API key | Optional Azure region setting |
 | `deepl` | DeepL API | API key | Official DeepL translation API |
 | `deepseek` | DeepSeek | API key | AI translation, batching, and decision mode |
-| `openai` | OpenAI API | API key | Retained Responses API adapter for existing configurations; see below |
 | `gemini` | Google Gemini | API key | Native `generateContent` integration |
 | `oaicompat` | Custom providers | Endpoint, model; credentials according to protocol | Self-hosted or third-party services; protocol options below |
-| `papago` | Papago | Client ID and secret | Retained Naver compatibility provider |
 | `baidu` | Baidu | App ID and secret | Retained compatibility provider with provider-specific signing |
 
-The table lists adapters retained in the code. The built-in OpenAI and Papago entries are archived in the current UI: new selections hide them by default, while existing primary, backup or channel selections remain visible and configurable. Custom providers use their configured protocol; the table is not a list of buttons every new user will see.
+The table lists services that can be configured for new installations. The OpenAI and Papago adapters remain in the runtime only for existing saved configurations and are archived: new installations do not offer them in the provider list, and they are not recommended as new 1.0.0 integrations. Use Gemini, DeepSeek, or a custom provider for new AI connections.
 
 Custom providers support OpenAI Chat Completions, OpenAI Responses, Ollama, Gemini and Anthropic Messages protocols. Match the endpoint and model to your service. The native Ollama protocol accepts an optional API key; your server determines whether authentication is needed.
 

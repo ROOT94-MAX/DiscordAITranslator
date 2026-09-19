@@ -17,7 +17,7 @@
 
 <a id="current-providers"></a>
 
-## 当前支持的服务
+## 当前可新配置的服务
 
 | 供应商键 | 用途 | 必要配置 |
 | --- | --- | --- |
@@ -26,13 +26,11 @@
 | `microsoft` | Azure Translator | API 密钥，可选区域 |
 | `deepl` | DeepL API | API 密钥 |
 | `deepseek` | DeepSeek Chat Completions | API 密钥；端点和模型有官方默认值 |
-| `openai` | 官方 OpenAI Responses API | API 密钥；端点和模型有官方默认值 |
 | `gemini` | 原生 Gemini `generateContent` API | API 密钥；端点和模型有官方默认值 |
 | `oaicompat` | 自定义第三方或自托管服务 | 明确端点/模型，凭证要求由最终协议决定 |
-| `papago` | Naver Papago 兼容适配器 | 在供应商凭证字段中填写 Client ID 和 Client secret |
 | `baidu` | 百度通用文本翻译 | 分别填写 APP ID 和密钥 |
 
-界面目录不再向新选择提供内置 `openai` 和 `papago` 条目；已有主备选择和当前频道选择仍可访问，适配器继续保留。本表描述运行时兼容范围，不仅是默认选择器的可见条目。选择职责见[供应商目录](../src/ui/provider-catalog.js)。
+运行时仍保留 `openai` 和 `papago` 适配器，但它们已归档，仅用于读取已有主用、备用或频道配置；新安装和新配置不再提供这两个条目。需要新接入 AI 服务时使用 Gemini、DeepSeek 或自定义服务商。本节表格只列出当前可新配置的服务。选择职责见[供应商目录](../src/ui/provider-catalog.js)。
 
 示例 `oaicompat` 端点和模型只是占位符，不能作为有效运行配置，也不会发到网络。
 

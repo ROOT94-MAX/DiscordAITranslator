@@ -66,13 +66,11 @@ DiscordAITranslator 把翻译控制放在当前会话附近，而不是使用一
 | `microsoft` | Azure Translator | API Key | 支持可选 Azure Region |
 | `deepl` | DeepL API | API Key | DeepL 官方翻译 API |
 | `deepseek` | DeepSeek | API Key | 支持 AI 翻译、批量和决策模式 |
-| `openai` | OpenAI API | API Key | 保留的 Responses API 适配器；现有配置兼容，见下方说明 |
 | `gemini` | Google Gemini | API Key | 原生 `generateContent` 接口 |
 | `oaicompat` | 自定义服务商 | 端点、模型；按协议提供凭证 | 可接入自建或第三方服务，协议选项见下文 |
-| `papago` | Papago | Client ID 与 Secret | 保留的 Naver 兼容供应商 |
 | `baidu` | Baidu | App ID 与 Secret | 保留的兼容供应商，使用供应商专用签名 |
 
-上表列出代码内保留的适配器。当前界面将内置 OpenAI 和 Papago 归档：新配置列表默认隐藏，已有主用、备用或频道选择仍可显示和配置。自定义服务商另按所选协议配置；不要把表中的兼容适配器当作所有新用户都能看到的按钮。
+上表只列出当前可以新配置和推荐使用的服务。OpenAI 和 Papago 的旧适配器仍保留在运行时中，用于读取已有配置，但已经归档：新安装不会在服务商列表中提供，也不作为 1.0.0 的新服务推荐。已有配置继续按原协议运行；需要新接入 AI 服务时，请使用 Gemini、DeepSeek 或自定义服务商。
 
 自定义服务商支持 OpenAI Chat Completions、OpenAI Responses、Ollama、Gemini 和 Anthropic Messages 协议。端点和模型需与所选服务匹配；Ollama 原生协议的 API Key 可选，是否需要鉴权由你的服务端决定。
 
